@@ -130,7 +130,12 @@ impl Browser {
             }
         }
         // Sessions saved before built-in pages had titles.
-        let ids: Vec<Id> = ws.tabs.iter().filter(|t| t.title.is_empty() && urlutil::is_internal(&t.url)).map(|t| t.id.clone()).collect();
+        let ids: Vec<Id> = ws
+            .tabs
+            .iter()
+            .filter(|t| t.title.is_empty() && urlutil::is_internal(&t.url))
+            .map(|t| t.id.clone())
+            .collect();
         for id in ids {
             let url = ws.tab(&id).map(|t| t.url.clone()).unwrap_or_default();
             ws.update_tab(&id, Some(&url), None, None);

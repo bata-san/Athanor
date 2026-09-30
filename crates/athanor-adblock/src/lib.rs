@@ -438,6 +438,7 @@ struct Inner {
     dir: PathBuf,
     compiled: RwLock<Arc<Compiled>>,
     config: RwLock<Config>,
+    extra_lists: RwLock<HashMap<String, String>>,
     enabled: AtomicBool,
     blocked: AtomicU64,
     by_host: Mutex<HashMap<String, u64>>,
@@ -468,6 +469,7 @@ impl Blocker {
                     plain_rule_lines: HashSet::new(),
                 })),
                 config: RwLock::new(Config::default()),
+                extra_lists: RwLock::new(HashMap::new()),
                 enabled: AtomicBool::new(true),
                 blocked: AtomicU64::new(0),
                 by_host: Mutex::new(HashMap::new()),
@@ -839,6 +841,42 @@ impl Blocker {
             self.persist_config();
         }
     }
+    /// Replace app-supplied extension filter lists and atomically rebuild the compiled engine.
+    /// IDs are limited to ASCII letters, digits, `_`, `-`, and `.`, and each list is capped at
+    /// 8 MiB (32 MiB total). Invalid entries are returned as errors and omitted.
+    pub fn set_extra_lists(&self, lists: Vec<(String, String)>) -> Vec<String> {
+        let _guard = self.inner.build_lock.lock();
+        let mut accepted = HashMap::new();
+        let mut errors = Vec::new();
+        let mut total_bytes = 0usize;
+        for (id, text) in lists {
+            let valid_id = !id.is_empty()
+                && id.len() <= 64
+                && id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'));
+            if !valid_id {
+                errors.push(format!("invalid extension list ID: {id:?}"));
+                continue;
+            }
+            if text.len() > 8 * 1024 * 1024
+                || total_bytes.saturating_add(text.len()) > 32 * 1024 * 1024
+            {
+                errors.push(format!("extension list {id} exceeds the size limit"));
+                continue;
+            }
+            if accepted.contains_key(&id) {
+                errors.push(format!("duplicate extension list ID: {id}"));
+                continue;
+            }
+            total_bytes += text.len();
+            accepted.insert(id, text);
+        }
+        *self.inner.extra_lists.write() = accepted;
+        let (hash, raw, _) = self.collect_raw();
+        self.build_and_store(&hash, &raw);
+        errors
+    }
     /// Recompile currently enabled cached sources.
     pub fn rebuild(&self) {
         let _guard = self.inner.build_lock.lock();
@@ -905,6 +943,18 @@ impl Blocker {
                 hasher.update(raw.as_bytes());
                 lists.push((source, raw));
             }
+        }
+        for (id, text) in self.inner.extra_lists.read().iter() {
+            let source = ListSource {
+                id: format!("extension:{id}"),
+                name: format!("Extension filter list {id}"),
+                url: String::new(),
+                kind: ListKind::Network,
+                default_enabled: true,
+            };
+            hasher.update(source.id.as_bytes());
+            hasher.update(text.as_bytes());
+            lists.push((source, text.clone()));
         }
         let any = lists.iter().any(|(s, _)| s.kind != ListKind::Resources);
         if !any {
@@ -1359,6 +1409,30 @@ mod tests {
         blocker.set_site_disabled("site.test", true);
         assert_eq!(
             blocker.check_with_page_context(&third_party, &page),
+            Decision::Allow
+        );
+    }
+    #[test]
+    fn extension_filter_lists_swap_compiled_engine_and_validate_ids() {
+        let blocker = fixture("");
+        let errors = blocker.set_extra_lists(vec![
+            ("ext.one".into(), "||extension-block.test^$script\n".into()),
+            ("../escape".into(), "||ignored.test^".into()),
+        ]);
+        assert_eq!(errors.len(), 1);
+        assert!(matches!(
+            blocker.check(&request(
+                "https://extension-block.test/a.js",
+                "https://site.test/"
+            )),
+            Decision::Block { .. }
+        ));
+        assert!(blocker.set_extra_lists(Vec::new()).is_empty());
+        assert_eq!(
+            blocker.check(&request(
+                "https://extension-block.test/a.js",
+                "https://site.test/"
+            )),
             Decision::Allow
         );
     }

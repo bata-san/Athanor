@@ -178,7 +178,9 @@ impl Workspace {
         let tab = Tab {
             id: new_id(),
             url: url.to_string(),
-            title: crate::urlutil::internal_title(url).unwrap_or_default().to_string(),
+            title: crate::urlutil::internal_title(url)
+                .unwrap_or_default()
+                .to_string(),
             favicon: None,
             space,
             folder: if opts.pinned { None } else { folder },

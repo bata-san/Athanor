@@ -44,6 +44,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.Keep
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.webkit.WebViewCompat
@@ -232,7 +233,7 @@ class AthanorEngine(private val activity: Activity) : Plugin(activity) {
         }
     }
 
-    private inner class TabWebView(tabId: String) : WebView(activity) {
+    private inner class TabWebView(private val tabId: String) : WebView(activity) {
         private val keyState = EngineKeyEventState()
 
         override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -305,12 +306,13 @@ class AthanorEngine(private val activity: Activity) : Plugin(activity) {
     }
 
     override fun onStop(activity: androidx.appcompat.app.AppCompatActivity) {
-        WebView.pauseTimers()
+        // `pauseTimers` is process-wide but only reachable through an instance.
+        tabs.values.firstOrNull()?.webView?.pauseTimers()
         super.onStop(activity)
     }
 
     override fun onResume(activity: androidx.appcompat.app.AppCompatActivity) {
-        WebView.resumeTimers()
+        tabs.values.firstOrNull()?.webView?.resumeTimers()
         tabs.values.forEach { record -> if (record.visible || record.audible) record.webView.onResume() }
         super.onResume(activity)
     }
@@ -741,7 +743,7 @@ class AthanorEngine(private val activity: Activity) : Plugin(activity) {
             customView = view
             customViewCallback = callback
             val insets = WindowInsetsControllerCompat(activity.window, decor)
-            systemBarsWereVisible = insets.isVisible(WindowInsetsCompat.Type.systemBars())
+            systemBarsWereVisible = ViewCompat.getRootWindowInsets(decor)?.isVisible(WindowInsetsCompat.Type.systemBars()) ?: true
             insets.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             insets.hide(WindowInsetsCompat.Type.systemBars())
             decor.addView(view, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))

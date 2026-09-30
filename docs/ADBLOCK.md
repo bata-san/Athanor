@@ -113,8 +113,11 @@ the Shields section of `docs/IPC.md`.
 The facade adds `DetailedVerdict` / `verdict_with_rewrite` for adapters that can follow rewritten
 URLs, `PageContext` / `page_context` / `verdict_with_page_context` to reuse the source host parsed
 once per navigation, `cosmetic_query` for generic class/ID matching, `page_script_injections` for
-extension-only phases, and `enabled` for adapter fast paths. Existing `Verdict` and `verdict` stay
-source-compatible; legacy `verdict` maps a rewrite to allow.
+extension-only phases, `enabled` for adapter fast paths, and `set_extra_lists` to accept extension
+list pairs and atomically replace the compiled engine. Extra list IDs accept ASCII letters,
+digits, `_`, `-`, and `.`, with 8 MiB per list and 32 MiB total limits; the method returns
+validation errors. Existing `Verdict` and `verdict` stay source-compatible; legacy `verdict` maps
+a rewrite to allow.
 
 ## Performance measurements
 
@@ -135,14 +138,15 @@ rebuilt: a rebuild is not a cold compiled-cache load. On the implementation mach
 cache rebuild took 1.78 s; subsequent optimized compiled-cache loads took 64–67 ms. `engine.dat`
 was 15,582,948 bytes and the serialized engine payload was 15,571,213 bytes for 13 enabled lists.
 The loaded benchmark process used 22.6 MiB working set (17.5 MiB private bytes) before reading the
-large request corpus. The optimized engine rebuild measurement inside the benchmark was 128–131
-ms. Across three full-corpus optimized runs (242,945 requests, two passes each), raw-engine checks
-measured 5.0–5.7 μs/request; the wrapper with navigation-cached source context measured 6.7–7.3
-μs/request before the benchmark's final adjustment to classify URL rewrites separately from
-blocked requests. These are environment measurements, include the default per-host counter update
-on matches, and vary with process scheduling. The run after the adjustment should be used for a
-final raw/wrapper comparison.
-
+large request corpus. The optimized engine rebuild measurement inside the benchmark was 128-131 ms.
+In the final full-corpus optimized run (242,945 requests, two passes), raw-engine matching measured
+5,595 ns/request and the wrapper with navigation-cached source context measured 6,645 ns/request.
+Raw and wrapper block totals differ by 24 because the wrapper applies Athanor's `$denyallow`
+compatibility exceptions; URL rewrites are excluded from the blocked count. Earlier runs varied
+between 5.0-5.7 us raw and 6.6-7.3 us in the wrapper, so the <=5 us target was not consistently met.
+The wrapper figure includes destination parsing, per-site config lookup, and the default per-host
+counter update on matches. Peak working set during cache deserialization was not captured; the
+loaded working set before corpus buffering was 22.6 MiB.
 The 101 sampled host-specific cosmetic CSS+JS payloads had a 37,362-byte median, including
 procedural runtime/action payloads and URL-specific CSS. This is not the generic on-demand reply
 size: the supplied request corpus has no DOM token inventories, so a representative generic reply

@@ -503,9 +503,12 @@ pub async fn open_board_window(app: AppHandle, id: Id) -> R {
 
 #[tauri::command]
 pub async fn set_board_always_on_top(app: AppHandle, id: Id, on: bool) -> R {
+    #[cfg(desktop)]
     if let Some(w) = app.get_webview_window(&format!("board-{id}")) {
         w.set_always_on_top(on).map_err(e)?;
     }
+    #[cfg(mobile)]
+    let _ = (&app, &id, on);
     Ok(())
 }
 
@@ -631,16 +634,27 @@ pub async fn remove_extension(
 
 #[tauri::command]
 pub async fn pick_directory(app: AppHandle) -> R<Option<String>> {
-    use tauri_plugin_dialog::DialogExt;
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    app.dialog().file().pick_folder(move |p| {
-        let _ = tx.send(p.map(|p| p.to_string()));
-    });
-    rx.await.map_err(e)
+    #[cfg(desktop)]
+    {
+        use tauri_plugin_dialog::DialogExt;
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        app.dialog().file().pick_folder(move |p| {
+            let _ = tx.send(p.map(|p| p.to_string()));
+        });
+        rx.await.map_err(e)
+    }
+    // Android has no folder picker; extensions are installed from the desktop app.
+    #[cfg(mobile)]
+    {
+        let _ = app;
+        Ok(None)
+    }
 }
 
 // ---------- window (desktop) ----------
 
+// Window chrome only exists on desktop; on Android these are harmless no-ops so the shell can call them blindly.
+#[cfg(desktop)]
 fn main_window(app: &AppHandle) -> R<tauri::Window> {
     app.get_window("main")
         .ok_or_else(|| "no main window".to_string())
@@ -648,31 +662,63 @@ fn main_window(app: &AppHandle) -> R<tauri::Window> {
 
 #[tauri::command]
 pub async fn window_minimize(app: AppHandle) -> R {
-    main_window(&app)?.minimize().map_err(e)
+    #[cfg(desktop)]
+    return main_window(&app)?.minimize().map_err(e);
+    #[cfg(mobile)]
+    {
+        let _ = app;
+        Ok(())
+    }
 }
 
 #[tauri::command]
 pub async fn window_toggle_maximize(app: AppHandle) -> R {
-    let w = main_window(&app)?;
-    if w.is_maximized().map_err(e)? {
-        w.unmaximize()
-    } else {
-        w.maximize()
+    #[cfg(desktop)]
+    {
+        let w = main_window(&app)?;
+        if w.is_maximized().map_err(e)? {
+            w.unmaximize()
+        } else {
+            w.maximize()
+        }
+        .map_err(e)
     }
-    .map_err(e)
+    #[cfg(mobile)]
+    {
+        let _ = app;
+        Ok(())
+    }
 }
 
 #[tauri::command]
 pub async fn window_close(app: AppHandle) -> R {
-    main_window(&app)?.close().map_err(e)
+    #[cfg(desktop)]
+    return main_window(&app)?.close().map_err(e);
+    #[cfg(mobile)]
+    {
+        let _ = app;
+        Ok(())
+    }
 }
 
 #[tauri::command]
 pub async fn window_start_drag(app: AppHandle) -> R {
-    main_window(&app)?.start_dragging().map_err(e)
+    #[cfg(desktop)]
+    return main_window(&app)?.start_dragging().map_err(e);
+    #[cfg(mobile)]
+    {
+        let _ = app;
+        Ok(())
+    }
 }
 
 #[tauri::command]
 pub async fn window_is_maximized(app: AppHandle) -> R<bool> {
-    main_window(&app)?.is_maximized().map_err(e)
+    #[cfg(desktop)]
+    return main_window(&app)?.is_maximized().map_err(e);
+    #[cfg(mobile)]
+    {
+        let _ = app;
+        Ok(false)
+    }
 }

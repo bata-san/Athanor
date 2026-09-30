@@ -377,6 +377,12 @@ impl Filter {
         self.blocker.set_list_enabled(id, on);
     }
 
+    /// Replace extension-provided filter lists and swap in their compiled engine.
+    #[allow(dead_code)] // Extension registry integration is wired by the app layer.
+    pub fn set_extra_lists(&self, lists: Vec<(String, String)>) -> Vec<String> {
+        self.blocker.set_extra_lists(lists)
+    }
+
     pub fn site_disabled(&self, host: &str) -> bool {
         self.blocker.site_disabled(host)
     }
