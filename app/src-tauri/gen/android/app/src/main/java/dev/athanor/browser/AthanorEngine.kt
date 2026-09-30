@@ -299,6 +299,7 @@ class AthanorEngine(private val activity: Activity) : Plugin(activity) {
     private external fun nativeShouldBlock(tab: String, url: String, source: String, kind: Int): Boolean
     private external fun nativeInjections(pageUrl: String, phase: Int): String
     private external fun nativeRewriteNavigation(url: String): String?
+    private external fun nativeUpgradeFallback(url: String): String?
     private external fun nativeOnEvent(eventJson: String)
 
     /** Source text of `cosmetic-bridge.js`, fetched once per process from the Rust core. */
@@ -709,6 +710,12 @@ class AthanorEngine(private val activity: Activity) : Plugin(activity) {
         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
             super.onReceivedError(view, request, error)
             if (request.isForMainFrame) {
+                // We upgraded http -> https and the site does not speak https: fall back to the original.
+                val original = runCatching { nativeUpgradeFallback(request.url.toString()) }.getOrNull()
+                if (original != null) {
+                    view.post { view.loadUrl(original) }
+                    return
+                }
                 emitEvent(JSONObject().put("type", "loadingChanged").put("tab", tabId).put("loading", false))
                 showErrorPage(view, "This page could not be loaded.")
             }
@@ -716,6 +723,11 @@ class AthanorEngine(private val activity: Activity) : Plugin(activity) {
 
         override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: android.net.http.SslError) {
             handler.cancel()
+            val original = runCatching { nativeUpgradeFallback(error.url) }.getOrNull()
+            if (original != null) {
+                view.post { view.loadUrl(original) }
+                return
+            }
             emitEvent(JSONObject().put("type", "loadingChanged").put("tab", tabId).put("loading", false))
             showErrorPage(view, "The secure connection could not be verified.")
         }

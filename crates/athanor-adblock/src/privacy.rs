@@ -63,6 +63,11 @@ pub fn upgrade_https(input: &str) -> Option<String> {
         .host_str()?
         .trim_matches(['[', ']'])
         .to_ascii_lowercase();
+    // An explicit port other than 80 means a specific service (dev server, router UI, ...) that almost
+    // never speaks TLS on that port; upgrading would just break it.
+    if parsed.port().is_some_and(|p| p != 80) {
+        return None;
+    }
     if host == "localhost"
         || host.ends_with(".localhost")
         || host.ends_with(".local")
@@ -71,7 +76,10 @@ pub fn upgrade_https(input: &str) -> Option<String> {
     {
         return None;
     }
-    Some(input.replacen("http:", "https:", 1))
+    // `Url` drops the default port, so an explicit `:80` does not turn into `https://host:80`.
+    let mut upgraded = parsed;
+    upgraded.set_scheme("https").ok()?;
+    Some(upgraded.to_string())
 }
 
 /// Unwrap a small allowlisted set of well-known tracker redirect endpoints.
@@ -116,6 +124,13 @@ fn safe_redirect_target(target: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn explicit_ports_are_never_upgraded() {
+        assert_eq!(upgrade_https("http://example.com:8099/app"), None);
+        assert_eq!(upgrade_https("http://example.com:80/app").as_deref(), Some("https://example.com/app"));
+        assert_eq!(upgrade_https("http://example.com/app").as_deref(), Some("https://example.com/app"));
+    }
+
     use super::*;
     #[test]
     fn tracking() {

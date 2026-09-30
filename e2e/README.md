@@ -28,3 +28,20 @@ NODE_PATH=app/node_modules node e2e/shield/check.cjs
 
 Note: WebView2 only delivers **string** messages from pages to the host; the cosmetic bridge therefore
 sends `JSON.stringify(...)` payloads (see `docs/ADBLOCK.md`).
+
+## Shield on Android (emulator)
+
+`e2e/shield/check-android.cjs` runs the same assertions against the Android WebViews (raw CDP; Playwright's
+`connectOverCDP` needs browser-level APIs that Android WebView does not provide).
+
+```bash
+# emulator with a userdebug image (adb root works); map a public-suffix host to the dev machine
+adb root
+adb shell "echo '_ --host-resolver-rules=\"MAP shield-test.example.com 10.0.2.2\"' > /data/local/tmp/webview-command-line"
+node e2e/shield/server.cjs &
+adb install -r app-x86_64-debug.apk && adb shell am start -n dev.athanor.browser/.MainActivity
+adb forward tcp:9223 localabstract:webview_devtools_remote_$(adb shell pidof dev.athanor.browser)
+node e2e/shield/check-android.cjs
+```
+
+The first run waits for the filter lists to be downloaded before asserting.

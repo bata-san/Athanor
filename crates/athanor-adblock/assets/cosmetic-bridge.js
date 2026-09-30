@@ -51,7 +51,13 @@
       return style;
     };
 
-    const applyReply = (message) => {
+    const applyReply = (raw) => {
+      // WebView2 delivers host replies as parsed JSON objects, Android's JavaScriptReplyProxy as strings.
+      let message = raw;
+      if (typeof raw === "string") {
+        if (raw.length > maxReplyBytes) return;
+        try { message = JSON.parse(raw); } catch (_) { return; }
+      }
       if (!message || message.athanorShield !== 1 || message.type !== "cosmetic-response") return;
       if (typeof message.id !== "string" || !pending.delete(message.id)) return;
       if (typeof message.css !== "string" || message.css.length > maxReplyBytes || !message.css) return;

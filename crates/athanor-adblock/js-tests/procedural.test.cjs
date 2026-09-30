@@ -132,3 +132,21 @@ test("document bridge prefers chrome.webview and waits for a late Android transp
   assert.equal(androidMessages.length, 1, "a transport that appears after document start is still picked up");
   late.window.close();
 });
+
+test("document bridge accepts string replies (Android reply proxy) over the athanorShield transport", async () => {
+  const dom = new JSDOM("<!doctype html><main><div class='promo'></div></main>", { runScripts: "outside-only", pretendToBeVisual: true });
+  const { window } = dom;
+  const messages = [];
+  const shield = new window.EventTarget();
+  shield.postMessage = (message) => { assert.equal(typeof message, "string"); messages.push(JSON.parse(message)); };
+  window.athanorShield = shield; // Android: object injected by addWebMessageListener, no chrome.webview
+  window.eval(bridge);
+  await new Promise((resolve) => setTimeout(resolve, 70));
+  const request = messages.find((message) => message.type === "cosmetic-query");
+  assert.ok(request);
+  shield.dispatchEvent(new window.MessageEvent("message", {
+    data: JSON.stringify({ athanorShield: 1, type: "cosmetic-response", id: request.id, css: ".promo{display:none!important}" }),
+  }));
+  assert.match(window.document.querySelector("[data-athanor-cosmetics]").textContent, /\.promo/);
+  dom.window.close();
+});

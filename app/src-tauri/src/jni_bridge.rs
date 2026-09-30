@@ -161,6 +161,29 @@ pub extern "system" fn Java_dev_athanor_browser_AthanorEngine_nativeRewriteNavig
     .unwrap_or(std::ptr::null_mut())
 }
 
+/// A main-frame navigation to `url` failed. If we had upgraded it from http, returns the original http URL
+/// (and remembers not to upgrade that host again).
+#[no_mangle]
+pub extern "system" fn Java_dev_athanor_browser_AthanorEngine_nativeUpgradeFallback(
+    mut env: JNIEnv<'_>,
+    _this: JObject<'_>,
+    url: JString<'_>,
+) -> jstring {
+    catch_unwind(AssertUnwindSafe(|| {
+        let Some(url) = java_string(&mut env, &url) else {
+            return std::ptr::null_mut();
+        };
+        let Some(filter) = FILTER.get() else {
+            return std::ptr::null_mut();
+        };
+        filter
+            .upgrade_fallback(&url)
+            .map(|original| return_string(&mut env, original))
+            .unwrap_or(std::ptr::null_mut())
+    }))
+    .unwrap_or(std::ptr::null_mut())
+}
+
 #[no_mangle]
 pub extern "system" fn Java_dev_athanor_browser_AthanorEngine_nativeOnEvent(
     mut env: JNIEnv<'_>,
