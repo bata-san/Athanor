@@ -96,7 +96,8 @@
       if (classes.length || ids.length) {
         const id = `c${(++sequence).toString(36)}`;
         pending.add(id);
-        bridge.postMessage({ athanorShield: 1, type: "cosmetic-query", id, classes, ids });
+        // WebView2 only delivers *string* messages from pages to the host, so serialise explicitly.
+        bridge.postMessage(JSON.stringify({ athanorShield: 1, type: "cosmetic-query", id, classes, ids }));
       }
       if (queuedClasses.size || queuedIds.size) schedule();
     };

@@ -68,11 +68,19 @@ impl EngineBackend for DesktopEngine {
         opts: &TabOptions,
     ) -> EngineResult {
         let parsed: url::Url = url.parse().map_err(err)?;
+        #[cfg(windows)]
+        let _ = &parsed;
         let sink = self.sink.clone();
         let tab: Id = id.to_string();
 
+        // On Windows the page is loaded only after our hooks are attached (see below); otherwise the very
+        // first navigation would bypass document-start scripts, https upgrade and request blocking setup.
+        #[cfg(windows)]
+        let initial: url::Url = "about:blank".parse().map_err(err)?;
+        #[cfg(not(windows))]
+        let initial = parsed.clone();
         let mut builder =
-            WebviewBuilder::new(tab_label(id), WebviewUrl::External(parsed)).devtools(true);
+            WebviewBuilder::new(tab_label(id), WebviewUrl::External(initial)).devtools(true);
         if let Some(ua) = &opts.user_agent {
             builder = builder.user_agent(ua);
         }
@@ -152,10 +160,15 @@ impl EngineBackend for DesktopEngine {
                 filter: self.filter.clone(),
                 page_url: Arc::new(Mutex::new(url.to_string())),
             };
+            let target = url.to_string();
             wv.with_webview(move |pw| {
                 let controller = pw.controller();
                 if let Err(e) = unsafe { crate::win::attach(&controller, ctx) } {
-                    log::error!("webview2 attach failed: {e}");
+                    eprintln!("webview2 attach failed: {e}");
+                }
+                // Hooks are in place: start the real navigation now.
+                if let Err(e) = unsafe { crate::win::navigate(&controller, &target) } {
+                    eprintln!("initial navigation failed: {e}");
                 }
             })
             .map_err(err)?;

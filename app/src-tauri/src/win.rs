@@ -85,6 +85,15 @@ fn cosmetic_query_response(
     if raw.len() > 128 * 1024 || !is_web(source) {
         return None;
     }
+    // Pages send JSON *strings* (WebView2 drops plain objects); `WebMessageAsJson` hands them back quoted.
+    let unwrapped: String;
+    let raw = match serde_json::from_str::<String>(raw) {
+        Ok(inner) => {
+            unwrapped = inner;
+            unwrapped.as_str()
+        }
+        Err(_) => raw,
+    };
     {
         let mut budget = budget.lock();
         if budget.started.elapsed().as_secs() >= 1 {
@@ -847,6 +856,13 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
     }
 
     Ok(())
+}
+
+pub unsafe fn navigate(
+    controller: &ICoreWebView2Controller,
+    url: &str,
+) -> windows::core::Result<()> {
+    controller.CoreWebView2()?.Navigate(&HSTRING::from(url))
 }
 
 pub unsafe fn go_back(controller: &ICoreWebView2Controller) -> windows::core::Result<()> {

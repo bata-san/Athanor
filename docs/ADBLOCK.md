@@ -155,6 +155,12 @@ size is not measured. Embedded JS assets are 4,391 bytes (`cosmetic-bridge.js`) 
 are source-byte sizes rather than minified output. These figures and all timings are specific to
 the test machine.
 
+The test-shell application builds with `TAURI_CONFIG={"build":{"frontendDist":"../.testshell"}}`
+and `tauri/custom-protocol`. A live WebView2 test was attempted with a local fixture server and
+`--remote-debugging-port=9222`, but the app failed during setup while creating WebView2 with
+HRESULT `0x800700AA` (the requested resource is in use). No navigation, iframe scriptlet timing,
+request-blocking, header, or generic-cosmetic E2E assertions completed.
+
 ## Android adapter notes
 
 Keep the existing `Filter` APIs used by `platform_mobile.rs` source-compatible. For the cosmetic
