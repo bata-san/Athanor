@@ -82,3 +82,53 @@ test("document bridge batches class/id queries and accepts matching host CSS rep
   assert.match(window.document.querySelector("[data-athanor-cosmetics]").textContent, /\.banner/);
   dom.window.close();
 });
+
+test("document bridge falls back to the Android athanorShield transport", async () => {
+  const dom = new JSDOM("<!doctype html><main><div id='ad-slot' class='banner promo'></div></main>", { runScripts: "outside-only", pretendToBeVisual: true });
+  const { window } = dom;
+  const injected = new window.EventTarget();
+  const messages = [];
+  injected.postMessage = (message) => {
+    assert.equal(typeof message, "string", "bridge must post a JSON string");
+    messages.push(JSON.parse(message));
+  };
+  window.athanorShield = injected;
+  window.eval(bridge);
+  await new Promise((resolve) => setTimeout(resolve, 70));
+  const request = messages.find((message) => message.type === "cosmetic-query");
+  assert.ok(request, "bridge must query the host over the injected object");
+  assert.equal(request.athanorShield, 1);
+  assert.deepEqual([...request.classes].sort(), ["banner", "promo"]);
+  assert.deepEqual([...request.ids], ["ad-slot"]);
+  injected.dispatchEvent(new window.MessageEvent("message", {
+    data: { athanorShield: 1, type: "cosmetic-response", id: request.id, css: "#ad-slot{display:none!important}\n" },
+  }));
+  assert.match(window.document.querySelector("[data-athanor-cosmetics]").textContent, /#ad-slot/);
+  dom.window.close();
+});
+
+test("document bridge prefers chrome.webview and waits for a late Android transport", async () => {
+  const dom = new JSDOM("<!doctype html><main><div class='banner'></div></main>", { runScripts: "outside-only", pretendToBeVisual: true });
+  const { window } = dom;
+  const webview = new window.EventTarget();
+  const webviewMessages = [];
+  webview.postMessage = (message) => webviewMessages.push(JSON.parse(message));
+  const android = new window.EventTarget();
+  const androidMessages = [];
+  android.postMessage = (message) => androidMessages.push(JSON.parse(message));
+  window.chrome = { webview };
+  window.eval(bridge);
+  window.athanorShield = android;
+  await new Promise((resolve) => setTimeout(resolve, 70));
+  assert.equal(webviewMessages.filter((message) => message.type === "cosmetic-query").length, 1);
+  assert.equal(androidMessages.length, 0, "chrome.webview must win when both transports exist");
+  dom.window.close();
+
+  const late = new JSDOM("<!doctype html><main><div class='banner'></div></main>", { runScripts: "outside-only", pretendToBeVisual: true });
+  const lateWindow = late.window;
+  lateWindow.eval(bridge);
+  lateWindow.athanorShield = android;
+  await new Promise((resolve) => setTimeout(resolve, 120));
+  assert.equal(androidMessages.length, 1, "a transport that appears after document start is still picked up");
+  late.window.close();
+});

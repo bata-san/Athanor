@@ -178,6 +178,47 @@ pub extern "system" fn Java_dev_athanor_browser_AthanorEngine_nativeOnEvent(
     }));
 }
 
+/// Source text of `crates/athanor-adblock/assets/cosmetic-bridge.js`. The Kotlin plugin fetches this
+/// once per process and registers it with `WebViewCompat.addDocumentStartJavaScript`.
+#[no_mangle]
+pub extern "system" fn Java_dev_athanor_browser_AthanorEngine_cosmeticBridgeScript(
+    mut env: JNIEnv<'_>,
+    _this: JObject<'_>,
+) -> jstring {
+    catch_unwind(AssertUnwindSafe(|| {
+        return_string(&mut env, athanor_adblock::COSMETIC_BRIDGE_JS.to_string())
+    }))
+    .unwrap_or(std::ptr::null_mut())
+}
+
+/// Answer one in-page generic-cosmetic query. `page_url` must come from native data (the WebView's
+/// current URL or the message source origin), never from the page. Returns `null` when the message
+/// is not a valid query, so the caller skips the reply and the page just loads without cosmetics.
+#[no_mangle]
+pub extern "system" fn Java_dev_athanor_browser_AthanorEngine_cosmeticQuery(
+    mut env: JNIEnv<'_>,
+    _this: JObject<'_>,
+    page_url: JString<'_>,
+    raw_json: JString<'_>,
+) -> jstring {
+    catch_unwind(AssertUnwindSafe(|| {
+        let (Some(page_url), Some(raw)) = (
+            java_string(&mut env, &page_url),
+            java_string(&mut env, &raw_json),
+        ) else {
+            return std::ptr::null_mut();
+        };
+        let Some(filter) = FILTER.get() else {
+            return std::ptr::null_mut();
+        };
+        filter
+            .cosmetic_query_reply(&page_url, &raw)
+            .map(|response| return_string(&mut env, response))
+            .unwrap_or(std::ptr::null_mut())
+    }))
+    .unwrap_or(std::ptr::null_mut())
+}
+
 #[cfg(test)]
 mod tests {
     use super::kind_from_int;

@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type * as React from 'react'
-import type { ExtensionInfo, FilingRule, Settings as SettingsShape, ThemeInfo } from '@/lib/types'
+import { toast } from 'sonner'
+import type { ExtensionInfo, FilingRule, LineIssue, Settings as SettingsShape, ThemeInfo } from '@/lib/types'
 import { api } from '@/lib/api'
+import { countFilterLines, ignoredLineSummary, lineCountLabel, lineSelectionRange } from '@/lib/userFilters'
 import { useAppStore } from '@/lib/store'
 import { AppIcon } from '@/components/Icons'
 import { Button } from '@/components/ui/button'
@@ -35,6 +37,7 @@ export default function SettingsPage() {
       </>}
       {section === 'Privacy' && <>
         <section className="page-section"><h2>Ad and tracker blocking</h2><SwitchRow label="Built-in adblock" description="Block requests with local filter lists." checked={adblock?.enabled ?? settings.adblockEnabled} onChange={(enabled) => void api.setAdblockEnabled(enabled)} /><div className="list-heading"><span>Filter lists</span><Button size="sm" variant="outline" disabled={adblock?.updating} onClick={() => void api.updateAdblockLists()}><AppIcon name="RotateCw" />{adblock?.updating ? 'Updating…' : 'Update now'}</Button></div>{adblock?.lists.map((list) => <div className="filter-row" key={list.id}><div><strong>{list.name}</strong><span className="muted-copy">{list.ruleCount.toLocaleString()} rules · {list.updatedAt ? `Updated ${new Date(list.updatedAt).toLocaleDateString()}` : 'Not updated'}{list.error ? ` · ${list.error}` : ''}</span></div><Switch checked={list.enabled} label={`${list.name} list`} onChange={(enabled) => void api.setAdblockListEnabled(list.id, enabled)} /></div>)}</section>
+        <section className="page-section"><h2>My filters</h2><MyFiltersEditor /></section>
         <section className="page-section"><h2>Protection preferences</h2><SwitchRow label="Upgrade to HTTPS" description="Prefer encrypted connections when available." checked={settings.httpsUpgrade} onChange={(httpsUpgrade) => patch({ httpsUpgrade })} /><SwitchRow label="Strip tracking parameters" description="Remove common tracking keys from addresses." checked={settings.stripTracking} onChange={(stripTracking) => patch({ stripTracking })} /><p className="muted-copy">{snapshot?.blockedTotal.toLocaleString()} requests blocked across this session.</p></section>
       </>}
       {section === 'Filing' && <>
@@ -52,6 +55,30 @@ export default function SettingsPage() {
   </div>
 }
 
+function MyFiltersEditor() {
+  const [text, setText] = useState('')
+  const [saved, setSaved] = useState('')
+  const [issues, setIssues] = useState<LineIssue[]>([])
+  const [saving, setSaving] = useState(false)
+  const area = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => { let alive = true; void api.getUserFilters().then((value) => { if (alive) { setText(value); setSaved(value) } }).catch(() => toast.error('Filters could not be loaded.')); return () => { alive = false } }, [])
+  const dirty = text !== saved
+  const save = async () => {
+    if (!dirty || saving) return
+    setSaving(true)
+    try { const found = await api.setUserFilters(text); setSaved(text); setIssues(found); toast.success(found.length ? `Filters saved · ${ignoredLineSummary(found.length)}` : 'Filters saved') }
+    catch (error) { toast.error(error instanceof Error ? error.message : String(error)) }
+    finally { setSaving(false) }
+  }
+  const jump = (line: number) => { const node = area.current; if (!node) return; const range = lineSelectionRange(text, line); node.focus(); node.setSelectionRange(range.start, range.end) }
+  const lines = countFilterLines(text)
+  return <>
+    <p className="filter-help" id="my-filters-help">One rule per line, for example <code>||ads.example.com^</code>, <code>example.com##.banner</code>, <code>@@||example.com^$document</code>.</p>
+    <textarea ref={area} id="my-filters" data-part="my-filters" className="textarea" aria-label="My filters" aria-describedby="my-filters-help" rows={12} wrap="off" spellCheck={false} value={text} placeholder="||ads.example.com^" onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void save() } }} />
+    <div className="filter-actions"><Button onClick={() => void save()} disabled={!dirty || saving}><AppIcon name="Check" />{saving ? 'Saving…' : 'Save'}</Button><Button variant="outline" onClick={() => setText(saved)} disabled={!dirty || saving}><AppIcon name="RotateCcw" />Revert</Button><span className="filter-count"><span className="muted-copy" data-part="filter-count">{lineCountLabel(lines)}</span><span className="filter-hint"><span className="muted-copy">·</span><kbd>Ctrl</kbd><kbd>S</kbd></span></span></div>
+    {issues.length > 0 && <><p className="filter-report muted-copy">The engine ignored {lineCountLabel(issues.length)}:</p><ul className="filter-issues" data-part="filter-issues" aria-label="Ignored lines">{issues.map((issue) => <li key={`${issue.line}-${issue.message}`}><button type="button" className="filter-issue" data-part="filter-issue" aria-label={issue.line ? `Select line ${issue.line}` : 'Select all filters'} onClick={() => jump(issue.line)}><AppIcon name="XCircle" /><span><strong>{issue.line ? `Line ${issue.line}:` : 'All lines:'}</strong> <span className="muted-copy">{issue.message}</span></span></button></li>)}</ul></>}
+  </>
+}
 function SwitchRow({ label, description, checked, onChange }: { label: string; description: string; checked: boolean; onChange: (value: boolean) => void }) { return <div className="setting-row"><div><strong>{label}</strong><span className="muted-copy">{description}</span></div><Switch checked={checked} label={label} onChange={onChange} /></div> }
 function Switch({ checked, label, onChange }: { checked: boolean; label: string; onChange: (value: boolean) => void }) { return <button className="switch" data-checked={String(checked)} role="switch" aria-label={label} aria-checked={checked} onClick={() => onChange(!checked)} /> }
 function ExtensionRow({ extension, onRefresh }: { extension: ExtensionInfo; onRefresh: () => void }) { return <div className="extension-row"><div className="extension-info"><span className="speed-icon"><AppIcon name="Zap" /></span><div><strong>{extension.name}</strong><span className="muted-copy">{extension.description}</span><span className="muted-copy">Permissions: {extension.permissions.join(', ') || 'None'} · {extension.version}</span></div></div><div className="extension-actions"><Switch checked={extension.enabled} label={`${extension.name} enabled`} onChange={(enabled) => void api.setExtensionEnabled(extension.id, enabled).then(onRefresh)} />{extension.source === 'user' && <Button variant="ghost" size="icon" aria-label={`Remove ${extension.name}`} onClick={() => void api.removeExtension(extension.id).then(onRefresh)}><AppIcon name="Trash2" /></Button>}</div></div> }

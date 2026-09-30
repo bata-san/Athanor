@@ -93,6 +93,7 @@ export type DevTool = 'json-pretty' | 'json-minify' | 'base64-encode' | 'base64-
 
 export interface AdblockList { id: string; name: string; enabled: boolean; updatedAt: number | null; ruleCount: number; error: string | null }
 export interface AdblockStatus { enabled: boolean; lists: AdblockList[]; blockedTotal: number; updating: boolean }
+export interface LineIssue { line: number; message: string }   // line = 1-based; 0 = whole text (e.g. too large)
 
 export interface ThemeInfo { id: string; name: string; dark: boolean; source: 'builtin' | 'extension' | 'user' }
 export interface ExtensionInfo { id: string; name: string; version: string; description: string; enabled: boolean; source: 'builtin' | 'user'; permissions: string[] }
@@ -191,7 +192,15 @@ the native message event, validates/rate-limits tokens, and never evaluates cont
 See [ADBLOCK.md](ADBLOCK.md#cosmetic-message-protocol-version-1) for limits and Android transport
 guidance.
 
-Granular per-site controls, user filters, element picker/zapper, and dynamic filtering do not yet
+User filters ("My filters") are part of the same shield contract; the text is uBlock / Adblock Plus syntax:
+
+* `get_user_filters() → string` — the stored text (may be empty).
+* `set_user_filters({ text }) → LineIssue[]` — stores the text, recompiles, then returns the lines the engine
+  cannot parse (`line` is 1-based; `line: 0` means the whole text was rejected). Text is capped at 512 KiB: an
+  oversized text is **not** stored and the command rejects with a string message, so the shell must keep the
+  editor content. Recompiling emits `athanor://adblock` when the counters change.
+
+Granular per-site controls, element picker/zapper, and dynamic filtering do not yet
 have Tauri commands.
 
 ### Settings / extensions

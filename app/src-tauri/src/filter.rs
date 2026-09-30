@@ -6,7 +6,7 @@
 use athanor_adblock::{privacy, Blocker, Decision, PageContext, Request, ResourceType};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use parking_lot::{Mutex, RwLock};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
@@ -100,6 +100,37 @@ pub struct AdblockStatus {
 }
 
 const STALE_AFTER_SECS: u64 = 3 * 24 * 3600;
+
+/// Largest in-page cosmetic query accepted (bytes). Shared by every adapter so WebView2 and the
+/// Android WebMessageListener enforce the same bound.
+const COSMETIC_QUERY_MAX_BYTES: usize = 128 * 1024;
+/// Largest reply built for one query (bytes).
+const COSMETIC_REPLY_MAX_BYTES: usize = 768 * 1024;
+/// Selectors per emitted CSS rule.
+const COSMETIC_SELECTOR_CHUNK: usize = 200;
+/// Per-message token budget for `classes` + `ids`.
+const COSMETIC_QUERY_MAX_TOKENS: usize = 512;
+/// Longest single class/id token, in bytes.
+const COSMETIC_QUERY_MAX_TOKEN_BYTES: usize = 256;
+/// Longest request id echoed back to the page.
+const COSMETIC_QUERY_MAX_ID_BYTES: usize = 64;
+
+/// The in-page collector's request. `deny_unknown_fields` keeps unknown page data out of the host.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CosmeticQueryMessage {
+    #[serde(rename = "athanorShield")]
+    version: u8,
+    #[serde(rename = "type")]
+    kind: String,
+    id: String,
+    classes: Vec<String>,
+    ids: Vec<String>,
+}
+
+fn is_web_url(url: &str) -> bool {
+    url.starts_with("http://") || url.starts_with("https://")
+}
 
 fn now_secs() -> u64 {
     SystemTime::now()
@@ -254,6 +285,73 @@ impl Filter {
     ) -> Vec<String> {
         self.blocker
             .cosmetic_query(page_url, classes, ids, exceptions)
+    }
+
+    /// Validate one in-page cosmetic query and build its reply, shared by every adapter.
+    ///
+    /// `source` is the frame URL as reported by the *native* message event, never page-supplied
+    /// data; `raw` is the page's JSON text (some hosts hand a JSON string back quoted, which is
+    /// unwrapped here). Returns `None` for anything that is not a well-formed, in-budget query so
+    /// adapters can simply skip the reply and let the page continue without cosmetics.
+    ///
+    /// Rate limiting is deliberately *not* here: each adapter owns its own per-view budget
+    /// (see `win.rs`), because the useful window and key differ per engine.
+    pub fn cosmetic_query_reply(&self, source: &str, raw: &str) -> Option<String> {
+        if raw.len() > COSMETIC_QUERY_MAX_BYTES || !is_web_url(source) {
+            return None;
+        }
+        // Pages send JSON *strings* (WebView2 drops plain objects); `WebMessageAsJson` hands them back
+        // quoted, so accept both the object and a quoted string carrying it.
+        let unwrapped: String;
+        let raw = match serde_json::from_str::<String>(raw) {
+            Ok(inner) => {
+                unwrapped = inner;
+                unwrapped.as_str()
+            }
+            Err(_) => raw,
+        };
+        let query: CosmeticQueryMessage = serde_json::from_str(raw).ok()?;
+        if query.version != 1
+            || query.kind != "cosmetic-query"
+            || query.id.is_empty()
+            || query.id.len() > COSMETIC_QUERY_MAX_ID_BYTES
+            || !query
+                .id
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+            || query.classes.len() > COSMETIC_QUERY_MAX_TOKENS
+            || query.ids.len() > COSMETIC_QUERY_MAX_TOKENS
+            || query.classes.len() + query.ids.len() > COSMETIC_QUERY_MAX_TOKENS
+            || query
+                .classes
+                .iter()
+                .chain(&query.ids)
+                .any(|token| token.len() > COSMETIC_QUERY_MAX_TOKEN_BYTES)
+        {
+            return None;
+        }
+        let selectors = self.cosmetic_query(source, &query.classes, &query.ids, &HashSet::new());
+        let mut css = String::new();
+        for group in selectors.chunks(COSMETIC_SELECTOR_CHUNK) {
+            let next_len = group.iter().map(String::len).sum::<usize>() + group.len() + 28;
+            if css.len().saturating_add(next_len) > COSMETIC_REPLY_MAX_BYTES {
+                break;
+            }
+            for (index, selector) in group.iter().enumerate() {
+                if index > 0 {
+                    css.push(',');
+                }
+                css.push_str(selector);
+            }
+            css.push_str("{display:none!important}\n");
+        }
+        serde_json::to_string(&serde_json::json!({
+            "athanorShield": 1,
+            "type": "cosmetic-response",
+            "id": query.id,
+            "css": css,
+        }))
+        .ok()
     }
 
     pub fn set_injector(&self, injector: Injector) {
@@ -524,5 +622,139 @@ mod tests {
             f.injections("https://a.test/", 2),
             vec!["https://a.test/#2".to_string()]
         );
+    }
+
+    /// Fixture with generic class/id hide rules, enough to exercise the shared reply builder.
+    /// `###ad-slot` is the generic form for an id selector, and `generichide` switches generic
+    /// matching off for one site so the tests can show the frame URL is what decides the answer.
+    fn cosmetic_filter() -> Filter {
+        filter_with_rules(
+            "##.banner\n##.promo\n###ad-slot\n@@||generichide.test^$generichide\n",
+        )
+    }
+
+    fn query(id: &str, classes: &[&str], ids: &[&str]) -> String {
+        serde_json::json!({
+            "athanorShield": 1,
+            "type": "cosmetic-query",
+            "id": id,
+            "classes": classes,
+            "ids": ids,
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn cosmetic_reply_echoes_the_request_id_and_returns_matching_selectors() {
+        let f = cosmetic_filter();
+        let raw = query("c1", &["banner", "unrelated"], &["ad-slot"]);
+        let reply = f
+            .cosmetic_query_reply("https://site.test/page", &raw)
+            .expect("valid query");
+        let value: serde_json::Value = serde_json::from_str(&reply).expect("reply is JSON");
+        assert_eq!(value["athanorShield"], 1);
+        assert_eq!(value["type"], "cosmetic-response");
+        assert_eq!(value["id"], "c1");
+        let css = value["css"].as_str().expect("css is a string");
+        assert!(css.contains(".banner"), "expected .banner in {css:?}");
+        assert!(css.contains("#ad-slot"), "expected #ad-slot in {css:?}");
+        assert!(!css.contains("unrelated"));
+        assert!(css.ends_with("{display:none!important}\n"));
+        // The frame URL decides the answer: $generichide silences the same tokens on one site.
+        let hidden = f
+            .cosmetic_query_reply("https://generichide.test/page", &raw)
+            .expect("valid query");
+        assert!(
+            !hidden.contains("display:none"),
+            "$generichide site should get no generic CSS: {hidden}"
+        );
+    }
+
+    #[test]
+    fn cosmetic_reply_unwraps_a_quoted_json_string() {
+        let f = cosmetic_filter();
+        let quoted = serde_json::to_string(&query("c3", &["banner"], &[])).expect("encode");
+        let reply = f
+            .cosmetic_query_reply("https://site.test/", &quoted)
+            .expect("quoted string is unwrapped");
+        assert!(reply.contains("\"id\":\"c3\""), "unexpected reply {reply}");
+        assert!(reply.contains(".banner"));
+    }
+
+    #[test]
+    fn cosmetic_reply_rejects_malformed_and_out_of_budget_messages() {
+        let f = cosmetic_filter();
+        let source = "https://site.test/";
+        // Non-web frame URL.
+        assert!(f.cosmetic_query_reply("about:blank", &query("c1", &["banner"], &[])).is_none());
+        assert!(f.cosmetic_query_reply("javascript:1", &query("c1", &["banner"], &[])).is_none());
+        // Oversized payload (128 KiB cap).
+        let filler = "a".repeat(200 * 1024);
+        assert!(
+            f.cosmetic_query_reply(source, &query("c1", &[&filler], &[]))
+                .is_none()
+        );
+        // Oversized raw message regardless of content.
+        assert!(
+            f.cosmetic_query_reply(source, &"x".repeat(128 * 1024 + 1))
+                .is_none()
+        );
+        // Wrong protocol version / type.
+        let bad_version =
+            serde_json::json!({"athanorShield": 2, "type": "cosmetic-query", "id": "c1", "classes": [], "ids": []});
+        assert!(
+            f.cosmetic_query_reply(source, &bad_version.to_string())
+                .is_none()
+        );
+        let bad_type =
+            serde_json::json!({"athanorShield": 1, "type": "cosmetic-eval", "id": "c1", "classes": [], "ids": []});
+        assert!(
+            f.cosmetic_query_reply(source, &bad_type.to_string())
+                .is_none()
+        );
+        // Invalid ids.
+        for id in ["", &"c".repeat(65), "has space", "semi;colon"] {
+            assert!(
+                f.cosmetic_query_reply(source, &query(id, &["banner"], &[]))
+                    .is_none(),
+                "id {id:?} should be rejected"
+            );
+        }
+        // Too many tokens (> 512 in total) and an over-long token (> 256 bytes).
+        let many: Vec<String> = (0..513).map(|n| format!("t{n}")).collect();
+        let refs: Vec<&str> = many.iter().map(String::as_str).collect();
+        assert!(f.cosmetic_query_reply(source, &query("c1", &refs, &[])).is_none());
+        assert!(
+            f.cosmetic_query_reply(source, &query("c1", &[""], &[]))
+                .is_some(),
+            "an empty token is harmless and simply matches nothing"
+        );
+        assert!(
+            f.cosmetic_query_reply(source, &query("c1", &[&"t".repeat(257)], &[]))
+                .is_none()
+        );
+        // Not JSON at all, and a JSON document with unexpected fields.
+        assert!(f.cosmetic_query_reply(source, "not json").is_none());
+        assert!(f.cosmetic_query_reply(source, "[]").is_none());
+        let extra = serde_json::json!({
+            "athanorShield": 1, "type": "cosmetic-query", "id": "c1",
+            "classes": [], "ids": [], "url": "https://evil.test/"
+        });
+        assert!(
+            f.cosmetic_query_reply(source, &extra.to_string())
+                .is_none(),
+            "page-supplied page data must not be accepted"
+        );
+    }
+
+    #[test]
+    fn cosmetic_reply_is_empty_css_when_nothing_matches() {
+        let f = cosmetic_filter();
+        let reply = f
+            .cosmetic_query_reply("https://site.test/", &query("c9", &["nothing-here"], &[]))
+            .expect("valid query");
+        let value: serde_json::Value = serde_json::from_str(&reply).expect("reply is JSON");
+        assert_eq!(value["id"], "c9");
+        assert_eq!(value["css"], "");
     }
 }

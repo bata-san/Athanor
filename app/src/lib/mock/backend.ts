@@ -1,4 +1,5 @@
 import type { AdblockStatus, Board, BoardItem, BoardSummary, CommandArgs, CommandResult, DevServer, EventPayloads, ExtensionInfo, FilingRule, Folder, Id, PanelInfo, Platform, Settings, Snapshot, Space, SplitNode, SplitRects, Suggestion, Tab, ThemeInfo } from '../types'
+import { validateFilterText } from '../userFilters'
 
 const now = Date.now()
 const uid = (prefix = 'id') => `${prefix}-${Math.random().toString(36).slice(2, 9)}`
@@ -42,6 +43,7 @@ let extensions: ExtensionInfo[] = [{ id: 'notes', name: 'Quick Notes', version: 
 const themes: ThemeInfo[] = [{ id: 'ember', name: 'Ember', dark: true, source: 'builtin' }, { id: 'paper', name: 'Paper', dark: false, source: 'builtin' }, { id: 'midnight', name: 'Midnight', dark: true, source: 'builtin' }, { id: 'moss', name: 'Moss', dark: true, source: 'builtin' }]
 const servers: DevServer[] = [{ port: 5173, url: 'http://localhost:5173', title: 'Vite app' }, { port: 3000, url: 'http://localhost:3000', title: 'Next.js' }]
 const shields = new Map<string, boolean>()
+let userFilters = ['! My filters — one rule per line', '||ads.example.com^', 'example.com##.banner', '@@||example.com^$document', ''].join('\n')
 const eventListeners = new Map<string, Set<(payload: unknown) => void>>()
 export function isMockMode(): boolean { return typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window) }
 export function mockListen<K extends keyof EventPayloads>(event: K, handler: (payload: EventPayloads[K]) => void): () => void {
@@ -185,6 +187,8 @@ export async function mockInvoke<K extends keyof CommandArgs>(name: K, rawArgs: 
     case 'update_adblock_lists': adblock.updating = true; emit('athanor://adblock', structuredClone(adblock)); await new Promise((resolve) => setTimeout(resolve, 550)); adblock.updating = false; adblock.lists.forEach((l) => { l.updatedAt = Date.now() }); emit('athanor://adblock', structuredClone(adblock)); emit('athanor://toast', { level: 'success', message: 'Filter lists are up to date.' }); break
     case 'get_site_shield': result = shields.get(args.host) ?? true; break
     case 'set_site_shield': shields.set(args.host, args.enabled); emit('athanor://toast', { level: 'info', message: `${args.host}: protection ${args.enabled ? 'on' : 'off'}.` }); break
+    case 'get_user_filters': result = userFilters; break
+    case 'set_user_filters': { const issues = validateFilterText(args.text); const rejected = issues.find((issue) => issue.line === 0); if (rejected) throw new Error(rejected.message); userFilters = args.text; result = issues; break }
     case 'get_settings': result = structuredClone(state.settings); break
     case 'set_settings': Object.assign(state.settings, args.patch); document.documentElement.dataset.themeDark = String(state.settings.theme !== 'paper'); emitSnapshot(); break
     case 'list_extensions': result = structuredClone(extensions); break

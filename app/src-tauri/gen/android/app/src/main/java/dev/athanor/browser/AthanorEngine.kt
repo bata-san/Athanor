@@ -47,6 +47,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.webkit.JavaScriptReplyProxy
+import androidx.webkit.WebMessageCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import app.tauri.annotation.Command
@@ -75,6 +77,23 @@ private const val KIND_FETCH = 8
 private const val KIND_WEBSOCKET = 9
 private const val KIND_PING = 10
 private const val KIND_OTHER = 11
+
+/** In-page object name for the generic-cosmetic bridge (must match `cosmetic-bridge.js`). */
+private const val COSMETIC_BRIDGE_OBJECT = "athanorShield"
+
+/** Same inbound cap as the Windows adapter and `Filter::cosmetic_query_reply`. */
+private const val COSMETIC_QUERY_MAX_CHARS = 128 * 1024
+
+/**
+ * Allowed-origin rules for both cosmetic-bridge registrations.
+ *
+ * androidx.webkit only accepts `SCHEME://[HOSTNAME_PATTERN[:PORT]]` plus the bare wildcard `*`;
+ * Chromium's origin matcher rejects `http://*` / `https://*` outright (`IllegalArgumentException`),
+ * so there is no rule that means "every http(s) origin". We therefore register `*` (all frames) and
+ * enforce HTTP(S)-only on the native side: `onCosmeticMessage` drops any frame whose
+ * `sourceOrigin` is not http(s), and `Filter::cosmetic_query_reply` drops any non-web page URL.
+ */
+private val COSMETIC_BRIDGE_ORIGINS = setOf("*")
 
 /** CSS pixels from getBoundingClientRect() to physical pixels. */
 internal object EngineGeometry {
@@ -189,6 +208,9 @@ class AthanorEngine(private val activity: Activity) : Plugin(activity) {
     private val runtimeQueue = ArrayDeque<PendingRuntimePermission>()
     private var permissionInFlight = false
 
+    /** Cached `cosmetic-bridge.js` source; the script never changes while the process lives. */
+    @Volatile private var cosmeticBridge: String? = null
+
     private val filePickerLauncher: ActivityResultLauncher<Intent>? =
         // The plugin is created after the activity is already RESUMED, where `registerForActivityResult`
         // (lifecycle-bound) throws; registering on the registry directly has no such restriction.
@@ -277,6 +299,15 @@ class AthanorEngine(private val activity: Activity) : Plugin(activity) {
     private external fun nativeInjections(pageUrl: String, phase: Int): String
     private external fun nativeRewriteNavigation(url: String): String?
     private external fun nativeOnEvent(eventJson: String)
+
+    /** Source text of `cosmetic-bridge.js`, fetched once per process from the Rust core. */
+    private external fun cosmeticBridgeScript(): String?
+
+    /**
+     * Answer one in-page generic-cosmetic query. [pageUrl] must come from native data; returns null
+     * when the message is not a valid query, in which case nothing is posted back.
+     */
+    private external fun cosmeticQuery(pageUrl: String, rawJson: String): String?
 
     override fun load(webView: WebView) {
         shellWebView = webView
@@ -480,6 +511,7 @@ class AthanorEngine(private val activity: Activity) : Plugin(activity) {
             runCatching { WebViewCompat.addDocumentStartJavaScript(view, script, setOf("*")) }
                 .onFailure { documentStartEnabled = false; Log.w(TAG, "Document-start script registration unavailable", it) }
         }
+        installCosmeticBridge(view, tabId)
         view.webViewClient = engineWebViewClient(tabId)
         view.webChromeClient = engineChromeClient(tabId)
         view.setDownloadListener(downloadListener(tabId))

@@ -8,7 +8,6 @@
 use crate::filter::{DetailedVerdict, Filter, Kind};
 use athanor_core::engine::{EngineEvent, EventSink};
 use parking_lot::Mutex;
-use serde::Deserialize;
 use std::{collections::HashSet, sync::Arc, time::Instant};
 use webview2_com::{take_pwstr, Microsoft::Web::WebView2::Win32::*, *};
 use windows::{
@@ -50,18 +49,6 @@ fn is_web(uri: &str) -> bool {
     uri.starts_with("http://") || uri.starts_with("https://")
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct CosmeticQueryMessage {
-    #[serde(rename = "athanorShield")]
-    version: u8,
-    #[serde(rename = "type")]
-    kind: String,
-    id: String,
-    classes: Vec<String>,
-    ids: Vec<String>,
-}
-
 struct CosmeticQueryBudget {
     started: Instant,
     requests: u16,
@@ -82,18 +69,10 @@ fn cosmetic_query_response(
     raw: &str,
     budget: &Mutex<CosmeticQueryBudget>,
 ) -> Option<String> {
+    // Cheap pre-checks stay here so an oversized or off-scheme message never consumes the budget.
     if raw.len() > 128 * 1024 || !is_web(source) {
         return None;
     }
-    // Pages send JSON *strings* (WebView2 drops plain objects); `WebMessageAsJson` hands them back quoted.
-    let unwrapped: String;
-    let raw = match serde_json::from_str::<String>(raw) {
-        Ok(inner) => {
-            unwrapped = inner;
-            unwrapped.as_str()
-        }
-        Err(_) => raw,
-    };
     {
         let mut budget = budget.lock();
         if budget.started.elapsed().as_secs() >= 1 {
@@ -105,48 +84,7 @@ fn cosmetic_query_response(
         }
         budget.requests += 1;
     }
-    let query: CosmeticQueryMessage = serde_json::from_str(raw).ok()?;
-    if query.version != 1
-        || query.kind != "cosmetic-query"
-        || query.id.is_empty()
-        || query.id.len() > 64
-        || !query
-            .id
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-        || query.classes.len() > 512
-        || query.ids.len() > 512
-        || query.classes.len() + query.ids.len() > 512
-        || query
-            .classes
-            .iter()
-            .chain(&query.ids)
-            .any(|token| token.len() > 256)
-    {
-        return None;
-    }
-    let selectors = filter.cosmetic_query(source, &query.classes, &query.ids, &HashSet::new());
-    let mut css = String::new();
-    for group in selectors.chunks(200) {
-        let next_len = group.iter().map(String::len).sum::<usize>() + group.len() + 28;
-        if css.len().saturating_add(next_len) > 768 * 1024 {
-            break;
-        }
-        for (index, selector) in group.iter().enumerate() {
-            if index > 0 {
-                css.push(',');
-            }
-            css.push_str(selector);
-        }
-        css.push_str("{display:none!important}\n");
-    }
-    serde_json::to_string(&serde_json::json!({
-        "athanorShield": 1,
-        "type": "cosmetic-response",
-        "id": query.id,
-        "css": css,
-    }))
-    .ok()
+    filter.cosmetic_query_reply(source, raw)
 }
 
 fn document_start_payload(filter: &Filter, url: &str) -> Option<String> {

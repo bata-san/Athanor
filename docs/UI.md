@@ -10,6 +10,10 @@ The React shell lives under `app/src/`. `components/` contains the sidebar with 
 
 Add a command's argument and result types in `lib/types.ts`, expose it through `lib/api.ts`, and implement it in `lib/mock/backend.ts` so browser demos stay functional. For a page, add a component under `pages/`, lazy-load it from `App.tsx`, and route it through an `athanor://` internal tab when the backend should hide native page webviews. Use CSS variables and `data-part` hooks so backend theme CSS can restyle the shell.
 
+## My filters editor
+
+`Settings > Privacy` carries a monospace editor for the user's own filter rules (`data-part="my-filters"`). It loads through `getUserFilters()` when the section opens, saves with `setUserFilters()` or `Ctrl+S` inside the editor, reverts to the last saved text, and keeps a live line counter; after a save it lists the returned `LineIssue` lines and clicking one selects that line in the textarea. The pure helpers in `lib/userFilters.ts` map a line number to a selection range, count lines, and validate text so the mock backend can report the same issues.
+
 ## Mock backend
 
 Mock mode starts automatically when `window.__TAURI_INTERNALS__` is absent. It includes example spaces, tabs, folders, filter lists, developer servers, extension panels, and reference boards; it also implements tab actions, filing, archive, split view, settings, boards, and developer utilities. `?platform=android` forces the mobile shell only in mock mode.
