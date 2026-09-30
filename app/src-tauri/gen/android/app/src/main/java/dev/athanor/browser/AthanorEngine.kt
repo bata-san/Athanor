@@ -190,7 +190,9 @@ class AthanorEngine(private val activity: Activity) : Plugin(activity) {
     private var permissionInFlight = false
 
     private val filePickerLauncher: ActivityResultLauncher<Intent>? =
-        (activity as? ComponentActivity)?.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        // The plugin is created after the activity is already RESUMED, where `registerForActivityResult`
+        // (lifecycle-bound) throws; registering on the registry directly has no such restriction.
+        (activity as? ComponentActivity)?.activityResultRegistry?.register("athanor-file-chooser", ActivityResultContracts.StartActivityForResult()) { result ->
             val callback = fileChooserCallback
             fileChooserCallback = null
             if (callback != null) {
@@ -200,7 +202,7 @@ class AthanorEngine(private val activity: Activity) : Plugin(activity) {
         }
 
     private val permissionLauncher: ActivityResultLauncher<Array<String>>? =
-        (activity as? ComponentActivity)?.registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+        (activity as? ComponentActivity)?.activityResultRegistry?.register("athanor-runtime-permissions", ActivityResultContracts.RequestMultiplePermissions()) { grants ->
             val pending = pendingRuntime
             pendingRuntime = null
             permissionInFlight = false
