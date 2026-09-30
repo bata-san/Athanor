@@ -127,8 +127,14 @@ mod tests {
     #[test]
     fn explicit_ports_are_never_upgraded() {
         assert_eq!(upgrade_https("http://example.com:8099/app"), None);
-        assert_eq!(upgrade_https("http://example.com:80/app").as_deref(), Some("https://example.com/app"));
-        assert_eq!(upgrade_https("http://example.com/app").as_deref(), Some("https://example.com/app"));
+        assert_eq!(
+            upgrade_https("http://example.com:80/app").as_deref(),
+            Some("https://example.com/app")
+        );
+        assert_eq!(
+            upgrade_https("http://example.com/app").as_deref(),
+            Some("https://example.com/app")
+        );
     }
 
     use super::*;
