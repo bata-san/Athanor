@@ -64,7 +64,11 @@ test("document bridge batches class/id queries and accepts matching host CSS rep
   const { window } = dom;
   const webview = new window.EventTarget();
   const messages = [];
-  webview.postMessage = (message) => messages.push(message);
+  // WebView2 only delivers string messages from pages, so the bridge must send JSON text.
+  webview.postMessage = (message) => {
+    assert.equal(typeof message, "string", "bridge must post a JSON string");
+    messages.push(JSON.parse(message));
+  };
   window.chrome = { webview };
   window.eval(bridge);
   await new Promise((resolve) => setTimeout(resolve, 70));
