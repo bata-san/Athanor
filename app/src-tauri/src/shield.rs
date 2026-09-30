@@ -16,7 +16,10 @@ pub struct Shield {
 impl Shield {
     pub fn new(paths: Paths) -> Arc<Self> {
         let text = fs::read_to_string(paths.file("user-filters.txt")).unwrap_or_default();
-        Arc::new(Self { paths, user: Mutex::new(text) })
+        Arc::new(Self {
+            paths,
+            user: Mutex::new(text),
+        })
     }
 
     pub fn user_filters(&self) -> String {
@@ -28,7 +31,11 @@ impl Shield {
     pub fn set_user_filters(&self, text: String) -> Result<Vec<LineIssue>, String> {
         let issues = user::validate(&text);
         if issues.iter().any(|i| i.line == 0) {
-            return Err(issues.into_iter().next().map(|i| i.message).unwrap_or_default());
+            return Err(issues
+                .into_iter()
+                .next()
+                .map(|i| i.message)
+                .unwrap_or_default());
         }
         fs::write(self.paths.file("user-filters.txt"), &text).map_err(|e| e.to_string())?;
         *self.user.lock() = text;

@@ -1,11 +1,11 @@
 //! Tauri commands: the shell-facing API described in `docs/IPC.md`. Thin wrappers over [`Browser`].
 
 use crate::{
-    shield::Shield,
     boards::{self, BoardSummary},
     browser::{Browser, OpenArgs},
     devservers,
     ext_host::{CommandInfo, ExtHost, ExtensionInfo, PanelInfo, ThemeInfo},
+    shield::Shield,
     state::*,
 };
 use athanor_adblock::user::LineIssue;
@@ -595,7 +595,11 @@ pub async fn list_extensions(host: State<'_, Arc<ExtHost>>) -> R<Vec<ExtensionIn
 
 /// Extension filter lists changed: recompile the engine off the UI path and tell the shell.
 fn reapply_shield(b: &B<'_>, host: &State<'_, Arc<ExtHost>>, shield: &State<'_, Arc<Shield>>) {
-    let (browser, host, shield) = (b.inner().clone(), host.inner().clone(), shield.inner().clone());
+    let (browser, host, shield) = (
+        b.inner().clone(),
+        host.inner().clone(),
+        shield.inner().clone(),
+    );
     tauri::async_runtime::spawn_blocking(move || {
         host.refresh_remote_filter_lists();
         shield.apply(&browser.filter, &host);
@@ -621,7 +625,11 @@ pub async fn set_user_filters(
     text: String,
 ) -> R<Vec<LineIssue>> {
     let issues = shield.set_user_filters(text)?;
-    let (browser, shield, host) = (b.inner().clone(), shield.inner().clone(), host.inner().clone());
+    let (browser, shield, host) = (
+        b.inner().clone(),
+        shield.inner().clone(),
+        host.inner().clone(),
+    );
     tauri::async_runtime::spawn_blocking(move || {
         shield.apply(&browser.filter, &host);
         browser.emit_adblock();

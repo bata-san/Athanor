@@ -88,10 +88,11 @@ private const val COSMETIC_QUERY_MAX_CHARS = 128 * 1024
  * Allowed-origin rules for both cosmetic-bridge registrations.
  *
  * androidx.webkit only accepts `SCHEME://[HOSTNAME_PATTERN[:PORT]]` plus the bare wildcard `*`;
- * Chromium's origin matcher rejects `http://*` / `https://*` outright (`IllegalArgumentException`),
- * so there is no rule that means "every http(s) origin". We therefore register `*` (all frames) and
- * enforce HTTP(S)-only on the native side: `onCosmeticMessage` drops any frame whose
- * `sourceOrigin` is not http(s), and `Filter::cosmetic_query_reply` drops any non-web page URL.
+ * Chromium's origin matcher rejects a wildcard *hostname* (`https:` + `://` + `*`) outright with
+ * `IllegalArgumentException`, so no rule can express "every http(s) origin". We therefore register
+ * the bare `*` (all frames) and enforce HTTP(S)-only natively: [onCosmeticMessage] drops any frame
+ * whose `sourceOrigin` is not http(s), and `Filter::cosmetic_query_reply` drops any non-web page
+ * URL.
  */
 private val COSMETIC_BRIDGE_ORIGINS = setOf("*")
 

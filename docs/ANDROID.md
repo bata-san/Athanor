@@ -13,10 +13,11 @@ Android project so it does not add an independently versioned plugin crate.
 The shell reports `set_content_bounds` in CSS pixels. Kotlin positions tabs as siblings over
 the shell, converting those coordinates with the shell WebView's display density and offset
 within its native parent. The native tab WebViews have no Tauri capabilities and no JavaScript
-bridge. Tauri commands remain available only to the shell's `main` WebView through
-`capabilities/mobile.json`. Android system bars are edge-to-edge; the shell's viewport and
-reported bounds follow its measured WebView viewport, and `adjustResize` lets the content
-rectangle track the IME.
+bridge (`addJavascriptInterface` is never used); their only page-to-host channel is the
+adblock-owned `athanorShield` WebMessageListener described below. Tauri commands remain available
+only to the shell's `main` WebView through `capabilities/mobile.json`. Android system bars are
+edge-to-edge; the shell's viewport and reported bounds follow its measured WebView viewport, and
+`adjustResize` lets the content rectangle track the IME.
 
 Web requests are classified from `isForMainFrame`, Fetch Metadata, `Accept`, and URL suffix
 heuristics, then passed to the app `Filter` through JNI. Type ordinals are documented alongside
@@ -25,6 +26,43 @@ event per tab per 100 ms. Script injection calls `Filter::injections` at documen
 commit, and page finish (phases 0, 1, and 2). WebView's document-start feature is used for
 per-tab init scripts when the installed Android System WebView supports it; phase-0 runtime
 injections are also evaluated from `onPageStarted`.
+
+## On-demand cosmetic filtering
+
+`AthanorEngine` also installs the shared `cosmetic-bridge.js` collector in every frame of every tab
+WebView, so generic class/ID hide rules are fetched from the compiled engine on demand instead of
+being written into every stylesheet. When `WebViewFeature.WEB_MESSAGE_LISTENER` and
+`WebViewFeature.DOCUMENT_START_SCRIPT` are both supported, `configureWebView` calls
+`installCosmeticBridge` before any URL is loaded:
+
+* the script source is fetched once per process from Rust through the `cosmeticBridgeScript()`
+  external method and cached in the plugin;
+* `WebViewCompat.addDocumentStartJavaScript` runs it at document start in every frame;
+* `WebViewCompat.addWebMessageListener(webView, "athanorShield", …)` injects the transport object
+  the collector posts its JSON strings to, and hands us the
+  `WebViewCompat.WebMessageListener` callback.
+
+The callback keeps the same bounds and protocol as the Windows host: string messages only, 128 KiB
+inbound cap, `cosmeticQuery(pageUrl, rawJson)` into `Filter::cosmetic_query_reply` (the same
+validator the WebView2 adapter uses), and `replyProxy.postMessage(response)` only when the call
+returns non-null. Every step is feature-checked and wrapped in `runCatching`; on an older Android
+System WebView, or on any error, nothing happens and the page simply loads without cosmetics.
+`addJavascriptInterface` is not used.
+
+Two platform limitations are worth knowing:
+
+* androidx.webkit's `allowedOriginRules` has no way to say "every http(s) origin" — the only
+  wildcard it accepts is the bare `*`, and a wildcard *hostname* is rejected outright. Both
+  registrations therefore use `*`, and HTTP(S)-only is enforced natively: the callback drops any
+  frame whose `sourceOrigin` is not http(s), and `Filter::cosmetic_query_reply` drops any non-web
+  page URL.
+* The listener reports only `sourceOrigin` for subframes, not the full subframe URL, so subframe
+  cosmetics are matched against the frame's origin (no path or query). Main-frame queries use the
+  WebView's current URL.
+
+The native bridge lives in `jni_bridge.rs` (`Java_dev_athanor_browser_AthanorEngine_cosmeticBridgeScript`
+and `Java_dev_athanor_browser_AthanorEngine_cosmeticQuery`, both `cfg(target_os = "android")` and
+panic-contained with `catch_unwind`). See [ADBLOCK.md](ADBLOCK.md) for the message protocol.
 
 The WebView enables JavaScript, DOM storage, safe browsing, and multiple-window requests;
 disables file/content access, mixed content, and third-party cookies; and cancels every SSL
@@ -66,10 +104,12 @@ when reproducing rendering or compatibility issues.
 Android System WebView is supplied by the device and updates independently of Athanor. This
 adapter depends on the stable `android.webkit.WebView`, `WebViewClient`, and `WebChromeClient`
 APIs; experimental WebView features are optional and guarded by support checks. Document-start
-injection depends on AndroidX WebKit/WebView support. Favicon events are best-effort, audio
+injection and the on-demand cosmetic message listener depend on AndroidX WebKit/WebView support
+(`DOCUMENT_START_SCRIPT` and `WEB_MESSAGE_LISTENER`). Favicon events are best-effort, audio
 state is best-effort and only observes HTML audio/video elements, tab audio muting is implemented
 in page JavaScript, and Android has no attached remote devtools window. APK/device validation
-should be repeated against the Android System WebView versions Athanor supports.
+should be repeated against the Android System WebView versions Athanor supports, including a
+device where the on-demand cosmetic bridge is unsupported so the fail-open path is exercised.
 
 When Chromium/WebView behavior changes, update this Android adapter and its feature checks;
 the Rust `EngineBackend`/`Browser` contract and desktop adapter remain independent of those

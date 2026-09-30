@@ -628,9 +628,7 @@ mod tests {
     /// `###ad-slot` is the generic form for an id selector, and `generichide` switches generic
     /// matching off for one site so the tests can show the frame URL is what decides the answer.
     fn cosmetic_filter() -> Filter {
-        filter_with_rules(
-            "##.banner\n##.promo\n###ad-slot\n@@||generichide.test^$generichide\n",
-        )
+        filter_with_rules("##.banner\n##.promo\n###ad-slot\n@@||generichide.test^$generichide\n")
     }
 
     fn query(id: &str, classes: &[&str], ids: &[&str]) -> String {
@@ -686,32 +684,30 @@ mod tests {
         let f = cosmetic_filter();
         let source = "https://site.test/";
         // Non-web frame URL.
-        assert!(f.cosmetic_query_reply("about:blank", &query("c1", &["banner"], &[])).is_none());
-        assert!(f.cosmetic_query_reply("javascript:1", &query("c1", &["banner"], &[])).is_none());
+        assert!(f
+            .cosmetic_query_reply("about:blank", &query("c1", &["banner"], &[]))
+            .is_none());
+        assert!(f
+            .cosmetic_query_reply("javascript:1", &query("c1", &["banner"], &[]))
+            .is_none());
         // Oversized payload (128 KiB cap).
         let filler = "a".repeat(200 * 1024);
-        assert!(
-            f.cosmetic_query_reply(source, &query("c1", &[&filler], &[]))
-                .is_none()
-        );
+        assert!(f
+            .cosmetic_query_reply(source, &query("c1", &[&filler], &[]))
+            .is_none());
         // Oversized raw message regardless of content.
-        assert!(
-            f.cosmetic_query_reply(source, &"x".repeat(128 * 1024 + 1))
-                .is_none()
-        );
+        assert!(f
+            .cosmetic_query_reply(source, &"x".repeat(128 * 1024 + 1))
+            .is_none());
         // Wrong protocol version / type.
-        let bad_version =
-            serde_json::json!({"athanorShield": 2, "type": "cosmetic-query", "id": "c1", "classes": [], "ids": []});
-        assert!(
-            f.cosmetic_query_reply(source, &bad_version.to_string())
-                .is_none()
-        );
-        let bad_type =
-            serde_json::json!({"athanorShield": 1, "type": "cosmetic-eval", "id": "c1", "classes": [], "ids": []});
-        assert!(
-            f.cosmetic_query_reply(source, &bad_type.to_string())
-                .is_none()
-        );
+        let bad_version = serde_json::json!({"athanorShield": 2, "type": "cosmetic-query", "id": "c1", "classes": [], "ids": []});
+        assert!(f
+            .cosmetic_query_reply(source, &bad_version.to_string())
+            .is_none());
+        let bad_type = serde_json::json!({"athanorShield": 1, "type": "cosmetic-eval", "id": "c1", "classes": [], "ids": []});
+        assert!(f
+            .cosmetic_query_reply(source, &bad_type.to_string())
+            .is_none());
         // Invalid ids.
         for id in ["", &"c".repeat(65), "has space", "semi;colon"] {
             assert!(
@@ -723,16 +719,17 @@ mod tests {
         // Too many tokens (> 512 in total) and an over-long token (> 256 bytes).
         let many: Vec<String> = (0..513).map(|n| format!("t{n}")).collect();
         let refs: Vec<&str> = many.iter().map(String::as_str).collect();
-        assert!(f.cosmetic_query_reply(source, &query("c1", &refs, &[])).is_none());
+        assert!(f
+            .cosmetic_query_reply(source, &query("c1", &refs, &[]))
+            .is_none());
         assert!(
             f.cosmetic_query_reply(source, &query("c1", &[""], &[]))
                 .is_some(),
             "an empty token is harmless and simply matches nothing"
         );
-        assert!(
-            f.cosmetic_query_reply(source, &query("c1", &[&"t".repeat(257)], &[]))
-                .is_none()
-        );
+        assert!(f
+            .cosmetic_query_reply(source, &query("c1", &[&"t".repeat(257)], &[]))
+            .is_none());
         // Not JSON at all, and a JSON document with unexpected fields.
         assert!(f.cosmetic_query_reply(source, "not json").is_none());
         assert!(f.cosmetic_query_reply(source, "[]").is_none());
@@ -741,8 +738,7 @@ mod tests {
             "classes": [], "ids": [], "url": "https://evil.test/"
         });
         assert!(
-            f.cosmetic_query_reply(source, &extra.to_string())
-                .is_none(),
+            f.cosmetic_query_reply(source, &extra.to_string()).is_none(),
             "page-supplied page data must not be accepted"
         );
     }

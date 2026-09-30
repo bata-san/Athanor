@@ -159,7 +159,15 @@ impl ExtHost {
     pub fn filter_list_texts(&self) -> Vec<(String, String)> {
         const MAX: u64 = 8 * 1024 * 1024;
         let clean = |s: &str| -> String {
-            s.chars().map(|c| if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') { c } else { '-' }).collect()
+            s.chars()
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') {
+                        c
+                    } else {
+                        '-'
+                    }
+                })
+                .collect()
         };
         let mut out = Vec::new();
         for c in self.registry.read().filter_lists() {
@@ -187,24 +195,42 @@ impl ExtHost {
         let _ = fs::create_dir_all(&dir);
         let mut changed = false;
         for c in self.registry.read().filter_lists() {
-            let (None, Some(url)) = (&c.local_file, &c.list.url) else { continue };
+            let (None, Some(url)) = (&c.local_file, &c.list.url) else {
+                continue;
+            };
             if !url.starts_with("https://") {
                 continue;
             }
             let id: String = format!("ext-{}-{}", c.ext_id, c.list.id)
                 .chars()
-                .map(|ch| if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.') { ch } else { '-' })
+                .map(|ch| {
+                    if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.') {
+                        ch
+                    } else {
+                        '-'
+                    }
+                })
                 .collect();
-            let agent = ureq::AgentBuilder::new().timeout(std::time::Duration::from_secs(20)).build();
-            let Ok(resp) = agent.get(url).call() else { continue };
+            let agent = ureq::AgentBuilder::new()
+                .timeout(std::time::Duration::from_secs(20))
+                .build();
+            let Ok(resp) = agent.get(url).call() else {
+                continue;
+            };
             let mut body = String::new();
-            if std::io::Read::read_to_string(&mut std::io::Read::take(resp.into_reader(), MAX + 1), &mut body).is_err()
+            if std::io::Read::read_to_string(
+                &mut std::io::Read::take(resp.into_reader(), MAX + 1),
+                &mut body,
+            )
+            .is_err()
                 || body.len() as u64 > MAX
             {
                 continue;
             }
             let path = dir.join(format!("{id}.txt"));
-            if fs::read_to_string(&path).ok().as_deref() != Some(body.as_str()) && fs::write(&path, body).is_ok() {
+            if fs::read_to_string(&path).ok().as_deref() != Some(body.as_str())
+                && fs::write(&path, body).is_ok()
+            {
                 changed = true;
             }
         }

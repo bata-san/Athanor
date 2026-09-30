@@ -20,8 +20,20 @@ document-created bridge observes class and ID tokens, batches them during idle t
 native host for selectors from the compiled engine's `hidden_class_id_selectors` index. URL-specific
 cosmetics, exceptions, scriptlets and procedural filters are selected by the host for that frame's
 URL. A matching response is appended to one style element. The bridge has bounded message/token
-sizes and the Windows host validates every message and derives its URL from WebView2's message
+sizes, and both hosts validate every message and derive their URL from the engine's native message
 source, never from page-supplied URL data.
+
+The bridge is transport-agnostic. It prefers `globalThis.chrome.webview` (WebView2) and otherwise
+uses the object Android injects as `athanorShield` via
+`WebViewCompat.addWebMessageListener("athanorShield", …)`, which offers `postMessage(string)` plus
+the DOM `message` event (and `onmessage`). The JSON-string protocol and every bound are identical on
+both transports; only the host side differs.
+
+Validation, token limits, selector chunking and response building live in one platform-neutral
+function, `Filter::cosmetic_query_reply(source, raw)`. Both the Windows adapter and the Android JNI
+export (`Java_dev_athanor_browser_AthanorEngine_cosmeticQuery`) call it, so the two engines cannot
+drift. Per-view rate limiting stays in each adapter (`win.rs` keeps its per-view budget; Android has
+no separate budget yet and relies on the shared size/token limits).
 
 ## Cosmetic message protocol (version 1)
 
@@ -61,14 +73,25 @@ The document accepts only a response whose ID is pending, and caps reply size be
 as text in a style element. Messages are advisory: malformed messages, timeouts, and internal
 errors skip cosmetics so the page continues to load. WebView2 top-level messages use
 `window.chrome.webview.postMessage` / `WebMessageReceived` / `PostWebMessageAsJson`; child frames
-use `ICoreWebView2Frame2` message events and replies. Android should install the same bridge in
-every frame using `WebViewCompat.addWebMessageListener`, restrict allowed origins to HTTP(S),
-validate the same protocol, derive the source URL from the native callback, and reply on the same
-frame listener. Do not expose a JavaScript evaluation command through this channel.
+use `ICoreWebView2Frame2` message events and replies. Android installs the same bridge in every
+frame with `WebViewCompat.addDocumentStartJavaScript` plus
+`WebViewCompat.addWebMessageListener`, validates the same protocol through
+`Filter::cosmetic_query_reply`, derives the source URL from the native callback, and replies on the
+same frame's `JavaScriptReplyProxy`. `addJavascriptInterface` is not used and no JavaScript
+evaluation command is exposed through this channel.
+
+One androidx.webkit detail matters here: `allowedOriginRules` only accepts
+`SCHEME://[HOSTNAME_PATTERN[:PORT]]` or the bare `*`. Chromium's origin matcher rejects a wildcard
+hostname (`https:` followed by `://` and `*`) with `IllegalArgumentException`, so no rule can
+express "every http(s) origin". Both registrations therefore use the bare `*`, and HTTP(S)-only is
+enforced natively: the Kotlin callback drops any frame whose `sourceOrigin` is not http(s), and
+`Filter::cosmetic_query_reply` drops any non-web page URL. Android also cannot report a subframe's
+full URL, so subframe queries use `sourceOrigin` (origin only, no path or query).
 
 The Windows adapter currently caps inbound JSON at 128 KiB, request tokens at 512, each token at
 256 UTF-8 bytes, and the response at 768 KiB. The page batches 256 tokens per message and keeps at
-most 8,192 distinct tokens per document.
+most 8,192 distinct tokens per document. Android applies the same 128 KiB inbound cap before
+crossing into JNI, and the shared reply builder applies the same 768 KiB response cap.
 
 ## Document-start injections
 
@@ -150,8 +173,8 @@ loaded working set before corpus buffering was 22.6 MiB.
 The 101 sampled host-specific cosmetic CSS+JS payloads had a 37,362-byte median, including
 procedural runtime/action payloads and URL-specific CSS. This is not the generic on-demand reply
 size: the supplied request corpus has no DOM token inventories, so a representative generic reply
-size is not measured. Embedded JS assets are 4,391 bytes (`cosmetic-bridge.js`) and 8,203 bytes
-(`procedural-runtime.js`), 12,594 bytes total before gzip; no JS minifier is configured, so these
+size is not measured. Embedded JS assets are 6,379 bytes (`cosmetic-bridge.js`) and 8,203 bytes
+(`procedural-runtime.js`), 14,582 bytes total before gzip; no JS minifier is configured, so these
 are source-byte sizes rather than minified output. These figures and all timings are specific to
 the test machine.
 
@@ -164,8 +187,14 @@ request-blocking, header, or generic-cosmetic E2E assertions completed.
 ## Android adapter notes
 
 Keep the existing `Filter` APIs used by `platform_mobile.rs` source-compatible. For the cosmetic
-bridge, register `COSMETIC_BRIDGE_JS` before any URL is loaded, including in child frames. Carry the
-frame URL from the native callback into `cosmetic_query`; return the response only to that same
-frame. Use `cosmetic_js` for URL-specific document-start payloads. Prefer `verdict_with_rewrite`
-for request types where the Android WebView adapter can cancel and reissue a rewritten request;
-the old `verdict` intentionally maps `Rewrite` to `Allow` for compatibility.
+bridge, register `COSMETIC_BRIDGE_JS` before any URL is loaded, including in child frames. The
+Kotlin plugin fetches that script once from JNI
+(`Java_dev_athanor_browser_AthanorEngine_cosmeticBridgeScript`) and registers it with
+`WebViewCompat.addDocumentStartJavaScript`; the transport object comes from
+`WebViewCompat.addWebMessageListener` under the name `athanorShield`. Carry the frame URL from the
+native callback into `Filter::cosmetic_query_reply` through
+`Java_dev_athanor_browser_AthanorEngine_cosmeticQuery`; return the response only to that same frame
+(`JavaScriptReplyProxy.postMessage`, only when the call returns non-null). Use `cosmetic_js` for
+URL-specific document-start payloads. Prefer `verdict_with_rewrite` for request types where the
+Android WebView adapter can cancel and reissue a rewritten request; the old `verdict`
+intentionally maps `Rewrite` to `Allow` for compatibility.

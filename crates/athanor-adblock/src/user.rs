@@ -25,7 +25,10 @@ pub fn validate(text: &str) -> Vec<LineIssue> {
     if text.len() > MAX_USER_FILTER_BYTES {
         return vec![LineIssue {
             line: 0,
-            message: format!("filters are larger than the {} KiB limit", MAX_USER_FILTER_BYTES / 1024),
+            message: format!(
+                "filters are larger than the {} KiB limit",
+                MAX_USER_FILTER_BYTES / 1024
+            ),
         }];
     }
     let opts = ParseOptions {
@@ -42,7 +45,10 @@ pub fn validate(text: &str) -> Vec<LineIssue> {
         match parse_filter(line, false, opts) {
             Ok(_) => {}
             Err(FilterParseError::Empty) => {}
-            Err(e) => issues.push(LineIssue { line: index + 1, message: e.to_string() }),
+            Err(e) => issues.push(LineIssue {
+                line: index + 1,
+                message: e.to_string(),
+            }),
         }
     }
     issues
@@ -60,7 +66,8 @@ mod tests {
 
     #[test]
     fn reports_bad_lines_with_numbers() {
-        let issues = validate("||good.example^\n##\nexample.com##.ok\n||bad.example^$nonsense-option\n");
+        let issues =
+            validate("||good.example^\n##\nexample.com##.ok\n||bad.example^$nonsense-option\n");
         let lines: Vec<usize> = issues.iter().map(|i| i.line).collect();
         assert_eq!(lines, vec![2, 4], "{issues:?}");
     }

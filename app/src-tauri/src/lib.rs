@@ -100,7 +100,7 @@ pub fn run() {
 
             let paths_for_shield = paths.clone();
             let browser = platform::init(app, filter.clone(), paths)?;
-                        {
+            {
                 let shield = shield::Shield::new(paths_for_shield);
                 app.manage(shield.clone());
                 let b = browser.clone();
@@ -112,7 +112,8 @@ pub fn run() {
                     Arc::new(move || {
                         // After the first rules load, add extension lists and the user's own filters.
                         first.call_once(|| {
-                            let (s, f, h) = (shield.clone(), filter_for_apply.clone(), host.clone());
+                            let (s, f, h) =
+                                (shield.clone(), filter_for_apply.clone(), host.clone());
                             std::thread::spawn(move || {
                                 s.apply(&f, &h);
                                 if h.refresh_remote_filter_lists() {
