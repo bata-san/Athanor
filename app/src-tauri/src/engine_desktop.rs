@@ -26,7 +26,12 @@ pub struct DesktopEngine {
 
 impl DesktopEngine {
     pub fn new(_app: &AppHandle, window: Window, filter: Arc<Filter>) -> Self {
-        Self { window, filter, sink: Arc::new(Mutex::new(None)), tabs: Mutex::new(HashMap::new()) }
+        Self {
+            window,
+            filter,
+            sink: Arc::new(Mutex::new(None)),
+            tabs: Mutex::new(HashMap::new()),
+        }
     }
 
     pub fn set_sink(&self, sink: EventSink) {
@@ -34,7 +39,11 @@ impl DesktopEngine {
     }
 
     fn get(&self, id: &str) -> EngineResult<Webview<Wry>> {
-        self.tabs.lock().get(id).cloned().ok_or_else(|| EngineError::UnknownTab(id.to_string()))
+        self.tabs
+            .lock()
+            .get(id)
+            .cloned()
+            .ok_or_else(|| EngineError::UnknownTab(id.to_string()))
     }
 }
 
@@ -50,12 +59,20 @@ fn bounds(r: Rect) -> tauri::Rect {
 }
 
 impl EngineBackend for DesktopEngine {
-    fn create_tab(&self, id: &str, url: &str, rect: Rect, visible: bool, opts: &TabOptions) -> EngineResult {
+    fn create_tab(
+        &self,
+        id: &str,
+        url: &str,
+        rect: Rect,
+        visible: bool,
+        opts: &TabOptions,
+    ) -> EngineResult {
         let parsed: url::Url = url.parse().map_err(err)?;
         let sink = self.sink.clone();
         let tab: Id = id.to_string();
 
-        let mut builder = WebviewBuilder::new(tab_label(id), WebviewUrl::External(parsed)).devtools(true);
+        let mut builder =
+            WebviewBuilder::new(tab_label(id), WebviewUrl::External(parsed)).devtools(true);
         if let Some(ua) = &opts.user_agent {
             builder = builder.user_agent(ua);
         }
@@ -69,22 +86,34 @@ impl EngineBackend for DesktopEngine {
             let (s1, t1) = (sink.clone(), tab.clone());
             builder = builder.on_new_window(move |url, _| {
                 if let Some(s) = s1.lock().as_ref() {
-                    s(EngineEvent::NewTabRequested { from: t1.clone(), url: url.to_string() });
+                    s(EngineEvent::NewTabRequested {
+                        from: t1.clone(),
+                        url: url.to_string(),
+                    });
                 }
                 NewWindowResponse::Deny
             });
             let (s2, t2) = (sink.clone(), tab.clone());
             builder = builder.on_document_title_changed(move |_, title| {
                 if let Some(s) = s2.lock().as_ref() {
-                    s(EngineEvent::TitleChanged { tab: t2.clone(), title });
+                    s(EngineEvent::TitleChanged {
+                        tab: t2.clone(),
+                        title,
+                    });
                 }
             });
             let (s3, t3) = (sink.clone(), tab.clone());
             builder = builder.on_page_load(move |_, payload| {
                 if let Some(s) = s3.lock().as_ref() {
                     let loading = matches!(payload.event(), tauri::webview::PageLoadEvent::Started);
-                    s(EngineEvent::UrlChanged { tab: t3.clone(), url: payload.url().to_string() });
-                    s(EngineEvent::LoadingChanged { tab: t3.clone(), loading });
+                    s(EngineEvent::UrlChanged {
+                        tab: t3.clone(),
+                        url: payload.url().to_string(),
+                    });
+                    s(EngineEvent::LoadingChanged {
+                        tab: t3.clone(),
+                        loading,
+                    });
                 }
             });
         }
@@ -97,7 +126,11 @@ impl EngineBackend for DesktopEngine {
 
         let wv = self
             .window
-            .add_child(builder, LogicalPosition::new(rect.x, rect.y), LogicalSize::new(rect.w.max(1.0), rect.h.max(1.0)))
+            .add_child(
+                builder,
+                LogicalPosition::new(rect.x, rect.y),
+                LogicalSize::new(rect.w.max(1.0), rect.h.max(1.0)),
+            )
             .map_err(err)?;
         if !visible {
             wv.hide().map_err(err)?;
@@ -142,15 +175,19 @@ impl EngineBackend for DesktopEngine {
     }
 
     fn navigate(&self, id: &str, url: &str) -> EngineResult {
-        self.get(id)?.navigate(url.parse().map_err(err)?).map_err(err)
+        self.get(id)?
+            .navigate(url.parse().map_err(err)?)
+            .map_err(err)
     }
 
     fn go_back(&self, id: &str) -> EngineResult {
         let wv = self.get(id)?;
         #[cfg(windows)]
-        return wv.with_webview(|pw| unsafe {
-            let _ = crate::win::go_back(&pw.controller());
-        }).map_err(err);
+        return wv
+            .with_webview(|pw| unsafe {
+                let _ = crate::win::go_back(&pw.controller());
+            })
+            .map_err(err);
         #[cfg(not(windows))]
         wv.eval("history.back()").map_err(err)
     }
@@ -158,9 +195,11 @@ impl EngineBackend for DesktopEngine {
     fn go_forward(&self, id: &str) -> EngineResult {
         let wv = self.get(id)?;
         #[cfg(windows)]
-        return wv.with_webview(|pw| unsafe {
-            let _ = crate::win::go_forward(&pw.controller());
-        }).map_err(err);
+        return wv
+            .with_webview(|pw| unsafe {
+                let _ = crate::win::go_forward(&pw.controller());
+            })
+            .map_err(err);
         #[cfg(not(windows))]
         wv.eval("history.forward()").map_err(err)
     }
@@ -172,9 +211,11 @@ impl EngineBackend for DesktopEngine {
     fn stop(&self, id: &str) -> EngineResult {
         let wv = self.get(id)?;
         #[cfg(windows)]
-        return wv.with_webview(|pw| unsafe {
-            let _ = crate::win::stop(&pw.controller());
-        }).map_err(err);
+        return wv
+            .with_webview(|pw| unsafe {
+                let _ = crate::win::stop(&pw.controller());
+            })
+            .map_err(err);
         #[cfg(not(windows))]
         wv.eval("window.stop()").map_err(err)
     }
@@ -202,9 +243,12 @@ impl EngineBackend for DesktopEngine {
 
     fn set_muted(&self, id: &str, muted: bool) -> EngineResult {
         #[cfg(windows)]
-        return self.get(id)?.with_webview(move |pw| unsafe {
-            let _ = crate::win::set_muted(&pw.controller(), muted);
-        }).map_err(err);
+        return self
+            .get(id)?
+            .with_webview(move |pw| unsafe {
+                let _ = crate::win::set_muted(&pw.controller(), muted);
+            })
+            .map_err(err);
         #[cfg(not(windows))]
         {
             let _ = (id, muted);
@@ -221,12 +265,16 @@ impl EngineBackend for DesktopEngine {
                 let _ = crate::win::capture_png(&pw.controller(), tx);
             })
             .map_err(err)?;
-            rx.recv_timeout(std::time::Duration::from_secs(10)).map_err(err)?.map_err(EngineError::Engine)
+            rx.recv_timeout(std::time::Duration::from_secs(10))
+                .map_err(err)?
+                .map_err(EngineError::Engine)
         }
         #[cfg(not(windows))]
         {
             let _ = id;
-            Err(EngineError::Engine("page capture is not supported on this platform yet".into()))
+            Err(EngineError::Engine(
+                "page capture is not supported on this platform yet".into(),
+            ))
         }
     }
 
@@ -235,4 +283,3 @@ impl EngineBackend for DesktopEngine {
         Ok(())
     }
 }
-

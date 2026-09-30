@@ -29,8 +29,15 @@ pub enum Dir {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Node {
-    Leaf { tab: Id },
-    Split { dir: Dir, ratio: f64, a: Box<Node>, b: Box<Node> },
+    Leaf {
+        tab: Id,
+    },
+    Split {
+        dir: Dir,
+        ratio: f64,
+        a: Box<Node>,
+        b: Box<Node>,
+    },
 }
 
 const MIN_RATIO: f64 = 0.1;
@@ -82,13 +89,21 @@ impl Node {
                         let usable = (area.w - gap).max(0.0);
                         let wa = usable * r;
                         a.walk(Rect::new(area.x, area.y, wa, area.h), gap, out);
-                        b.walk(Rect::new(area.x + wa + gap, area.y, usable - wa, area.h), gap, out);
+                        b.walk(
+                            Rect::new(area.x + wa + gap, area.y, usable - wa, area.h),
+                            gap,
+                            out,
+                        );
                     }
                     Dir::Column => {
                         let usable = (area.h - gap).max(0.0);
                         let ha = usable * r;
                         a.walk(Rect::new(area.x, area.y, area.w, ha), gap, out);
-                        b.walk(Rect::new(area.x, area.y + ha + gap, area.w, usable - ha), gap, out);
+                        b.walk(
+                            Rect::new(area.x, area.y + ha + gap, area.w, usable - ha),
+                            gap,
+                            out,
+                        );
                     }
                 }
             }
@@ -102,8 +117,16 @@ impl Node {
         out
     }
 
-    fn walk_dividers(&self, area: Rect, gap: f64, path: &mut Vec<bool>, out: &mut Vec<DividerInfo>) {
-        let Node::Split { dir, ratio, a, b } = self else { return };
+    fn walk_dividers(
+        &self,
+        area: Rect,
+        gap: f64,
+        path: &mut Vec<bool>,
+        out: &mut Vec<DividerInfo>,
+    ) {
+        let Node::Split { dir, ratio, a, b } = self else {
+            return;
+        };
         let r = ratio.clamp(MIN_RATIO, 1.0 - MIN_RATIO);
         let (area_a, area_b, rect) = match dir {
             Dir::Row => {
@@ -125,7 +148,12 @@ impl Node {
                 )
             }
         };
-        out.push(DividerInfo { path: path.clone(), dir: *dir, rect, ratio: r });
+        out.push(DividerInfo {
+            path: path.clone(),
+            dir: *dir,
+            rect,
+            ratio: r,
+        });
         path.push(false);
         a.walk_dividers(area_a, gap, path, out);
         path.pop();
@@ -141,13 +169,23 @@ impl Node {
             Node::Leaf { tab } if tab == target => {
                 let old = Node::leaf(tab.clone());
                 let fresh = Node::leaf(new_tab);
-                let (a, b) = if new_first { (fresh, old) } else { (old, fresh) };
-                *self = Node::Split { dir, ratio: 0.5, a: Box::new(a), b: Box::new(b) };
+                let (a, b) = if new_first {
+                    (fresh, old)
+                } else {
+                    (old, fresh)
+                };
+                *self = Node::Split {
+                    dir,
+                    ratio: 0.5,
+                    a: Box::new(a),
+                    b: Box::new(b),
+                };
                 true
             }
             Node::Leaf { .. } => false,
             Node::Split { a, b, .. } => {
-                a.split_leaf(target, new_tab, dir, new_first) || b.split_leaf(target, new_tab, dir, new_first)
+                a.split_leaf(target, new_tab, dir, new_first)
+                    || b.split_leaf(target, new_tab, dir, new_first)
             }
         }
     }
@@ -157,7 +195,12 @@ impl Node {
         match self {
             Node::Leaf { tab } => (tab != id).then_some(Node::Leaf { tab }),
             Node::Split { dir, ratio, a, b } => match (a.remove(id), b.remove(id)) {
-                (Some(a), Some(b)) => Some(Node::Split { dir, ratio, a: Box::new(a), b: Box::new(b) }),
+                (Some(a), Some(b)) => Some(Node::Split {
+                    dir,
+                    ratio,
+                    a: Box::new(a),
+                    b: Box::new(b),
+                }),
                 (Some(x), None) | (None, Some(x)) => Some(x),
                 (None, None) => None,
             },

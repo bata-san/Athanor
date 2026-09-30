@@ -56,7 +56,10 @@ pub struct ExtHost {
 }
 
 fn perm_name(p: Permission) -> String {
-    serde_json::to_value(p).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
+    serde_json::to_value(p)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_string))
+        .unwrap_or_default()
 }
 
 /// Base URL of the extension file protocol as seen from web content on this platform.
@@ -71,7 +74,9 @@ fn ext_base() -> &'static str {
 impl ExtHost {
     pub fn new(paths: Paths) -> Arc<Self> {
         let mut registry = Registry::new();
-        if let Ok(state) = store::load_or_default::<RegistryState>(&paths.file("extensions-state.json")) {
+        if let Ok(state) =
+            store::load_or_default::<RegistryState>(&paths.file("extensions-state.json"))
+        {
             registry.restore_state(state);
         }
         let dir = paths.extensions();
@@ -79,7 +84,10 @@ impl ExtHost {
         for issue in registry.load_dir(&dir, Source::User) {
             log::warn!("extension {}: {}", issue.path.display(), issue.message);
         }
-        Arc::new(Self { registry: RwLock::new(registry), paths })
+        Arc::new(Self {
+            registry: RwLock::new(registry),
+            paths,
+        })
     }
 
     fn persist(&self) {
@@ -92,14 +100,27 @@ impl ExtHost {
             .read()
             .themes()
             .into_iter()
-            .map(|t| ThemeInfo { id: t.id, name: t.name, dark: t.dark, source: if t.ext_id.is_some() { "extension" } else { "builtin" } })
+            .map(|t| ThemeInfo {
+                id: t.id,
+                name: t.name,
+                dark: t.dark,
+                source: if t.ext_id.is_some() {
+                    "extension"
+                } else {
+                    "builtin"
+                },
+            })
             .collect()
     }
 
     /// CSS for the shell: the theme's variables, then every enabled extension's shell CSS.
     pub fn shell_css(&self, theme: &str) -> String {
         let reg = self.registry.read();
-        let base = reg.theme(theme).or_else(|| reg.theme("monolith")).map(|t| t.to_css()).unwrap_or_default();
+        let base = reg
+            .theme(theme)
+            .or_else(|| reg.theme("monolith"))
+            .map(|t| t.to_css())
+            .unwrap_or_default();
         format!("{base}\n{}", reg.shell_css())
     }
 
@@ -124,7 +145,12 @@ impl ExtHost {
             .read()
             .commands()
             .into_iter()
-            .map(|c| CommandInfo { ext: c.ext_id, id: c.command.id, title: c.command.title, keybinding: c.command.keybinding })
+            .map(|c| CommandInfo {
+                ext: c.ext_id,
+                id: c.command.id,
+                title: c.command.title,
+                keybinding: c.command.keybinding,
+            })
             .collect()
     }
 
@@ -139,7 +165,11 @@ impl ExtHost {
                 version: e.version,
                 description: e.description,
                 enabled: e.enabled,
-                source: if e.source == Source::Builtin { "builtin" } else { "user" },
+                source: if e.source == Source::Builtin {
+                    "builtin"
+                } else {
+                    "user"
+                },
                 permissions: e.permissions.into_iter().map(perm_name).collect(),
             })
             .collect()
@@ -151,26 +181,40 @@ impl ExtHost {
     }
 
     pub fn install(&self, src: &std::path::Path) -> Result<String, String> {
-        let id = self.registry.write().install_from_dir(src, &self.paths.extensions()).map_err(|e| e.to_string())?;
+        let id = self
+            .registry
+            .write()
+            .install_from_dir(src, &self.paths.extensions())
+            .map_err(|e| e.to_string())?;
         self.persist();
         Ok(id)
     }
 
     pub fn remove(&self, id: &str) -> Result<(), String> {
-        self.registry.write().remove(id, &self.paths.extensions()).map_err(|e| e.to_string())?;
+        self.registry
+            .write()
+            .remove(id, &self.paths.extensions())
+            .map_err(|e| e.to_string())?;
         self.persist();
         Ok(())
     }
 
     /// Scripts + styles to run in a page for the given phase (0 = start, 1 = end, 2 = idle).
     pub fn page_scripts(&self, url: &str, phase: u8) -> Vec<String> {
-        let Ok(parsed) = url::Url::parse(url) else { return vec![] };
+        let Ok(parsed) = url::Url::parse(url) else {
+            return vec![];
+        };
         let run_at = match phase {
             0 => RunAt::DocumentStart,
             1 => RunAt::DocumentEnd,
             _ => RunAt::DocumentIdle,
         };
-        self.registry.read().user_scripts_for(&parsed, run_at, true).into_iter().map(|s| s.to_eval_js()).collect()
+        self.registry
+            .read()
+            .user_scripts_for(&parsed, run_at, true)
+            .into_iter()
+            .map(|s| s.to_eval_js())
+            .collect()
     }
 
     /// Serve a file for the `athanor-ext` protocol. Returns `(bytes, mime, csp)`.
@@ -179,23 +223,41 @@ impl ExtHost {
         let (ext, rel) = path.split_once('/').ok_or("bad path")?;
         let reg = self.registry.read();
         let (bytes, mime) = reg.resolve_asset(ext, rel).map_err(|e| e.to_string())?;
-        let perms: Vec<Permission> = reg.list().into_iter().find(|e| e.id == ext).map(|e| e.permissions).unwrap_or_default();
+        let perms: Vec<Permission> = reg
+            .list()
+            .into_iter()
+            .find(|e| e.id == ext)
+            .map(|e| e.permissions)
+            .unwrap_or_default();
         Ok((bytes, mime, athanor_ext::panel_csp_for(&perms)))
     }
 
     fn check(&self, ext: &str, perm: Permission) -> Result<(), String> {
-        self.registry.read().check(ext, perm).map_err(|e| e.to_string())
+        self.registry
+            .read()
+            .check(ext, perm)
+            .map_err(|e| e.to_string())
     }
 
     fn storage_path(&self, ext: &str) -> Result<std::path::PathBuf, String> {
-        if !ext.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_')) || ext.contains("..") {
+        if !ext
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+            || ext.contains("..")
+        {
             return Err("bad extension id".into());
         }
         Ok(self.paths.file("ext-storage").join(format!("{ext}.json")))
     }
 
     /// Permission-gated RPC used by panel iframes (see docs/EXTENSIONS.md).
-    pub fn rpc(&self, browser: &Arc<Browser>, ext: &str, method: &str, params: Value) -> Result<Value, String> {
+    pub fn rpc(
+        &self,
+        browser: &Arc<Browser>,
+        ext: &str,
+        method: &str,
+        params: Value,
+    ) -> Result<Value, String> {
         match method {
             "tabs.list" => {
                 self.check(ext, Permission::TabsRead)?;
@@ -210,16 +272,27 @@ impl ExtHost {
             }
             "tabs.open" => {
                 self.check(ext, Permission::TabsWrite)?;
-                let url = params.get("url").and_then(Value::as_str).ok_or("url required")?;
-                let id = browser.open_tab(OpenArgs { url: Some(url.to_string()), ..Default::default() });
+                let url = params
+                    .get("url")
+                    .and_then(Value::as_str)
+                    .ok_or("url required")?;
+                let id = browser.open_tab(OpenArgs {
+                    url: Some(url.to_string()),
+                    ..Default::default()
+                });
                 Ok(json!({ "id": id }))
             }
             "storage.get" | "storage.set" => {
                 self.check(ext, Permission::Storage)?;
                 let path = self.storage_path(ext)?;
                 // Only a missing file means "empty"; a corrupt one must not be silently overwritten.
-                let mut map: BTreeMap<String, Value> = store::load_or_default(&path).map_err(|e| format!("extension storage unreadable: {e}"))?;
-                let key = params.get("key").and_then(Value::as_str).ok_or("key required")?.to_string();
+                let mut map: BTreeMap<String, Value> = store::load_or_default(&path)
+                    .map_err(|e| format!("extension storage unreadable: {e}"))?;
+                let key = params
+                    .get("key")
+                    .and_then(Value::as_str)
+                    .ok_or("key required")?
+                    .to_string();
                 if method == "storage.get" {
                     return Ok(map.get(&key).cloned().unwrap_or(Value::Null));
                 }
@@ -236,9 +309,22 @@ impl ExtHost {
             }
             "ui.toast" => {
                 self.check(ext, Permission::ShellPanel)?;
-                let msg = params.get("message").and_then(Value::as_str).ok_or("message required")?;
-                let level = params.get("level").and_then(Value::as_str).unwrap_or("info");
-                browser.toast(if matches!(level, "success" | "error") { level } else { "info" }, msg.chars().take(300).collect::<String>());
+                let msg = params
+                    .get("message")
+                    .and_then(Value::as_str)
+                    .ok_or("message required")?;
+                let level = params
+                    .get("level")
+                    .and_then(Value::as_str)
+                    .unwrap_or("info");
+                browser.toast(
+                    if matches!(level, "success" | "error") {
+                        level
+                    } else {
+                        "info"
+                    },
+                    msg.chars().take(300).collect::<String>(),
+                );
                 Ok(Value::Null)
             }
             "commands.register" => {
@@ -251,11 +337,19 @@ impl ExtHost {
 
     pub fn run_command(&self, browser: &Arc<Browser>, ext: &str, id: &str) -> Result<(), String> {
         self.check(ext, Permission::Commands)?;
-        let known = self.registry.read().commands().into_iter().any(|c| c.ext_id == ext && c.command.id == id);
+        let known = self
+            .registry
+            .read()
+            .commands()
+            .into_iter()
+            .any(|c| c.ext_id == ext && c.command.id == id);
         if !known {
             return Err("unknown command".into());
         }
-        let _ = browser.app().emit("athanor://extension-event", json!({ "ext": ext, "type": "command", "data": { "id": id } }));
+        let _ = browser.app().emit(
+            "athanor://extension-event",
+            json!({ "ext": ext, "type": "command", "data": { "id": id } }),
+        );
         Ok(())
     }
 }

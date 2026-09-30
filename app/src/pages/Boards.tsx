@@ -22,7 +22,6 @@ export default function BoardsPage({ standaloneId = null }: { standaloneId?: str
   const [fitSize, setFitSize] = useState({ w: 800, h: 600 })
   const [spaceDown, setSpaceDown] = useState(false)
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
-  const [renameId, setRenameId] = useState<string | null>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
   const gestureRef = useRef<Gesture | null>(null)
   const saveTimer = useRef<number | null>(null)

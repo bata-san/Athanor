@@ -41,8 +41,14 @@ impl Rule {
             return false;
         }
         self.host.as_deref().is_none_or(|p| host_matches(host, p))
-            && self.path_prefix.as_deref().is_none_or(|p| path.starts_with(p))
-            && self.title_contains.as_deref().is_none_or(|t| title.contains(&t.to_lowercase()))
+            && self
+                .path_prefix
+                .as_deref()
+                .is_none_or(|p| path.starts_with(p))
+            && self
+                .title_contains
+                .as_deref()
+                .is_none_or(|t| title.contains(&t.to_lowercase()))
     }
 }
 
@@ -51,57 +57,168 @@ pub fn host_matches(host: &str, pattern: &str) -> bool {
     let host = host.trim_end_matches('.').to_ascii_lowercase();
     let pattern = pattern.trim().to_ascii_lowercase();
     match pattern.strip_prefix("*.") {
-        Some(base) => host.len() > base.len() && host.ends_with(base) && host.as_bytes()[host.len() - base.len() - 1] == b'.',
-        None => host == pattern || (host.ends_with(&pattern) && host.as_bytes()[host.len() - pattern.len() - 1] == b'.'),
+        Some(base) => {
+            host.len() > base.len()
+                && host.ends_with(base)
+                && host.as_bytes()[host.len() - base.len() - 1] == b'.'
+        }
+        None => {
+            host == pattern
+                || (host.ends_with(&pattern)
+                    && host.as_bytes()[host.len() - pattern.len() - 1] == b'.')
+        }
     }
 }
 
 const CATEGORIES: &[(&str, &[&str])] = &[
     (
         "Localhost",
-        &["localhost", "127.0.0.1", "[::1]", "*.localhost", "*.local", "*.test"],
+        &[
+            "localhost",
+            "127.0.0.1",
+            "[::1]",
+            "*.localhost",
+            "*.local",
+            "*.test",
+        ],
     ),
     (
         "Dev",
         &[
-            "github.com", "gitlab.com", "bitbucket.org", "stackoverflow.com", "stackexchange.com", "docs.rs",
-            "crates.io", "npmjs.com", "pypi.org", "developer.mozilla.org", "rust-lang.org", "tauri.app",
-            "react.dev", "vercel.com", "netlify.com", "dev.to", "hub.docker.com", "learn.microsoft.com",
-            "developer.android.com", "kotlinlang.org", "go.dev", "python.org", "nodejs.org", "typescriptlang.org",
-            "tailwindcss.com", "ui.shadcn.com", "codepen.io", "jsfiddle.net", "developer.chrome.com", "web.dev",
+            "github.com",
+            "gitlab.com",
+            "bitbucket.org",
+            "stackoverflow.com",
+            "stackexchange.com",
+            "docs.rs",
+            "crates.io",
+            "npmjs.com",
+            "pypi.org",
+            "developer.mozilla.org",
+            "rust-lang.org",
+            "tauri.app",
+            "react.dev",
+            "vercel.com",
+            "netlify.com",
+            "dev.to",
+            "hub.docker.com",
+            "learn.microsoft.com",
+            "developer.android.com",
+            "kotlinlang.org",
+            "go.dev",
+            "python.org",
+            "nodejs.org",
+            "typescriptlang.org",
+            "tailwindcss.com",
+            "ui.shadcn.com",
+            "codepen.io",
+            "jsfiddle.net",
+            "developer.chrome.com",
+            "web.dev",
         ],
     ),
     (
         "AI",
-        &["chatgpt.com", "claude.ai", "gemini.google.com", "perplexity.ai", "huggingface.co", "openai.com", "anthropic.com"],
+        &[
+            "chatgpt.com",
+            "claude.ai",
+            "gemini.google.com",
+            "perplexity.ai",
+            "huggingface.co",
+            "openai.com",
+            "anthropic.com",
+        ],
     ),
     (
         "Media",
-        &["youtube.com", "youtu.be", "twitch.tv", "nicovideo.jp", "netflix.com", "spotify.com", "vimeo.com", "bilibili.com", "soundcloud.com"],
+        &[
+            "youtube.com",
+            "youtu.be",
+            "twitch.tv",
+            "nicovideo.jp",
+            "netflix.com",
+            "spotify.com",
+            "vimeo.com",
+            "bilibili.com",
+            "soundcloud.com",
+        ],
     ),
     (
         "Social",
-        &["x.com", "twitter.com", "reddit.com", "facebook.com", "instagram.com", "bsky.app", "mastodon.social", "discord.com", "linkedin.com", "threads.net"],
+        &[
+            "x.com",
+            "twitter.com",
+            "reddit.com",
+            "facebook.com",
+            "instagram.com",
+            "bsky.app",
+            "mastodon.social",
+            "discord.com",
+            "linkedin.com",
+            "threads.net",
+        ],
     ),
     (
         "Shopping",
-        &["amazon.com", "amazon.co.jp", "ebay.com", "rakuten.co.jp", "mercari.com", "aliexpress.com", "etsy.com"],
+        &[
+            "amazon.com",
+            "amazon.co.jp",
+            "ebay.com",
+            "rakuten.co.jp",
+            "mercari.com",
+            "aliexpress.com",
+            "etsy.com",
+        ],
     ),
     (
         "Work",
-        &["mail.google.com", "outlook.live.com", "outlook.office.com", "notion.so", "slack.com", "calendar.google.com", "docs.google.com", "drive.google.com", "figma.com", "trello.com", "linear.app", "atlassian.net"],
+        &[
+            "mail.google.com",
+            "outlook.live.com",
+            "outlook.office.com",
+            "notion.so",
+            "slack.com",
+            "calendar.google.com",
+            "docs.google.com",
+            "drive.google.com",
+            "figma.com",
+            "trello.com",
+            "linear.app",
+            "atlassian.net",
+        ],
     ),
     (
         "News",
-        &["nytimes.com", "bbc.com", "cnn.com", "news.ycombinator.com", "theverge.com", "techcrunch.com", "nikkei.com", "news.yahoo.co.jp"],
+        &[
+            "nytimes.com",
+            "bbc.com",
+            "cnn.com",
+            "news.ycombinator.com",
+            "theverge.com",
+            "techcrunch.com",
+            "nikkei.com",
+            "news.yahoo.co.jp",
+        ],
     ),
     (
         "Reference",
-        &["wikipedia.org", "arxiv.org", "wikimedia.org", "britannica.com"],
+        &[
+            "wikipedia.org",
+            "arxiv.org",
+            "wikimedia.org",
+            "britannica.com",
+        ],
     ),
     (
         "Inspiration",
-        &["pixiv.net", "pinterest.com", "behance.net", "dribbble.com", "artstation.com", "unsplash.com"],
+        &[
+            "pixiv.net",
+            "pinterest.com",
+            "behance.net",
+            "dribbble.com",
+            "artstation.com",
+            "unsplash.com",
+        ],
     ),
 ];
 
@@ -115,7 +232,10 @@ pub struct Filer {
 
 impl Default for Filer {
     fn default() -> Self {
-        Self { rules: vec![], builtin: true }
+        Self {
+            rules: vec![],
+            builtin: true,
+        }
     }
 }
 
@@ -160,10 +280,23 @@ mod tests {
     #[test]
     fn builtin_categories() {
         let f = Filer::default();
-        assert_eq!(f.suggest("https://github.com/a/b", "").as_deref(), Some("Dev"));
-        assert_eq!(f.suggest("http://localhost:5173/", "").as_deref(), Some("Localhost"));
-        assert_eq!(f.suggest("https://my.app.test/", "").as_deref(), Some("Localhost"));
-        assert_eq!(f.suggest("https://www.youtube.com/watch?v=1", "").as_deref(), Some("Media"));
+        assert_eq!(
+            f.suggest("https://github.com/a/b", "").as_deref(),
+            Some("Dev")
+        );
+        assert_eq!(
+            f.suggest("http://localhost:5173/", "").as_deref(),
+            Some("Localhost")
+        );
+        assert_eq!(
+            f.suggest("https://my.app.test/", "").as_deref(),
+            Some("Localhost")
+        );
+        assert_eq!(
+            f.suggest("https://www.youtube.com/watch?v=1", "")
+                .as_deref(),
+            Some("Media")
+        );
         assert_eq!(f.suggest("https://example.org/", ""), None);
         assert_eq!(f.suggest("athanor://newtab", ""), None);
         assert_eq!(f.suggest("not a url", ""), None);
@@ -180,8 +313,14 @@ mod tests {
             title_contains: None,
             enabled: true,
         });
-        assert_eq!(f.suggest("https://github.com/issues", "").as_deref(), Some("Issues"));
-        assert_eq!(f.suggest("https://github.com/rust-lang", "").as_deref(), Some("Dev"));
+        assert_eq!(
+            f.suggest("https://github.com/issues", "").as_deref(),
+            Some("Issues")
+        );
+        assert_eq!(
+            f.suggest("https://github.com/rust-lang", "").as_deref(),
+            Some("Dev")
+        );
         f.builtin = false;
         assert_eq!(f.suggest("https://github.com/rust-lang", ""), None);
     }
@@ -191,12 +330,33 @@ mod tests {
         let f = Filer {
             builtin: false,
             rules: vec![
-                Rule { id: "a".into(), folder: "Trip".into(), host: None, path_prefix: None, title_contains: Some("kyoto".into()), enabled: true },
-                Rule { id: "b".into(), folder: "Bad".into(), host: None, path_prefix: None, title_contains: None, enabled: true },
+                Rule {
+                    id: "a".into(),
+                    folder: "Trip".into(),
+                    host: None,
+                    path_prefix: None,
+                    title_contains: Some("kyoto".into()),
+                    enabled: true,
+                },
+                Rule {
+                    id: "b".into(),
+                    folder: "Bad".into(),
+                    host: None,
+                    path_prefix: None,
+                    title_contains: None,
+                    enabled: true,
+                },
             ],
         };
-        assert_eq!(f.suggest("https://x.org/", "Best Kyoto Cafes").as_deref(), Some("Trip"));
-        assert_eq!(f.suggest("https://x.org/", "other"), None, "a rule without conditions never matches");
+        assert_eq!(
+            f.suggest("https://x.org/", "Best Kyoto Cafes").as_deref(),
+            Some("Trip")
+        );
+        assert_eq!(
+            f.suggest("https://x.org/", "other"),
+            None,
+            "a rule without conditions never matches"
+        );
     }
 
     /// Title matching is case-insensitive on both sides, for every rule in the list.
@@ -205,15 +365,53 @@ mod tests {
         let f = Filer {
             builtin: false,
             rules: vec![
-                Rule { id: "a".into(), folder: "Trip".into(), host: Some("x.org".into()), path_prefix: None, title_contains: Some("KYOTO".into()), enabled: true },
-                Rule { id: "b".into(), folder: "Food".into(), host: Some("y.org".into()), path_prefix: None, title_contains: Some("ramen".into()), enabled: true },
-                Rule { id: "c".into(), folder: "Ünïcode".into(), host: Some("z.org".into()), path_prefix: None, title_contains: Some("straße".into()), enabled: true },
+                Rule {
+                    id: "a".into(),
+                    folder: "Trip".into(),
+                    host: Some("x.org".into()),
+                    path_prefix: None,
+                    title_contains: Some("KYOTO".into()),
+                    enabled: true,
+                },
+                Rule {
+                    id: "b".into(),
+                    folder: "Food".into(),
+                    host: Some("y.org".into()),
+                    path_prefix: None,
+                    title_contains: Some("ramen".into()),
+                    enabled: true,
+                },
+                Rule {
+                    id: "c".into(),
+                    folder: "Ünïcode".into(),
+                    host: Some("z.org".into()),
+                    path_prefix: None,
+                    title_contains: Some("straße".into()),
+                    enabled: true,
+                },
             ],
         };
-        assert_eq!(f.suggest("https://x.org/", "Best KyOtO Cafes").as_deref(), Some("Trip"));
-        assert_eq!(f.suggest("https://y.org/", "Late Night RAMEN").as_deref(), Some("Food"));
-        assert_eq!(f.suggest("https://z.org/", "Straße 42").as_deref(), Some("Ünïcode"));
-        assert_eq!(f.suggest("https://y.org/", "Late Night Sushi"), None, "no rule matches, so nothing is filed");
-        assert_eq!(f.suggest("https://x.org/issues", "no title word here"), None, "every condition has to hold");
+        assert_eq!(
+            f.suggest("https://x.org/", "Best KyOtO Cafes").as_deref(),
+            Some("Trip")
+        );
+        assert_eq!(
+            f.suggest("https://y.org/", "Late Night RAMEN").as_deref(),
+            Some("Food")
+        );
+        assert_eq!(
+            f.suggest("https://z.org/", "Straße 42").as_deref(),
+            Some("Ünïcode")
+        );
+        assert_eq!(
+            f.suggest("https://y.org/", "Late Night Sushi"),
+            None,
+            "no rule matches, so nothing is filed"
+        );
+        assert_eq!(
+            f.suggest("https://x.org/issues", "no title word here"),
+            None,
+            "every condition has to hold"
+        );
     }
 }

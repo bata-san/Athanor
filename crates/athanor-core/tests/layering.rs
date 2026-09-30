@@ -10,8 +10,19 @@ const PURE_CRATES: &[&str] = &["athanor-core", "athanor-adblock", "athanor-ext"]
 /// UI toolkits, webview wrappers and platform app frameworks. (OS-level binding crates such as
 /// `windows-sys` are fine: they are pulled in transitively by std-adjacent crates like sockets/TLS.)
 const FORBIDDEN: &[&str] = &[
-    "tauri", "tauri-runtime", "tauri-runtime-wry", "tauri-plugin", "wry", "tao", "webview2-com", "webview2-com-sys",
-    "jni", "android-activity", "objc2", "gtk", "webkit2gtk",
+    "tauri",
+    "tauri-runtime",
+    "tauri-runtime-wry",
+    "tauri-plugin",
+    "wry",
+    "tao",
+    "webview2-com",
+    "webview2-com-sys",
+    "jni",
+    "android-activity",
+    "objc2",
+    "gtk",
+    "webkit2gtk",
 ];
 
 #[test]
@@ -22,7 +33,11 @@ fn engine_agnostic_crates_have_no_platform_dependencies() {
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
         .expect("run cargo metadata");
-    assert!(out.status.success(), "cargo metadata failed: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "cargo metadata failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let meta: Value = serde_json::from_slice(&out.stdout).expect("metadata json");
 
     let nodes = meta["resolve"]["nodes"].as_array().expect("resolve nodes");
@@ -37,7 +52,12 @@ fn engine_agnostic_crates_have_no_platform_dependencies() {
     };
 
     for root in PURE_CRATES {
-        let Some(start) = meta["packages"].as_array().unwrap().iter().find(|p| p["name"] == *root) else {
+        let Some(start) = meta["packages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["name"] == *root)
+        else {
             continue; // crate not present in this checkout
         };
         let mut stack = vec![start["id"].as_str().unwrap().to_string()];
@@ -49,7 +69,11 @@ fn engine_agnostic_crates_have_no_platform_dependencies() {
             let node = nodes.iter().find(|n| n["id"] == id.as_str()).expect("node");
             for dep in node["deps"].as_array().unwrap() {
                 // only normal (runtime) edges count; dev/build tooling may use anything
-                let normal = dep["dep_kinds"].as_array().unwrap().iter().any(|k| k["kind"].is_null());
+                let normal = dep["dep_kinds"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|k| k["kind"].is_null());
                 if normal {
                     stack.push(dep["pkg"].as_str().unwrap().to_string());
                 }
@@ -57,7 +81,10 @@ fn engine_agnostic_crates_have_no_platform_dependencies() {
         }
         for id in &seen {
             let name = name_of(id);
-            assert!(!FORBIDDEN.contains(&name.as_str()), "`{root}` must not depend on `{name}` (layering violation)");
+            assert!(
+                !FORBIDDEN.contains(&name.as_str()),
+                "`{root}` must not depend on `{name}` (layering violation)"
+            );
         }
     }
 }

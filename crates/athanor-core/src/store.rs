@@ -83,7 +83,10 @@ mod tests {
             other => panic!("expected an io error, got {other:?}"),
         }
         assert!(p.exists(), "the file must not be moved aside");
-        assert!(!dir.join("s.json.corrupt").exists(), "and nothing is left behind either");
+        assert!(
+            !dir.join("s.json.corrupt").exists(),
+            "and nothing is left behind either"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 }

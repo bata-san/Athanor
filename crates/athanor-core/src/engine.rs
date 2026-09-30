@@ -42,7 +42,11 @@ pub enum EngineEvent {
     #[serde(rename_all = "camelCase")]
     LoadingChanged { tab: Id, loading: bool },
     #[serde(rename_all = "camelCase")]
-    HistoryChanged { tab: Id, can_go_back: bool, can_go_forward: bool },
+    HistoryChanged {
+        tab: Id,
+        can_go_back: bool,
+        can_go_forward: bool,
+    },
     #[serde(rename_all = "camelCase")]
     AudioChanged { tab: Id, audible: bool },
     /// Page asked for a new window / tab (`target=_blank`, `window.open`).
@@ -55,13 +59,24 @@ pub enum EngineEvent {
     Blocked { tab: Id, url: String },
     /// A custom context-menu entry was chosen (e.g. `send-image-to-board` with the image URL as `data`).
     #[serde(rename_all = "camelCase")]
-    ContextAction { tab: Id, action: String, data: String },
+    ContextAction {
+        tab: Id,
+        action: String,
+        data: String,
+    },
 }
 
 pub type EventSink = Arc<dyn Fn(EngineEvent) + Send + Sync>;
 
 pub trait EngineBackend: Send + Sync {
-    fn create_tab(&self, id: &str, url: &str, bounds: Rect, visible: bool, opts: &TabOptions) -> EngineResult;
+    fn create_tab(
+        &self,
+        id: &str,
+        url: &str,
+        bounds: Rect,
+        visible: bool,
+        opts: &TabOptions,
+    ) -> EngineResult;
     fn close_tab(&self, id: &str) -> EngineResult;
     fn navigate(&self, id: &str, url: &str) -> EngineResult;
     fn go_back(&self, id: &str) -> EngineResult;
@@ -77,7 +92,9 @@ pub trait EngineBackend: Send + Sync {
     fn open_devtools(&self, id: &str) -> EngineResult;
     /// Screenshot of the visible page as PNG bytes. Optional capability.
     fn capture_png(&self, _id: &str) -> EngineResult<Vec<u8>> {
-        Err(EngineError::Engine("page capture is not supported by this engine".into()))
+        Err(EngineError::Engine(
+            "page capture is not supported by this engine".into(),
+        ))
     }
     /// Free the renderer of a tab but keep the Athanor tab entry (archive / memory saver).
     fn discard(&self, id: &str) -> EngineResult {

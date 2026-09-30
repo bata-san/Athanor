@@ -120,13 +120,18 @@ pub fn desired_panes(ws: &Workspace, view: &ViewState) -> Vec<(Id, Rect)> {
         Some(s) if s.root.contains(active) => s.root.rects(view.bounds, SPLIT_GAP),
         // An archived tab has no renderer, so it is not a pane either.
         _ => match ws.tab(active) {
-            Some(t) if !t.archived && !urlutil::is_internal(&t.url) => vec![(t.id.clone(), view.bounds)],
+            Some(t) if !t.archived && !urlutil::is_internal(&t.url) => {
+                vec![(t.id.clone(), view.bounds)]
+            }
             _ => vec![],
         },
     };
     // Internal pages are drawn by the shell and archived tabs hold no webview, so a split pane
     // holding one shows nothing.
-    panes.retain(|(id, _)| ws.tab(id).is_some_and(|t| !t.archived && !urlutil::is_internal(&t.url)));
+    panes.retain(|(id, _)| {
+        ws.tab(id)
+            .is_some_and(|t| !t.archived && !urlutil::is_internal(&t.url))
+    });
     for (id, rect) in &mut panes {
         if let Some(&(w, h)) = view.emulation.get(id) {
             // Emulated viewports never grow past their pane, and are centred horizontally.
@@ -744,12 +749,22 @@ mod tests {
         set_archived(&mut w, &b, true);
         let p = run(&w, &mut v);
         assert_eq!(ids(&p.discard), vec![b.as_str()]);
-        assert!(p.create.is_empty(), "an archived leaf must not be re-created: {p:?}");
+        assert!(
+            p.create.is_empty(),
+            "an archived leaf must not be re-created: {p:?}"
+        );
         assert!(p.hide.is_empty(), "a still-visible pane keeps the screen");
         assert!(v.live.contains_key(&a) && v.live[&a].visible);
         assert!(!v.live.contains_key(&b));
-        assert!(run(&w, &mut v).is_empty(), "the plan settles instead of churning");
-        assert_eq!(desired_panes(&w, &v), vec![(a, Rect::new(0.0, 0.0, 498.0, 600.0))], "only the live half of the split stays on screen");
+        assert!(
+            run(&w, &mut v).is_empty(),
+            "the plan settles instead of churning"
+        );
+        assert_eq!(
+            desired_panes(&w, &v),
+            vec![(a, Rect::new(0.0, 0.0, 498.0, 600.0))],
+            "only the live half of the split stays on screen"
+        );
     }
 
     /// Same for the active tab: an archived active tab owns no webview at all.
@@ -761,10 +776,16 @@ mod tests {
         set_archived(&mut w, &a, true);
         let p = run(&w, &mut v);
         assert_eq!(ids(&p.discard), vec![a.as_str()]);
-        assert!(p.create.is_empty(), "an archived active tab must not be re-created: {p:?}");
+        assert!(
+            p.create.is_empty(),
+            "an archived active tab must not be re-created: {p:?}"
+        );
         assert!(v.live.is_empty());
         assert!(desired_panes(&w, &v).is_empty());
-        assert!(run(&w, &mut v).is_empty(), "the plan settles instead of churning");
+        assert!(
+            run(&w, &mut v).is_empty(),
+            "the plan settles instead of churning"
+        );
         // Activating un-archives and the pane comes back.
         assert!(w.activate(&a, 5));
         let p = run(&w, &mut v);
@@ -988,7 +1009,10 @@ mod tests {
         v.want_live.insert(a.clone());
         let p = run(&w, &mut v);
         assert!(p.is_empty(), "{p:?}");
-        assert!(!v.want_live.contains(&a), "the tab already has its renderer, so the request dies");
+        assert!(
+            !v.want_live.contains(&a),
+            "the tab already has its renderer, so the request dies"
+        );
         assert!(v.live[&a].visible, "the pane is left as it was");
     }
 

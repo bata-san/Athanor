@@ -6,7 +6,8 @@ import path from 'node:path'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': path.resolve(import.meta.dirname, 'src') } },
-  server: { port: 1420, strictPort: true, clearScreen: false, host: '0.0.0.0' },
+  clearScreen: false,
+  server: { port: 1420, strictPort: true, host: '0.0.0.0' },
   build: {
     outDir: 'dist',
     target: 'es2022',

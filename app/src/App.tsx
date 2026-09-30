@@ -1,3 +1,4 @@
+import { AthanorMark } from './components/AthanorMark'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import type * as React from 'react'
 import { Toaster, toast } from 'sonner'
@@ -138,7 +139,7 @@ export function App() {
   const standaloneBoardWindow = screen === 'board-window'
   const splitActive = Boolean(snapshot?.workspace.split)
 
-  if (!snapshot || !ready) return <div className="page-placeholder"><div className="brand-mark"><AppIcon name="WandSparkles" /></div></div>
+  if (!snapshot || !ready) return <div className="page-placeholder"><div className="brand-mark"><AthanorMark /></div></div>
   return <DndContext onDragEnd={startDrag}>
     <div className={`${mobile ? 'mobile-shell' : ''} ${standaloneBoardWindow ? 'standalone-board-shell' : ''} app-shell`} data-part="shell" data-side={snapshot.settings.sidebarSide} data-density={density}>
       {!mobile && !standaloneBoardWindow && <Sidebar snapshot={snapshot} panels={panels} toolbar={<Toolbar snapshot={snapshot} activeTab={activeTab} omniboxRef={omniboxRef} openPalette={() => { setPaletteOpen(true); setPaletteQuery('') }} openPage={openInternalPage} toggleDev={() => setDevOpen((value) => !value)} onOverlay={setOmniboxOverlay} />} openPage={openInternalPage} openPanel={(selected) => { setPanel(selected); setScreen('browser') }} onOverlay={setMenuOverlay} />}

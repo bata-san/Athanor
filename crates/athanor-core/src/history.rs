@@ -23,7 +23,10 @@ pub struct History {
 
 impl Default for History {
     fn default() -> Self {
-        Self { entries: vec![], cap: 3000 }
+        Self {
+            entries: vec![],
+            cap: 3000,
+        }
     }
 }
 
@@ -52,7 +55,12 @@ impl History {
             }
             return;
         }
-        self.entries.push(Entry { url: key.to_string(), title: title.to_string(), visits: 1, last: now });
+        self.entries.push(Entry {
+            url: key.to_string(),
+            title: title.to_string(),
+            visits: 1,
+            last: now,
+        });
         if self.entries.len() > self.cap {
             // drop the stalest, least visited entry
             if let Some(i) = self
@@ -96,13 +104,22 @@ impl History {
             .filter_map(|e| {
                 let url = e.url.to_lowercase();
                 let title = e.title.to_lowercase();
-                if !terms.iter().all(|t| url.contains(t.as_str()) || title.contains(t.as_str())) {
+                if !terms
+                    .iter()
+                    .all(|t| url.contains(t.as_str()) || title.contains(t.as_str()))
+                {
                     return None;
                 }
-                let host_prefix = url.split("://").nth(1).unwrap_or(&url).trim_start_matches("www.");
+                let host_prefix = url
+                    .split("://")
+                    .nth(1)
+                    .unwrap_or(&url)
+                    .trim_start_matches("www.");
                 let prefix = terms.iter().any(|t| host_prefix.starts_with(t.as_str()));
                 let age_days = now.saturating_sub(e.last) as f64 / 86_400_000.0;
-                let score = f64::from(e.visits).ln_1p() * 2.0 + if prefix { 3.0 } else { 0.0 } + 2.0 / (1.0 + age_days);
+                let score = f64::from(e.visits).ln_1p() * 2.0
+                    + if prefix { 3.0 } else { 0.0 }
+                    + 2.0 / (1.0 + age_days);
                 Some((score, e))
             })
             .collect();
@@ -143,7 +160,10 @@ mod tests {
 
     #[test]
     fn a_file_without_cap_loads_and_sanitized_clamps_it() {
-        let h: History = serde_json::from_str(r#"{"entries":[{"url":"https://a.test/","title":"A","visits":1,"last":5}]}"#).unwrap();
+        let h: History = serde_json::from_str(
+            r#"{"entries":[{"url":"https://a.test/","title":"A","visits":1,"last":5}]}"#,
+        )
+        .unwrap();
         assert_eq!(h.len(), 1);
         assert_eq!(h.cap, 3000, "a missing cap falls back to the default");
         for (raw, want) in [
@@ -161,7 +181,9 @@ mod tests {
 
     #[test]
     fn a_sanitized_cap_never_evicts_the_entry_it_just_recorded() {
-        let mut h = serde_json::from_str::<History>(r#"{"entries":[],"cap":0}"#).unwrap().sanitized();
+        let mut h = serde_json::from_str::<History>(r#"{"entries":[],"cap":0}"#)
+            .unwrap()
+            .sanitized();
         for i in 0..3u64 {
             h.record(&format!("https://e{i}.test/"), "", i);
         }
@@ -187,7 +209,10 @@ mod tests {
     fn cap_evicts_stale_low_visit_entries() {
         // Built directly, so `sanitized`'s lower bound does not apply - this is the eviction
         // rule itself, not the file-format guard.
-        let mut h = History { entries: vec![], cap: 3 };
+        let mut h = History {
+            entries: vec![],
+            cap: 3,
+        };
         for i in 0..5u64 {
             h.record(&format!("https://e{i}.test/"), "", i);
         }

@@ -44,7 +44,10 @@ pub async fn list_themes(host: State<'_, Arc<ExtHost>>) -> R<Vec<ThemeInfo>> {
 
 #[tauri::command]
 pub async fn set_theme(b: B<'_>, app: AppHandle, host: State<'_, Arc<ExtHost>>, id: String) -> R {
-    b.set_settings(SettingsPatch { theme: Some(id.clone()), ..Default::default() });
+    b.set_settings(SettingsPatch {
+        theme: Some(id.clone()),
+        ..Default::default()
+    });
     let _ = app.emit("athanor://shell-css", host.shell_css(&id));
     Ok(())
 }
@@ -70,7 +73,12 @@ pub async fn get_commands(host: State<'_, Arc<ExtHost>>) -> R<Vec<CommandInfo>> 
 }
 
 #[tauri::command]
-pub async fn run_extension_command(b: B<'_>, host: State<'_, Arc<ExtHost>>, ext: String, id: String) -> R {
+pub async fn run_extension_command(
+    b: B<'_>,
+    host: State<'_, Arc<ExtHost>>,
+    ext: String,
+    id: String,
+) -> R {
     host.run_command(&b, &ext, &id)
 }
 
@@ -98,7 +106,14 @@ pub async fn open_tab(
     background: Option<bool>,
     pinned: Option<bool>,
 ) -> R<Id> {
-    Ok(b.open_tab(OpenArgs { url, parent, folder, space, background, pinned }))
+    Ok(b.open_tab(OpenArgs {
+        url,
+        parent,
+        folder,
+        space,
+        background,
+        pinned,
+    }))
 }
 
 #[tauri::command]
@@ -161,8 +176,23 @@ pub async fn set_muted(b: B<'_>, tab: Id, muted: bool) -> R {
 }
 
 #[tauri::command]
-pub async fn move_tab(b: B<'_>, tab: Id, space: Option<Id>, folder: Option<Id>, before: Option<Id>, pinned: Option<bool>) -> R {
-    b.move_tab(&tab, MoveDest { space, folder, before, pinned });
+pub async fn move_tab(
+    b: B<'_>,
+    tab: Id,
+    space: Option<Id>,
+    folder: Option<Id>,
+    before: Option<Id>,
+    pinned: Option<bool>,
+) -> R {
+    b.move_tab(
+        &tab,
+        MoveDest {
+            space,
+            folder,
+            before,
+            pinned,
+        },
+    );
     Ok(())
 }
 
@@ -284,12 +314,18 @@ pub async fn switch_space(b: B<'_>, id: Id) -> R {
     // prefer the most recently used tab of that space; an empty space gets a fresh new-tab page
     let target = b.with_ws(|w| {
         w.active_space = id.clone();
-        w.visible_tabs(&id).iter().max_by_key(|t| t.last_active).map(|t| t.id.clone())
+        w.visible_tabs(&id)
+            .iter()
+            .max_by_key(|t| t.last_active)
+            .map(|t| t.id.clone())
     });
     match target {
         Some(t) => b.activate_tab(&t),
         None => {
-            b.open_tab(OpenArgs { space: Some(id), ..Default::default() });
+            b.open_tab(OpenArgs {
+                space: Some(id),
+                ..Default::default()
+            });
         }
     }
     Ok(())
@@ -412,7 +448,10 @@ pub async fn create_board(b: B<'_>, name: String) -> R<Board> {
 #[tauri::command]
 pub async fn save_board(b: B<'_>, app: AppHandle, board: Board) -> R {
     boards::save(&b.paths, &board)?;
-    let _ = app.emit("athanor://board-changed", serde_json::json!({ "id": board.id }));
+    let _ = app.emit(
+        "athanor://board-changed",
+        serde_json::json!({ "id": board.id }),
+    );
     Ok(())
 }
 
@@ -427,10 +466,19 @@ pub async fn board_put_asset(b: B<'_>, data_base64: String, mime: String) -> R<S
 }
 
 #[tauri::command]
-pub async fn board_add_from_url(b: B<'_>, app: AppHandle, id: Id, url: String, cx: f64, cy: f64) -> R {
+pub async fn board_add_from_url(
+    b: B<'_>,
+    app: AppHandle,
+    id: Id,
+    url: String,
+    cx: f64,
+    cy: f64,
+) -> R {
     let paths = b.paths.clone();
     let id2 = id.clone();
-    tauri::async_runtime::spawn_blocking(move || boards::add_from_url(&paths, &id2, &url, cx, cy)).await.map_err(e)??;
+    tauri::async_runtime::spawn_blocking(move || boards::add_from_url(&paths, &id2, &url, cx, cy))
+        .await
+        .map_err(e)??;
     let _ = app.emit("athanor://board-changed", serde_json::json!({ "id": id }));
     Ok(())
 }
@@ -464,7 +512,9 @@ pub async fn set_board_always_on_top(app: AppHandle, id: Id, on: bool) -> R {
 #[tauri::command]
 pub async fn send_page_image_to_board(b: B<'_>, tab: Id, board_id: Id) -> R {
     let browser = b.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || browser.capture_to_board(&tab, &board_id)).await.map_err(e)?
+    tauri::async_runtime::spawn_blocking(move || browser.capture_to_board(&tab, &board_id))
+        .await
+        .map_err(e)?
 }
 
 // ---------- adblock ----------
@@ -476,7 +526,10 @@ pub async fn get_adblock_status(b: B<'_>) -> R<crate::filter::AdblockStatus> {
 
 #[tauri::command]
 pub async fn set_adblock_enabled(b: B<'_>, enabled: bool) -> R {
-    b.set_settings(SettingsPatch { adblock_enabled: Some(enabled), ..Default::default() });
+    b.set_settings(SettingsPatch {
+        adblock_enabled: Some(enabled),
+        ..Default::default()
+    });
     b.filter.set_enabled(enabled);
     b.emit_adblock();
     Ok(())
@@ -540,21 +593,37 @@ fn refresh_shell_css(app: &AppHandle, b: &Browser, host: &ExtHost) {
 }
 
 #[tauri::command]
-pub async fn set_extension_enabled(b: B<'_>, app: AppHandle, host: State<'_, Arc<ExtHost>>, id: String, enabled: bool) -> R {
+pub async fn set_extension_enabled(
+    b: B<'_>,
+    app: AppHandle,
+    host: State<'_, Arc<ExtHost>>,
+    id: String,
+    enabled: bool,
+) -> R {
     host.set_enabled(&id, enabled);
     refresh_shell_css(&app, &b, &host);
     Ok(())
 }
 
 #[tauri::command]
-pub async fn install_extension(b: B<'_>, app: AppHandle, host: State<'_, Arc<ExtHost>>, path: String) -> R {
+pub async fn install_extension(
+    b: B<'_>,
+    app: AppHandle,
+    host: State<'_, Arc<ExtHost>>,
+    path: String,
+) -> R {
     host.install(std::path::Path::new(&path))?;
     refresh_shell_css(&app, &b, &host);
     Ok(())
 }
 
 #[tauri::command]
-pub async fn remove_extension(b: B<'_>, app: AppHandle, host: State<'_, Arc<ExtHost>>, id: String) -> R {
+pub async fn remove_extension(
+    b: B<'_>,
+    app: AppHandle,
+    host: State<'_, Arc<ExtHost>>,
+    id: String,
+) -> R {
     host.remove(&id)?;
     refresh_shell_css(&app, &b, &host);
     Ok(())
@@ -573,7 +642,8 @@ pub async fn pick_directory(app: AppHandle) -> R<Option<String>> {
 // ---------- window (desktop) ----------
 
 fn main_window(app: &AppHandle) -> R<tauri::Window> {
-    app.get_window("main").ok_or_else(|| "no main window".to_string())
+    app.get_window("main")
+        .ok_or_else(|| "no main window".to_string())
 }
 
 #[tauri::command]
@@ -584,7 +654,12 @@ pub async fn window_minimize(app: AppHandle) -> R {
 #[tauri::command]
 pub async fn window_toggle_maximize(app: AppHandle) -> R {
     let w = main_window(&app)?;
-    if w.is_maximized().map_err(e)? { w.unmaximize() } else { w.maximize() }.map_err(e)
+    if w.is_maximized().map_err(e)? {
+        w.unmaximize()
+    } else {
+        w.maximize()
+    }
+    .map_err(e)
 }
 
 #[tauri::command]

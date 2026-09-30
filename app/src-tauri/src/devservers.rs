@@ -10,14 +10,28 @@ use tokio::{
 };
 
 async fn probe(port: u16) -> Option<DevServer> {
-    let mut stream = timeout(Duration::from_millis(120), TcpStream::connect(("127.0.0.1", port))).await.ok()?.ok()?;
+    let mut stream = timeout(
+        Duration::from_millis(120),
+        TcpStream::connect(("127.0.0.1", port)),
+    )
+    .await
+    .ok()?
+    .ok()?;
     let title = fetch_title(&mut stream).await;
-    Some(DevServer { port, url: format!("http://localhost:{port}/"), title })
+    Some(DevServer {
+        port,
+        url: format!("http://localhost:{port}/"),
+        title,
+    })
 }
 
 async fn fetch_title(stream: &mut TcpStream) -> Option<String> {
-    let req = b"GET / HTTP/1.0\r\nHost: localhost\r\nAccept: text/html\r\nConnection: close\r\n\r\n";
-    timeout(Duration::from_millis(200), stream.write_all(req)).await.ok()?.ok()?;
+    let req =
+        b"GET / HTTP/1.0\r\nHost: localhost\r\nAccept: text/html\r\nConnection: close\r\n\r\n";
+    timeout(Duration::from_millis(200), stream.write_all(req))
+        .await
+        .ok()?
+        .ok()?;
     let mut buf = vec![0u8; 16 * 1024];
     let mut n = 0;
     // read until we have the title or run out of time/space
@@ -67,7 +81,10 @@ mod tests {
 
     #[test]
     fn title_parsing() {
-        assert_eq!(find_title(b"HTTP/1.0 200\r\n\r\n<html><TITLE> Vite + React </TITLE>").as_deref(), Some("Vite + React"));
+        assert_eq!(
+            find_title(b"HTTP/1.0 200\r\n\r\n<html><TITLE> Vite + React </TITLE>").as_deref(),
+            Some("Vite + React")
+        );
         assert_eq!(find_title(b"<html><head></head>"), None);
         assert_eq!(find_title(b"<title></title>"), None);
     }
@@ -80,7 +97,9 @@ mod tests {
             if let Ok((mut s, _)) = listener.accept().await {
                 let mut b = [0u8; 256];
                 let _ = s.read(&mut b).await;
-                let _ = s.write_all(b"HTTP/1.0 200 OK\r\n\r\n<title>Hello dev</title>").await;
+                let _ = s
+                    .write_all(b"HTTP/1.0 200 OK\r\n\r\n<title>Hello dev</title>")
+                    .await;
             }
         });
         let s = probe(port).await.expect("server found");

@@ -8,6 +8,8 @@ mod devservers;
 mod engine_desktop;
 #[cfg(target_os = "android")]
 mod engine_mobile;
+mod ext_host;
+mod filter;
 #[cfg(target_os = "android")]
 mod jni_bridge;
 #[cfg(desktop)]
@@ -16,8 +18,6 @@ mod platform;
 #[cfg(mobile)]
 #[path = "platform_mobile.rs"]
 mod platform;
-mod ext_host;
-mod filter;
 mod state;
 #[cfg(windows)]
 mod win;
@@ -29,15 +29,25 @@ use std::sync::Arc;
 use tauri::{http::Response, Emitter, Manager, RunEvent};
 
 fn asset_response(app: &tauri::AppHandle, hash: &str) -> Response<Vec<u8>> {
-    let not_found = || Response::builder().status(404).body(Vec::new()).expect("static response");
-    let Some(browser) = app.try_state::<Arc<Browser>>() else { return not_found() };
+    let not_found = || {
+        Response::builder()
+            .status(404)
+            .body(Vec::new())
+            .expect("static response")
+    };
+    let Some(browser) = app.try_state::<Arc<Browser>>() else {
+        return not_found();
+    };
     match boards::assets(&browser.paths).get(hash) {
         Ok((bytes, mime)) => Response::builder()
             .header("Content-Type", mime)
             .header("Access-Control-Allow-Origin", "*")
             .header("Cache-Control", "max-age=31536000, immutable")
             .header("X-Content-Type-Options", "nosniff")
-            .header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+            .header(
+                "Content-Security-Policy",
+                "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+            )
             .body(bytes)
             .unwrap_or_else(|_| not_found()),
         Err(_) => not_found(),
@@ -52,8 +62,15 @@ pub fn run() {
     let app = builder
         .plugin(tauri_plugin_dialog::init())
         .register_uri_scheme_protocol("athanor-ext", |ctx, req| {
-            let not_found = || Response::builder().status(404).body(Vec::new()).expect("static response");
-            let Some(host) = ctx.app_handle().try_state::<Arc<ExtHost>>() else { return not_found() };
+            let not_found = || {
+                Response::builder()
+                    .status(404)
+                    .body(Vec::new())
+                    .expect("static response")
+            };
+            let Some(host) = ctx.app_handle().try_state::<Arc<ExtHost>>() else {
+                return not_found();
+            };
             match host.serve(req.uri().path()) {
                 Ok((bytes, mime, csp)) => Response::builder()
                     .header("Content-Type", mime)
@@ -83,7 +100,10 @@ pub fn run() {
             let browser = platform::init(app, filter.clone(), paths)?;
             {
                 let b = browser.clone();
-                filter.start(browser.settings().adblock_enabled, Arc::new(move || b.emit_adblock()));
+                filter.start(
+                    browser.settings().adblock_enabled,
+                    Arc::new(move || b.emit_adblock()),
+                );
             }
             {
                 let host = app.state::<Arc<ExtHost>>().inner().clone();

@@ -3,16 +3,16 @@
 //! Adapters (WebView2 on desktop, the Android plugin via JNI) only ever see this small surface, so the
 //! blocking implementation can change without touching any engine code.
 
-use athanor_adblock::{Blocker, Decision, Request, ResourceType, privacy};
-use base64::{Engine as _, engine::general_purpose::STANDARD};
+use athanor_adblock::{privacy, Blocker, Decision, PageContext, Request, ResourceType};
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use parking_lot::{Mutex, RwLock};
 use serde::Serialize;
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
     sync::{
-        Arc,
         atomic::{AtomicBool, Ordering},
+        Arc,
     },
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -192,6 +192,36 @@ impl Filter {
             source_url: source,
             resource_type: kind.into(),
         }) {
+            Decision::Allow => DetailedVerdict::Allow,
+            Decision::Rewrite(url) => DetailedVerdict::Rewrite { url },
+            Decision::Block { .. } => DetailedVerdict::Block,
+            Decision::Redirect { to } => data_url(&to)
+                .map_or(DetailedVerdict::Block, |(mime, body)| {
+                    DetailedVerdict::Respond { mime, body }
+                }),
+        }
+    }
+
+    /// Parse and cache top-level source information once when a navigation begins.
+    pub fn page_context(&self, source_url: &str) -> PageContext {
+        self.blocker.page_context(source_url)
+    }
+
+    /// Hot-path verdict using the current navigation's parsed source context.
+    pub fn verdict_with_page_context(
+        &self,
+        url: &str,
+        page: &PageContext,
+        kind: Kind,
+    ) -> DetailedVerdict {
+        match self.blocker.check_with_page_context(
+            &Request {
+                url,
+                source_url: page.source_url(),
+                resource_type: kind.into(),
+            },
+            page,
+        ) {
             Decision::Allow => DetailedVerdict::Allow,
             Decision::Rewrite(url) => DetailedVerdict::Rewrite { url },
             Decision::Block { .. } => DetailedVerdict::Block,

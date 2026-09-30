@@ -4,7 +4,11 @@
 use crate::{new_id, Id};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{collections::HashSet, fs, io, path::{Path, PathBuf}};
+use std::{
+    collections::HashSet,
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -18,7 +22,11 @@ pub enum ItemKind {
         source_url: Option<String>,
     },
     #[serde(rename_all = "camelCase")]
-    Text { text: String, size: f64, color: String },
+    Text {
+        text: String,
+        size: f64,
+        color: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -62,7 +70,11 @@ pub struct View {
 
 impl Default for View {
     fn default() -> Self {
-        Self { x: 0.0, y: 0.0, zoom: 1.0 }
+        Self {
+            x: 0.0,
+            y: 0.0,
+            zoom: 1.0,
+        }
     }
 }
 
@@ -96,7 +108,13 @@ pub struct ImageSpec<'a> {
 
 impl<'a> ImageSpec<'a> {
     pub fn new(asset: &'a str, mime: &'a str, width: f64, height: f64) -> Self {
-        Self { asset, mime, source_url: None, width, height }
+        Self {
+            asset,
+            mime,
+            source_url: None,
+            width,
+            height,
+        }
     }
 }
 
@@ -105,24 +123,45 @@ const DEFAULT_MAX_EDGE: f64 = 400.0;
 
 impl Board {
     pub fn new(name: &str) -> Self {
-        Self { id: new_id(), name: name.into(), items: vec![], view: View::default(), background: default_bg(), always_on_top: false }
+        Self {
+            id: new_id(),
+            name: name.into(),
+            items: vec![],
+            view: View::default(),
+            background: default_bg(),
+            always_on_top: false,
+        }
     }
 
     /// One above the topmost item. Saturates: a board whose z already reached `i32::MAX`
     /// (hand-edited or long-lived) must not panic on the next insert.
     fn next_z(&self) -> i32 {
-        self.items.iter().map(|i| i.z).max().map_or(0, |z| z.saturating_add(1))
+        self.items
+            .iter()
+            .map(|i| i.z)
+            .max()
+            .map_or(0, |z| z.saturating_add(1))
     }
 
     /// Add an image centred on `(cx, cy)` (board coordinates), scaled so its longest edge is at most 400.
     pub fn add_image(&mut self, img: ImageSpec, cx: f64, cy: f64) -> Id {
-        let ImageSpec { asset, mime, source_url, width: nat_w, height: nat_h } = img;
+        let ImageSpec {
+            asset,
+            mime,
+            source_url,
+            width: nat_w,
+            height: nat_h,
+        } = img;
         let (nat_w, nat_h) = (nat_w.max(1.0), nat_h.max(1.0));
         let scale = (DEFAULT_MAX_EDGE / nat_w.max(nat_h)).min(1.0);
         let (w, h) = (nat_w * scale, nat_h * scale);
         let item = Item {
             id: new_id(),
-            kind: ItemKind::Image { asset: asset.into(), mime: mime.into(), source_url },
+            kind: ItemKind::Image {
+                asset: asset.into(),
+                mime: mime.into(),
+                source_url,
+            },
             x: cx - w / 2.0,
             y: cy - h / 2.0,
             w,
@@ -143,7 +182,11 @@ impl Board {
         let (w, h) = (240.0, 60.0);
         let item = Item {
             id: new_id(),
-            kind: ItemKind::Text { text: text.into(), size: 24.0, color: "#ffffff".into() },
+            kind: ItemKind::Text {
+                text: text.into(),
+                size: 24.0,
+                color: "#ffffff".into(),
+            },
             x: cx - w / 2.0,
             y: cy - h / 2.0,
             w,
@@ -174,7 +217,12 @@ impl Board {
     }
 
     pub fn send_to_back(&mut self, id: &str) {
-        let z = self.items.iter().map(|i| i.z).min().map_or(0, |z| z.saturating_sub(1));
+        let z = self
+            .items
+            .iter()
+            .map(|i| i.z)
+            .min()
+            .map_or(0, |z| z.saturating_sub(1));
         if let Some(i) = self.items.iter_mut().find(|i| i.id == id) {
             i.z = z;
         }
@@ -184,7 +232,8 @@ impl Board {
     pub fn bounds(&self) -> Option<(f64, f64, f64, f64)> {
         let mut it = self.items.iter();
         let first = it.next()?;
-        let (mut x0, mut y0, mut x1, mut y1) = (first.x, first.y, first.x + first.w, first.y + first.h);
+        let (mut x0, mut y0, mut x1, mut y1) =
+            (first.x, first.y, first.x + first.w, first.y + first.h);
         for i in it {
             x0 = x0.min(i.x);
             y0 = y0.min(i.y);
@@ -200,18 +249,29 @@ impl Board {
             self.view = View::default();
             return;
         };
-        let zoom = ((vw - 2.0 * pad) / w.max(1.0)).min((vh - 2.0 * pad) / h.max(1.0)).clamp(0.02, 8.0);
-        self.view = View { zoom, x: vw / 2.0 - (x + w / 2.0) * zoom, y: vh / 2.0 - (y + h / 2.0) * zoom };
+        let zoom = ((vw - 2.0 * pad) / w.max(1.0))
+            .min((vh - 2.0 * pad) / h.max(1.0))
+            .clamp(0.02, 8.0);
+        self.view = View {
+            zoom,
+            x: vw / 2.0 - (x + w / 2.0) * zoom,
+            y: vh / 2.0 - (y + h / 2.0) * zoom,
+        };
     }
 
     /// Shelf-pack all unlocked items into rows aiming at a roughly 16:10 overall shape.
     pub fn arrange(&mut self, gap: f64) {
-        let mut idx: Vec<usize> = (0..self.items.len()).filter(|&i| !self.items[i].locked).collect();
+        let mut idx: Vec<usize> = (0..self.items.len())
+            .filter(|&i| !self.items[i].locked)
+            .collect();
         if idx.is_empty() {
             return;
         }
         idx.sort_by(|&a, &b| self.items[b].h.total_cmp(&self.items[a].h));
-        let area: f64 = idx.iter().map(|&i| (self.items[i].w + gap) * (self.items[i].h + gap)).sum();
+        let area: f64 = idx
+            .iter()
+            .map(|&i| (self.items[i].w + gap) * (self.items[i].h + gap))
+            .sum();
         let row_w = (area * 1.6).sqrt().max(self.items[idx[0]].w);
         let (mut x, mut y, mut row_h) = (0.0, 0.0, 0.0f64);
         for &i in &idx {
@@ -252,7 +312,10 @@ impl AssetStore {
     }
 
     pub fn put(&self, bytes: &[u8], mime: &str) -> io::Result<String> {
-        let hash: String = Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect();
+        let hash: String = Sha256::digest(bytes)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
         fs::create_dir_all(&self.root)?;
         let path = self.root.join(&hash);
         if !path.exists() {
@@ -269,10 +332,14 @@ impl AssetStore {
     /// Returns `(bytes, mime)`. Rejects anything that is not a 64-char hex hash (no path traversal).
     pub fn get(&self, hash: &str) -> io::Result<(Vec<u8>, String)> {
         if !Self::valid(hash) {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "bad asset hash"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "bad asset hash",
+            ));
         }
         let bytes = fs::read(self.root.join(hash))?;
-        let mime = fs::read_to_string(self.root.join(format!("{hash}.mime"))).unwrap_or_else(|_| "application/octet-stream".into());
+        let mime = fs::read_to_string(self.root.join(format!("{hash}.mime")))
+            .unwrap_or_else(|_| "application/octet-stream".into());
         Ok((bytes, mime))
     }
 
@@ -280,7 +347,10 @@ impl AssetStore {
     /// a hash that is not 64 hex chars is rejected like in [`Self::get`].
     pub fn remove(&self, hash: &str) -> io::Result<()> {
         if !Self::valid(hash) {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "bad asset hash"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "bad asset hash",
+            ));
         }
         remove_file_if_exists(&self.root.join(hash))?;
         remove_file_if_exists(&self.root.join(format!("{hash}.mime")))
@@ -303,7 +373,9 @@ impl AssetStore {
             if !entry.file_type()?.is_file() {
                 continue;
             }
-            let Some(name) = entry.file_name().to_str().map(str::to_string) else { continue };
+            let Some(name) = entry.file_name().to_str().map(str::to_string) else {
+                continue;
+            };
             if !Self::valid(&name) || keep.contains(&name) {
                 continue;
             }
@@ -370,7 +442,8 @@ mod tests {
         let moved: Vec<&Item> = b.items.iter().filter(|i| !i.locked).collect();
         for (n, a) in moved.iter().enumerate() {
             for c in &moved[n + 1..] {
-                let overlap = a.x < c.x + c.w && c.x < a.x + a.w && a.y < c.y + c.h && c.y < a.y + a.h;
+                let overlap =
+                    a.x < c.x + c.w && c.x < a.x + a.w && a.y < c.y + c.h && c.y < a.y + a.h;
                 assert!(!overlap, "items overlap after arrange");
             }
         }
@@ -379,7 +452,11 @@ mod tests {
     #[test]
     fn fit_view_centres_content() {
         let mut b = Board::new("t");
-        b.add_image(ImageSpec::new("h", "image/png", 400.0, 400.0), 1000.0, 1000.0);
+        b.add_image(
+            ImageSpec::new("h", "image/png", 400.0, 400.0),
+            1000.0,
+            1000.0,
+        );
         b.fit_view(800.0, 600.0, 50.0);
         let (x, y, w, h) = b.bounds().unwrap();
         let cx = (x + w / 2.0) * b.view.zoom + b.view.x;
@@ -390,9 +467,20 @@ mod tests {
     #[test]
     fn serde_roundtrip_camel_case() {
         let mut b = Board::new("t");
-        b.add_image(ImageSpec { source_url: Some("https://x".into()), ..ImageSpec::new("abc", "image/png", 10.0, 10.0) }, 0.0, 0.0);
+        b.add_image(
+            ImageSpec {
+                source_url: Some("https://x".into()),
+                ..ImageSpec::new("abc", "image/png", 10.0, 10.0)
+            },
+            0.0,
+            0.0,
+        );
         let json = serde_json::to_string(&b).unwrap();
-        assert!(json.contains("\"flipX\"") && json.contains("\"sourceUrl\"") && json.contains("\"kind\":\"image\""));
+        assert!(
+            json.contains("\"flipX\"")
+                && json.contains("\"sourceUrl\"")
+                && json.contains("\"kind\":\"image\"")
+        );
         assert_eq!(serde_json::from_str::<Board>(&json).unwrap(), b);
     }
 
@@ -403,7 +491,10 @@ mod tests {
         let h1 = s.put(b"bytes", "image/png").unwrap();
         let h2 = s.put(b"bytes", "image/png").unwrap();
         assert_eq!(h1, h2);
-        assert_eq!(s.get(&h1).unwrap(), (b"bytes".to_vec(), "image/png".to_string()));
+        assert_eq!(
+            s.get(&h1).unwrap(),
+            (b"bytes".to_vec(), "image/png".to_string())
+        );
         assert!(s.get("../secret").is_err());
         let _ = fs::remove_dir_all(dir);
     }
@@ -416,8 +507,12 @@ mod tests {
         s.remove(&h).unwrap();
         assert!(!dir.join(&h).exists() && !dir.join(format!("{h}.mime")).exists());
         assert!(s.get(&h).is_err());
-        s.remove(&h).expect("removing an asset twice is not an error");
-        assert!(s.remove("../secret").is_err(), "the hash is still validated");
+        s.remove(&h)
+            .expect("removing an asset twice is not an error");
+        assert!(
+            s.remove("../secret").is_err(),
+            "the hash is still validated"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -437,7 +532,11 @@ mod tests {
         assert!(dir.join(format!("{keep}.mime")).exists());
         assert!(!dir.join(&doomed).exists() && !dir.join(format!("{doomed}.mime")).exists());
         assert!(stray.exists(), "gc only touches 64-char hex names");
-        assert_eq!(s.gc(&keep_set).unwrap(), 0, "a second pass finds nothing left");
+        assert_eq!(
+            s.gc(&keep_set).unwrap(),
+            0,
+            "a second pass finds nothing left"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -450,8 +549,16 @@ mod tests {
 
     #[test]
     fn view_defaults_to_unit_zoom_when_the_field_is_missing() {
-        let b: Board = serde_json::from_str(r#"{"id":"b","name":"old","view":{"x":10.0,"y":20.0}}"#).unwrap();
-        assert_eq!(b.view, View { x: 10.0, y: 20.0, zoom: 1.0 });
+        let b: Board =
+            serde_json::from_str(r#"{"id":"b","name":"old","view":{"x":10.0,"y":20.0}}"#).unwrap();
+        assert_eq!(
+            b.view,
+            View {
+                x: 10.0,
+                y: 20.0,
+                zoom: 1.0
+            }
+        );
         let b: Board = serde_json::from_str(r#"{"id":"b","name":"no view at all"}"#).unwrap();
         assert_eq!(b.view, View::default());
         assert!(b.items.is_empty() && b.background == "#1e1e1e");

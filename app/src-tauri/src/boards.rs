@@ -65,9 +65,15 @@ struct PublicOnly;
 
 impl ureq::Resolver for PublicOnly {
     fn resolve(&self, netloc: &str) -> io::Result<Vec<SocketAddr>> {
-        let addrs: Vec<SocketAddr> = netloc.to_socket_addrs()?.filter(|a| is_public_ip(a.ip())).collect();
+        let addrs: Vec<SocketAddr> = netloc
+            .to_socket_addrs()?
+            .filter(|a| is_public_ip(a.ip()))
+            .collect();
         if addrs.is_empty() {
-            Err(io::Error::new(io::ErrorKind::PermissionDenied, "refusing to fetch from a local or private address"))
+            Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "refusing to fetch from a local or private address",
+            ))
         } else {
             Ok(addrs)
         }
@@ -110,7 +116,12 @@ pub fn list(paths: &Paths) -> Vec<BoardSummary> {
                 .duration_since(UNIX_EPOCH)
                 .ok()
                 .map_or(0, |d| d.as_millis() as u64);
-            Some(BoardSummary { id: board.id, name: board.name, item_count: board.items.len(), updated_at })
+            Some(BoardSummary {
+                id: board.id,
+                name: board.name,
+                item_count: board.items.len(),
+                updated_at,
+            })
         })
         .collect();
     out.sort_by_key(|b| std::cmp::Reverse(b.updated_at));
@@ -127,7 +138,11 @@ fn get_unlocked(paths: &Paths, id: &str) -> Result<Board, String> {
 }
 
 pub fn create(paths: &Paths, name: &str) -> Result<Board, String> {
-    let board = Board::new(if name.trim().is_empty() { "Untitled board" } else { name.trim() });
+    let board = Board::new(if name.trim().is_empty() {
+        "Untitled board"
+    } else {
+        name.trim()
+    });
     save(paths, &board)?;
     Ok(board)
 }
@@ -156,7 +171,12 @@ pub fn delete(paths: &Paths, id: &str) -> Result<(), String> {
         let keep: HashSet<String> = list(paths)
             .into_iter()
             .filter_map(|s| get_unlocked(paths, &s.id).ok())
-            .flat_map(|b| b.assets().into_iter().map(str::to_string).collect::<Vec<_>>())
+            .flat_map(|b| {
+                b.assets()
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
             .collect();
         let store = assets(paths);
         for hash in board.assets() {
@@ -178,7 +198,11 @@ pub fn put_asset(paths: &Paths, data_base64: &str, mime: &str) -> Result<String,
     if bytes.len() as u64 > MAX_IMAGE_BYTES {
         return Err("image too large".into());
     }
-    let mime = if mime.starts_with("image/") { mime } else { "application/octet-stream" };
+    let mime = if mime.starts_with("image/") {
+        mime
+    } else {
+        "application/octet-stream"
+    };
     assets(paths).put(&bytes, mime).map_err(|e| e.to_string())
 }
 
@@ -186,7 +210,13 @@ pub fn put_asset(paths: &Paths, data_base64: &str, mime: &str) -> Result<String,
 ///
 /// The URL is attacker-influenced (it is the `src` of an image on a page the user right-clicked), so the
 /// connection is restricted to public addresses, redirects are re-checked, and oversize bodies are rejected.
-pub fn add_from_url(paths: &Paths, board_id: &str, url: &str, cx: f64, cy: f64) -> Result<(), String> {
+pub fn add_from_url(
+    paths: &Paths,
+    board_id: &str,
+    url: &str,
+    cx: f64,
+    cy: f64,
+) -> Result<(), String> {
     if !(url.starts_with("http://") || url.starts_with("https://")) {
         return Err("only http(s) image URLs are supported".into());
     }
@@ -200,20 +230,32 @@ pub fn add_from_url(paths: &Paths, board_id: &str, url: &str, cx: f64, cy: f64) 
     if !mime.starts_with("image/") {
         return Err(format!("not an image ({mime})"));
     }
-    if resp.header("content-length").and_then(|v| v.parse::<u64>().ok()).is_some_and(|n| n > MAX_IMAGE_BYTES) {
+    if resp
+        .header("content-length")
+        .and_then(|v| v.parse::<u64>().ok())
+        .is_some_and(|n| n > MAX_IMAGE_BYTES)
+    {
         return Err("image too large".into());
     }
     let mut bytes = Vec::new();
-    resp.into_reader().take(MAX_IMAGE_BYTES + 1).read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+    resp.into_reader()
+        .take(MAX_IMAGE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| e.to_string())?;
     if bytes.len() as u64 > MAX_IMAGE_BYTES {
         return Err("image too large".into());
     }
     let size = imagesize::blob_size(&bytes).map_err(|e| e.to_string())?;
-    let hash = assets(paths).put(&bytes, &mime).map_err(|e| e.to_string())?;
+    let hash = assets(paths)
+        .put(&bytes, &mime)
+        .map_err(|e| e.to_string())?;
     let _guard = BOARD_LOCK.lock();
     let mut board = get_unlocked(paths, board_id)?;
     board.add_image(
-        ImageSpec { source_url: Some(url.to_string()), ..ImageSpec::new(&hash, &mime, size.width as f64, size.height as f64) },
+        ImageSpec {
+            source_url: Some(url.to_string()),
+            ..ImageSpec::new(&hash, &mime, size.width as f64, size.height as f64)
+        },
         cx,
         cy,
     );
@@ -229,12 +271,27 @@ pub fn inbox_id(paths: &Paths) -> Result<String, String> {
 }
 
 /// Add an already-stored asset to a board at the next free "drop" position.
-pub fn add_asset(paths: &Paths, board_id: &str, hash: &str, mime: &str, w: f64, h: f64, source: Option<String>) -> Result<(), String> {
+pub fn add_asset(
+    paths: &Paths,
+    board_id: &str,
+    hash: &str,
+    mime: &str,
+    w: f64,
+    h: f64,
+    source: Option<String>,
+) -> Result<(), String> {
     let _guard = BOARD_LOCK.lock();
     let mut board = get_unlocked(paths, board_id)?;
     let n = board.items.len() as f64;
     let (cx, cy) = ((n % 8.0) * 36.0, (n % 8.0) * 28.0);
-    board.add_image(ImageSpec { source_url: source, ..ImageSpec::new(hash, mime, w, h) }, cx, cy);
+    board.add_image(
+        ImageSpec {
+            source_url: source,
+            ..ImageSpec::new(hash, mime, w, h)
+        },
+        cx,
+        cy,
+    );
     save_unlocked(paths, &board)
 }
 
@@ -250,13 +307,35 @@ mod tests {
     #[test]
     fn internal_addresses_are_not_public() {
         for bad in [
-            "127.0.0.1", "10.1.2.3", "172.16.0.1", "192.168.1.1", "169.254.169.254", "0.0.0.0", "100.64.0.1",
-            "224.0.0.1", "255.255.255.255", "192.0.2.1", "::1", "::", "fe80::1", "fc00::1", "fd12:3456::1",
-            "::ffff:127.0.0.1", "::ffff:10.0.0.1", "ff02::1", "2001:db8::1",
+            "127.0.0.1",
+            "10.1.2.3",
+            "172.16.0.1",
+            "192.168.1.1",
+            "169.254.169.254",
+            "0.0.0.0",
+            "100.64.0.1",
+            "224.0.0.1",
+            "255.255.255.255",
+            "192.0.2.1",
+            "::1",
+            "::",
+            "fe80::1",
+            "fc00::1",
+            "fd12:3456::1",
+            "::ffff:127.0.0.1",
+            "::ffff:10.0.0.1",
+            "ff02::1",
+            "2001:db8::1",
         ] {
             assert!(!is_public_ip(ip(bad)), "{bad} must be rejected");
         }
-        for good in ["8.8.8.8", "1.1.1.1", "93.184.216.34", "2606:4700:4700::1111", "::ffff:8.8.8.8"] {
+        for good in [
+            "8.8.8.8",
+            "1.1.1.1",
+            "93.184.216.34",
+            "2606:4700:4700::1111",
+            "::ffff:8.8.8.8",
+        ] {
             assert!(is_public_ip(ip(good)), "{good} must be allowed");
         }
     }
@@ -268,7 +347,10 @@ mod tests {
         assert!(r.resolve("localhost:80").is_err());
         assert!(r.resolve("[::1]:80").is_err());
         // decimal form is normalised by the URL parser before it ever gets here
-        assert_eq!(url::Url::parse("http://2130706433/").unwrap().host_str(), Some("127.0.0.1"));
+        assert_eq!(
+            url::Url::parse("http://2130706433/").unwrap().host_str(),
+            Some("127.0.0.1")
+        );
     }
 
     #[test]
@@ -278,7 +360,14 @@ mod tests {
         let b = create(&paths, "t").unwrap();
         assert!(add_from_url(&paths, &b.id, "file:///etc/passwd", 0.0, 0.0).is_err());
         assert!(add_from_url(&paths, &b.id, "http://127.0.0.1:1/x.png", 0.0, 0.0).is_err());
-        assert!(add_from_url(&paths, &b.id, "http://169.254.169.254/latest/meta-data/", 0.0, 0.0).is_err());
+        assert!(add_from_url(
+            &paths,
+            &b.id,
+            "http://169.254.169.254/latest/meta-data/",
+            0.0,
+            0.0
+        )
+        .is_err());
         let _ = fs::remove_dir_all(&paths.root);
     }
 

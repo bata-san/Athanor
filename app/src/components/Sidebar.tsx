@@ -1,3 +1,4 @@
+import { AthanorMark } from './AthanorMark'
 import { useEffect, useMemo, useState } from 'react'
 import type * as React from 'react'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
@@ -28,7 +29,7 @@ export function Sidebar({ snapshot, panels, toolbar, openPage, openPanel, onOver
     return () => window.removeEventListener('pointerdown', close)
   }, [menu])
 
-  const showMenu = (event: React.MouseEvent, detail: NonNullable<typeof menu>) => { event.preventDefault(); event.stopPropagation(); setMenu({ x: event.clientX, y: event.clientY, ...detail }) }
+  const showMenu = (event: React.MouseEvent, detail: Omit<NonNullable<typeof menu>, 'x' | 'y'>) => { event.preventDefault(); event.stopPropagation(); setMenu({ x: event.clientX, y: event.clientY, ...detail }) }
   const runTabMenu = (action: string, tabId: string) => {
     const tab = snapshot.workspace.tabs.find((entry) => entry.id === tabId)
     if (!tab) return
@@ -70,7 +71,7 @@ export function Sidebar({ snapshot, panels, toolbar, openPage, openPanel, onOver
       <button className="window-control" data-part="window-close" aria-label="Close" onClick={() => void api.windowClose()}><AppIcon name="X" /></button>
     </div>
     <div className="sidebar-header" data-part="sidebar-header">
-      <div className="brand-lockup"><span className="brand-mark"><AppIcon name="WandSparkles" /></span><span className="sidebar-copy">Athanor</span></div>
+      <div className="brand-lockup"><span className="brand-mark"><AthanorMark /></span><span className="sidebar-copy">Athanor</span></div>
       <button className="icon-button" aria-label={settings.sidebarCompact ? 'Expand sidebar' : 'Collapse sidebar'} title="Toggle sidebar (Ctrl+B)" onClick={() => void api.setSettings({ sidebarCompact: !settings.sidebarCompact })}><AppIcon name={settings.sidebarCompact ? 'PanelLeft' : 'PanelLeftClose'} /></button>
     </div>
     {toolbar}

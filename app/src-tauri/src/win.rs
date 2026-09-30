@@ -10,10 +10,10 @@ use athanor_core::engine::{EngineEvent, EventSink};
 use parking_lot::Mutex;
 use serde::Deserialize;
 use std::{collections::HashSet, sync::Arc, time::Instant};
-use webview2_com::{Microsoft::Web::WebView2::Win32::*, take_pwstr, *};
+use webview2_com::{take_pwstr, Microsoft::Web::WebView2::Win32::*, *};
 use windows::{
+    core::{Interface, HSTRING, PWSTR},
     Win32::UI::Input::KeyboardAndMouse::GetKeyState,
-    core::{HSTRING, Interface, PWSTR},
 };
 
 pub struct Ctx {
@@ -300,6 +300,10 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
     let core = controller.CoreWebView2()?;
     let mut token = 0i64;
     let tab = ctx.tab.clone();
+    let initial_source = ctx.page_url.lock().clone();
+    let page_context = Arc::new(Mutex::new(Arc::new(
+        ctx.filter.page_context(&initial_source),
+    )));
 
     // The small generic-cosmetic collector runs at document creation in every frame. Site
     // resources are registered separately before each matching navigation is resumed.
@@ -386,12 +390,19 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
 
     // --- URL / title / history / loading ---
     {
-        let (sink, tab, page_url) = (ctx.sink.clone(), tab.clone(), ctx.page_url.clone());
+        let (sink, tab, page_url, filter, page_context) = (
+            ctx.sink.clone(),
+            tab.clone(),
+            ctx.page_url.clone(),
+            ctx.filter.clone(),
+            page_context.clone(),
+        );
         core.add_SourceChanged(
             &SourceChangedEventHandler::create(Box::new(move |sender, _| {
                 if let Some(core) = sender {
                     if let Ok(url) = pw(|p| core.Source(p)) {
                         *page_url.lock() = url.clone();
+                        *page_context.lock() = Arc::new(filter.page_context(&url));
                         sink(EngineEvent::UrlChanged {
                             tab: tab.clone(),
                             url,
@@ -447,6 +458,7 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
             ctx.filter.clone(),
             ctx.page_url.clone(),
         );
+        let page_context_for_nav = page_context.clone();
         let start_armed = Arc::new(Mutex::new(HashSet::<String>::new()));
         let armed = start_armed.clone();
         core.add_NavigationStarting(
@@ -471,6 +483,7 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
                 let mut user_initiated = Default::default();
                 let _ = args.IsUserInitiated(&mut user_initiated);
                 *page_url.lock() = uri.clone();
+                *page_context_for_nav.lock() = Arc::new(filter.page_context(&uri));
                 sink(EngineEvent::NavigationStarted {
                     tab: tab.clone(),
                     url: uri,
@@ -571,11 +584,11 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
 
     // --- new windows become new tabs ---
     {
-        let (sink, tab, filter, page_url) = (
+        let (sink, tab, filter, page_context) = (
             ctx.sink.clone(),
             tab.clone(),
             ctx.filter.clone(),
-            ctx.page_url.clone(),
+            page_context.clone(),
         );
         core.add_NewWindowRequested(
             &NewWindowRequestedEventHandler::create(Box::new(move |_, args| {
@@ -600,8 +613,8 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
                     }
                     return Ok(());
                 }
-                let source = page_url.lock().clone();
-                match filter.verdict_with_rewrite(&uri, &source, Kind::Document) {
+                let page = page_context.lock().clone();
+                match filter.verdict_with_page_context(&uri, &page, Kind::Document) {
                     DetailedVerdict::Block | DetailedVerdict::Respond { .. } => {
                         sink(EngineEvent::Blocked {
                             tab: tab.clone(),
@@ -678,11 +691,11 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
             &HSTRING::from("*"),
             COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL,
         )?;
-        let (sink, tab, filter, page_url) = (
+        let (sink, tab, filter, page_context) = (
             ctx.sink.clone(),
             tab.clone(),
             ctx.filter.clone(),
-            ctx.page_url.clone(),
+            page_context.clone(),
         );
         core.add_WebResourceRequested(
             &WebResourceRequestedEventHandler::create(Box::new(move |_, args| {
@@ -696,16 +709,16 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
                 if !is_web(&uri) {
                     return Ok(());
                 }
-                let source = page_url.lock().clone();
+                let page = page_context.lock().clone();
                 let kind = if rc == COREWEBVIEW2_WEB_RESOURCE_CONTEXT_DOCUMENT {
-                    if uri == source {
+                    if uri == page.source_url() {
                         return Ok(());
                     }
                     Kind::Subdocument
                 } else {
                     kind_of(rc)
                 };
-                match filter.verdict_with_rewrite(&uri, &source, kind) {
+                match filter.verdict_with_page_context(&uri, &page, kind) {
                     DetailedVerdict::Allow => {}
                     DetailedVerdict::Block => {
                         let resp = env.CreateWebResourceResponse(

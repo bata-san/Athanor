@@ -180,6 +180,20 @@ Names are `snake_case`; args are camelCase properties of the single argument obj
 * `get_adblock_status() → AdblockStatus`, `set_adblock_enabled({ enabled })`, `set_adblock_list_enabled({ id, enabled })`, `update_adblock_lists()`
 * `get_site_shield({ host }) → boolean` (true = blocking on), `set_site_shield({ host, enabled })`
 
+### Shields
+
+The existing Adblock commands above remain the shell management API. The WebView cosmetic bridge
+is a separate page-to-native protocol, not a Tauri invoke command: each frame sends
+`{ athanorShield: 1, type: "cosmetic-query", id, classes, ids }` over its native WebView message
+channel, and the host replies to that same frame with
+`{ athanorShield: 1, type: "cosmetic-response", id, css }`. The host derives the frame URL from
+the native message event, validates/rate-limits tokens, and never evaluates content from the page.
+See [ADBLOCK.md](ADBLOCK.md#cosmetic-message-protocol-version-1) for limits and Android transport
+guidance.
+
+Granular per-site controls, user filters, element picker/zapper, and dynamic filtering do not yet
+have Tauri commands.
+
 ### Settings / extensions
 * `get_settings() → Settings`, `set_settings({ patch: Partial<Settings> })`
 * `list_extensions() → ExtensionInfo[]`, `set_extension_enabled({ id, enabled })`, `install_extension({ path })`, `remove_extension({ id })`

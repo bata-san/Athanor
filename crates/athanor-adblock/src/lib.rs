@@ -4,12 +4,12 @@
 //! then run without holding that lock. Rebuilds and downloads are serialized. State lives in
 //! `adblock-config.json`, raw lists in `lists/<id>.txt`, and a versioned, list-set-hashed engine
 //! in `engine.dat`. `load` never downloads and uses embedded fallback rules when necessary.
-//! Generic cosmetic selectors are capped at 10,000 and emitted in groups of at most 200.
+//! Generic class and ID cosmetics are matched on demand through `cosmetic_query`.
 //! `Fetch` maps to adblock-rust's XHR request type.
 
 pub mod privacy;
 
-use adblock::{Engine, FilterSet, lists::ParseOptions};
+use adblock::{lists::ParseOptions, Engine, FilterSet};
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -18,8 +18,8 @@ use std::{
     fs,
     path::{Path, PathBuf},
     sync::{
-        Arc,
         atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc,
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -102,6 +102,21 @@ pub struct Request<'a> {
     pub source_url: &'a str,
     /// Resource category.
     pub resource_type: ResourceType,
+}
+/// Parsed source-page information reusable for all subresource checks during one navigation.
+/// Create a new context when the top-level document changes.
+#[derive(Debug, Clone, Default)]
+pub struct PageContext {
+    source_url: String,
+    source_hostname: String,
+    source_domain: String,
+    site_key: Option<String>,
+}
+impl PageContext {
+    /// Original top-level page URL.
+    pub fn source_url(&self) -> &str {
+        &self.source_url
+    }
 }
 /// Network decision.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -578,6 +593,55 @@ impl Blocker {
             Err(_) => return Decision::Allow,
         };
         let compiled = self.inner.compiled.read().clone();
+        self.check_parsed(&compiled, parsed)
+    }
+    /// Prepare source-page URL and registrable host information once per navigation.
+    pub fn page_context(&self, source_url: &str) -> PageContext {
+        let (source_hostname, source_domain, site_key) = adblock::url_parser::parse_url(source_url)
+            .map_or_else(
+                || (String::new(), String::new(), None),
+                |parsed| {
+                    let domain = parsed.domain().to_ascii_lowercase();
+                    let key = (!domain.is_empty()).then(|| domain.clone());
+                    (parsed.hostname().to_owned(), domain, key)
+                },
+            );
+        PageContext {
+            source_url: source_url.to_owned(),
+            source_hostname,
+            source_domain,
+            site_key,
+        }
+    }
+    /// Check using a source context prepared for the current top-level navigation.
+    /// Only the destination URL is parsed on this path; the source host and site exception key
+    /// are reused. Rebuild locks are never held while the engine matches.
+    pub fn check_with_page_context(&self, req: &Request<'_>, page: &PageContext) -> Decision {
+        if !self.enabled()
+            || page
+                .site_key
+                .as_deref()
+                .is_some_and(|key| self.inner.config.read().disabled_sites.contains(key))
+        {
+            return Decision::Allow;
+        }
+        let Some(parsed_url) = adblock::url_parser::parse_url(req.url) else {
+            return Decision::Allow;
+        };
+        let is_third_party =
+            page.source_domain.is_empty() || page.source_domain != parsed_url.domain();
+        let parsed = adblock::request::Request::preparsed(
+            &parsed_url.url,
+            parsed_url.hostname(),
+            &page.source_hostname,
+            req.resource_type.engine_name(),
+            is_third_party,
+            "get",
+        );
+        let compiled = self.inner.compiled.read().clone();
+        self.check_parsed(&compiled, parsed)
+    }
+    fn check_parsed(&self, compiled: &Compiled, parsed: adblock::request::Request) -> Decision {
         let result = compiled.engine.check_network_request(&parsed);
         if result.should_block() {
             if let Some(rule) = result
@@ -1271,6 +1335,34 @@ mod tests {
         ));
     }
     #[test]
+    fn cached_page_context_preserves_party_and_site_exception_behavior() {
+        let blocker = fixture("*$script,third-party\n");
+        let page = blocker.page_context("https://www.site.test/");
+        let third_party = Request {
+            url: "https://cdn.other.test/lib.js",
+            source_url: page.source_url(),
+            resource_type: ResourceType::Script,
+        };
+        assert_eq!(
+            blocker.check(&third_party),
+            blocker.check_with_page_context(&third_party, &page)
+        );
+        let first_party = Request {
+            url: "https://static.site.test/lib.js",
+            source_url: page.source_url(),
+            resource_type: ResourceType::Script,
+        };
+        assert_eq!(
+            blocker.check(&first_party),
+            blocker.check_with_page_context(&first_party, &page)
+        );
+        blocker.set_site_disabled("site.test", true);
+        assert_eq!(
+            blocker.check_with_page_context(&third_party, &page),
+            Decision::Allow
+        );
+    }
+    #[test]
     fn cosmetic_and_generichide() {
         let blocker = fixture(
             "##.generic-ad\n###generic-slot\nexample.com##.local-ad\nexample.com##.styled:style(color: red)\n@@||example.com^$generichide\n",
@@ -1287,16 +1379,14 @@ mod tests {
         let exception = blocker.cosmetic("https://example.com/");
         assert!(exception.css.contains(".local-ad"));
         assert!(exception.css.contains(".styled{color: red}"));
-        assert!(
-            blocker
-                .cosmetic_query(
-                    "https://example.com/",
-                    &classes,
-                    &ids,
-                    &exception.exceptions
-                )
-                .is_empty()
-        );
+        assert!(blocker
+            .cosmetic_query(
+                "https://example.com/",
+                &classes,
+                &ids,
+                &exception.exceptions
+            )
+            .is_empty());
         assert!(exception.generichide);
     }
     #[test]
@@ -1421,15 +1511,13 @@ mod tests {
             Decision::Block { .. }
         ));
         let second = blocker.update_lists(false);
-        assert!(
-            second
-                .iter()
-                .any(|r| r.id == "easylist" && !r.changed && r.error.is_none())
-        );
+        assert!(second
+            .iter()
+            .any(|r| r.id == "easylist" && !r.changed && r.error.is_none()));
     }
     #[test]
     fn redirect_resource() {
-        use base64::{Engine as _, engine::general_purpose::STANDARD};
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
         let blocker = fixture(
             "||redirect.example^$script,redirect=noop.js\n||redirect-rule.example^$script,redirect-rule=noop.js\n",
         );
@@ -1504,5 +1592,141 @@ mod tests {
             size,
             start.elapsed().as_nanos() / 100_000
         );
+    }
+
+    /// Compare the compiled engine and public wrapper over the supplied newline-delimited corpus.
+    /// Set `ATHANOR_ADBLOCK_BENCH_DIR` to the live lists directory and
+    /// `ATHANOR_ADBLOCK_CORPUS` to adblock-rust's `requests.json`.
+    #[test]
+    #[ignore]
+    fn live_corpus_benchmark() {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct CorpusRow {
+            frame_url: String,
+            url: String,
+            cpt: String,
+        }
+
+        let dir = std::env::var_os("ATHANOR_ADBLOCK_BENCH_DIR")
+            .map(PathBuf::from)
+            .expect("ATHANOR_ADBLOCK_BENCH_DIR must point to live lists");
+        let corpus_path = std::env::var_os("ATHANOR_ADBLOCK_CORPUS")
+            .map(PathBuf::from)
+            .expect("ATHANOR_ADBLOCK_CORPUS must point to requests.json");
+        let blocker = Blocker::new(dir.clone());
+        let load_started = std::time::Instant::now();
+        let load_kind = blocker.load();
+        let load_time = load_started.elapsed();
+        let cache_bytes = fs::metadata(dir.join("engine.dat"))
+            .map(|metadata| metadata.len())
+            .unwrap_or_default();
+        println!(
+            "load_kind={load_kind:?} load_ms={} cache_bytes={cache_bytes}",
+            load_time.as_millis()
+        );
+        if let Ok(hold) = std::env::var("ATHANOR_ADBLOCK_BENCH_HOLD_SECS") {
+            if let Ok(seconds) = hold.parse::<u64>() {
+                std::thread::sleep(Duration::from_secs(seconds.min(60)));
+            }
+        }
+
+        let (hash, raw, _) = blocker.collect_raw();
+        let build_started = std::time::Instant::now();
+        let compiled = compile(&raw);
+        let build_time = build_started.elapsed();
+        let serialized_bytes = compiled.engine.serialize().len();
+        println!(
+            "raw_compile_ms={} raw_serialized_bytes={serialized_bytes} enabled_lists={}",
+            build_time.as_millis(),
+            raw.len()
+        );
+
+        let corpus_text = fs::read_to_string(corpus_path).expect("read request corpus");
+        let corpus: Vec<CorpusRow> = corpus_text
+            .lines()
+            .filter_map(|line| serde_json::from_str(line).ok())
+            .collect();
+        let raw_requests = corpus
+            .iter()
+            .filter_map(|row| {
+                adblock::request::Request::new(
+                    &row.url,
+                    &row.frame_url,
+                    ResourceType::parse(&row.cpt).engine_name(),
+                    "get",
+                )
+                .ok()
+            })
+            .collect::<Vec<_>>();
+        let page_contexts = corpus
+            .iter()
+            .map(|row| row.frame_url.as_str())
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .map(|source| (source, blocker.page_context(source)))
+            .collect::<HashMap<_, _>>();
+        if raw_requests.is_empty() {
+            panic!("request corpus contained no valid entries");
+        }
+        let repeats = 2u32;
+        let start = std::time::Instant::now();
+        let mut raw_matches = 0u64;
+        for _ in 0..repeats {
+            for request in &raw_requests {
+                raw_matches += u64::from(
+                    std::hint::black_box(compiled.engine.check_network_request(request))
+                        .should_block(),
+                );
+            }
+        }
+        let raw_ns = start.elapsed().as_nanos() / (raw_requests.len() * repeats as usize) as u128;
+        let start = std::time::Instant::now();
+        let mut wrapper_matches = 0u64;
+        for _ in 0..repeats {
+            for row in &corpus {
+                let Some(page) = page_contexts.get(row.frame_url.as_str()) else {
+                    continue;
+                };
+                let request = Request {
+                    url: &row.url,
+                    source_url: &row.frame_url,
+                    resource_type: ResourceType::parse(&row.cpt),
+                };
+                wrapper_matches += u64::from(matches!(
+                    std::hint::black_box(blocker.check_with_page_context(&request, page)),
+                    Decision::Block { .. } | Decision::Redirect { .. }
+                ));
+            }
+        }
+        let wrapper_ns = start.elapsed().as_nanos() / (corpus.len() * repeats as usize) as u128;
+        let mut cosmetic_urls = HashSet::new();
+        let cosmetic_started = std::time::Instant::now();
+        let mut cosmetic_bytes = Vec::new();
+        for row in &corpus {
+            if cosmetic_urls.insert(row.frame_url.as_str()) {
+                let cosmetic = blocker.cosmetic(&row.frame_url);
+                cosmetic_bytes.push(cosmetic.css.len() + cosmetic.js.len());
+                if cosmetic_urls.len() == 101 {
+                    break;
+                }
+            }
+        }
+        cosmetic_bytes.sort_unstable();
+        let cosmetic_median = cosmetic_bytes
+            .get(cosmetic_bytes.len() / 2)
+            .copied()
+            .unwrap_or_default();
+        println!(
+            "corpus_rows={} raw_valid={} repeats={repeats} raw_ns_per_request={raw_ns} wrapper_ns_per_request={wrapper_ns} raw_matches={raw_matches} wrapper_matches={wrapper_matches}",
+            corpus.len(),
+            raw_requests.len()
+        );
+        println!(
+            "cosmetic_pages={} cosmetic_elapsed_ms={} median_payload_bytes={cosmetic_median} median_payload_minified_equivalent_bytes={cosmetic_median}",
+            cosmetic_bytes.len(),
+            cosmetic_started.elapsed().as_millis()
+        );
+        let _ = hash;
     }
 }

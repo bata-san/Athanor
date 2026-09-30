@@ -1,6 +1,10 @@
 //! Shared data types that cross the IPC boundary (see `docs/IPC.md`) and app-level settings.
 
-use athanor_core::{filing::Rule, layout::{DividerInfo, Rect}, Id, Workspace};
+use athanor_core::{
+    filing::Rule,
+    layout::{DividerInfo, Rect},
+    Id, Workspace,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -72,8 +76,17 @@ impl Settings {
             ($($f:ident),*) => { $( if let Some(v) = p.$f { self.$f = v; } )* };
         }
         set!(
-            search_engine, archive_after_hours, https_upgrade, strip_tracking, auto_file, restore_session,
-            sidebar_side, sidebar_compact, sidebar_width, theme, adblock_enabled
+            search_engine,
+            archive_after_hours,
+            https_upgrade,
+            strip_tracking,
+            auto_file,
+            restore_session,
+            sidebar_side,
+            sidebar_compact,
+            sidebar_width,
+            theme,
+            adblock_enabled
         );
         self.sanitize();
     }
@@ -164,15 +177,27 @@ mod tests {
     #[test]
     fn patch_applies_and_validates() {
         let mut s = Settings::default();
-        s.apply(SettingsPatch { sidebar_width: Some(9999), search_engine: Some("https://x.test/?q=".into()), theme: Some("paper".into()), ..Default::default() });
+        s.apply(SettingsPatch {
+            sidebar_width: Some(9999),
+            search_engine: Some("https://x.test/?q=".into()),
+            theme: Some("paper".into()),
+            ..Default::default()
+        });
         assert_eq!(s.sidebar_width, 520);
-        assert_eq!(s.search_engine, Settings::default().search_engine, "template without {{q}} is rejected");
+        assert_eq!(
+            s.search_engine,
+            Settings::default().search_engine,
+            "template without {{q}} is rejected"
+        );
         assert_eq!(s.theme, "paper");
     }
 
     #[test]
     fn sanitize_repairs_hand_edited_settings() {
-        let mut s: Settings = serde_json::from_str(r#"{"searchEngine":"","sidebarWidth":0,"sidebarSide":"middle","theme":" "}"#).unwrap();
+        let mut s: Settings = serde_json::from_str(
+            r#"{"searchEngine":"","sidebarWidth":0,"sidebarSide":"middle","theme":" "}"#,
+        )
+        .unwrap();
         s.sanitize();
         assert_eq!(s.search_engine, Settings::default().search_engine);
         assert_eq!(s.sidebar_width, 180);

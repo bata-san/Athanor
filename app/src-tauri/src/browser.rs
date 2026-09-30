@@ -27,7 +27,9 @@ use tauri::{AppHandle, Emitter};
 use tokio::sync::Notify;
 
 pub fn now() -> Millis {
-    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as Millis)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as Millis)
 }
 
 #[derive(Clone)]
@@ -91,13 +93,26 @@ pub struct Browser {
 }
 
 impl Browser {
-    pub fn new(app: AppHandle, engine: Arc<dyn EngineBackend>, filter: Arc<Filter>, paths: Paths) -> Arc<Self> {
-        let settings: Settings = store::load_or_default(&paths.file("settings.json")).unwrap_or_default();
-        let session: Session = store::load_or_default(&paths.file("session.json")).unwrap_or_default();
-        let history: History = store::load_or_default::<History>(&paths.file("history.json")).map(History::sanitized).unwrap_or_default();
+    pub fn new(
+        app: AppHandle,
+        engine: Arc<dyn EngineBackend>,
+        filter: Arc<Filter>,
+        paths: Paths,
+    ) -> Arc<Self> {
+        let settings: Settings =
+            store::load_or_default(&paths.file("settings.json")).unwrap_or_default();
+        let session: Session =
+            store::load_or_default(&paths.file("session.json")).unwrap_or_default();
+        let history: History = store::load_or_default::<History>(&paths.file("history.json"))
+            .map(History::sanitized)
+            .unwrap_or_default();
         let mut settings = settings;
         settings.sanitize();
-        let mut ws = if settings.restore_session { session.workspace.unwrap_or_default() } else { Workspace::default() };
+        let mut ws = if settings.restore_session {
+            session.workspace.unwrap_or_default()
+        } else {
+            Workspace::default()
+        };
         if ws.spaces.is_empty() {
             ws = Workspace::default();
         }
@@ -114,6 +129,12 @@ impl Browser {
                 }
             }
         }
+        // Sessions saved before built-in pages had titles.
+        let ids: Vec<Id> = ws.tabs.iter().filter(|t| t.title.is_empty() && urlutil::is_internal(&t.url)).map(|t| t.id.clone()).collect();
+        for id in ids {
+            let url = ws.tab(&id).map(|t| t.url.clone()).unwrap_or_default();
+            ws.update_tab(&id, Some(&url), None, None);
+        }
         // A session edited by hand (or from an older version) may point at an archived active tab.
         if let Some(active) = ws.active_tab.clone() {
             ws.activate(&active, now());
@@ -121,10 +142,23 @@ impl Browser {
         let runtime = ws
             .tabs
             .iter()
-            .map(|t| (t.id.clone(), TabRuntime { secure: urlutil::is_secure(&t.url), ..Default::default() }))
+            .map(|t| {
+                (
+                    t.id.clone(),
+                    TabRuntime {
+                        secure: urlutil::is_secure(&t.url),
+                        ..Default::default()
+                    },
+                )
+            })
             .collect();
-        filter.https_upgrade.store(settings.https_upgrade, std::sync::atomic::Ordering::Relaxed);
-        filter.strip_tracking.store(settings.strip_tracking, std::sync::atomic::Ordering::Relaxed);
+        filter
+            .https_upgrade
+            .store(settings.https_upgrade, std::sync::atomic::Ordering::Relaxed);
+        filter.strip_tracking.store(
+            settings.strip_tracking,
+            std::sync::atomic::Ordering::Relaxed,
+        );
         let inner = Inner {
             ws,
             runtime,
@@ -181,7 +215,8 @@ impl Browser {
             loop {
                 tick.tick().await;
                 let this = this.clone();
-                let _ = tauri::async_runtime::spawn_blocking(move || this.archive_inactive(false)).await;
+                let _ = tauri::async_runtime::spawn_blocking(move || this.archive_inactive(false))
+                    .await;
             }
         });
         // initial paint
@@ -210,7 +245,9 @@ impl Browser {
 
     fn effective_theme(&self) -> String {
         let g = self.inner.lock();
-        g.ws.space(&g.ws.active_space).and_then(|s| s.theme.clone()).unwrap_or_else(|| g.settings.theme.clone())
+        g.ws.space(&g.ws.active_space)
+            .and_then(|s| s.theme.clone())
+            .unwrap_or_else(|| g.settings.theme.clone())
     }
 
     fn emit_snapshot(&self) {
@@ -237,7 +274,10 @@ impl Browser {
         let (session, settings, history) = {
             let g = self.inner.lock();
             (
-                Session { workspace: Some(g.ws.clone()), filer: Some(g.filer.clone()) },
+                Session {
+                    workspace: Some(g.ws.clone()),
+                    filer: Some(g.filer.clone()),
+                },
                 g.settings.clone(),
                 g.history.clone(),
             )
@@ -253,7 +293,10 @@ impl Browser {
     }
 
     pub fn toast(&self, level: &str, message: impl Into<String>) {
-        let _ = self.app.emit("athanor://toast", serde_json::json!({ "level": level, "message": message.into() }));
+        let _ = self.app.emit(
+            "athanor://toast",
+            serde_json::json!({ "level": level, "message": message.into() }),
+        );
     }
 
     pub fn app(&self) -> &AppHandle {
@@ -281,7 +324,10 @@ impl Browser {
         }
         for c in &plan.create {
             let opts = TabOptions::default();
-            if let Err(e) = self.engine.create_tab(&c.id, &c.url, c.rect, c.visible, &opts) {
+            if let Err(e) = self
+                .engine
+                .create_tab(&c.id, &c.url, c.rect, c.visible, &opts)
+            {
                 log::error!("create_tab {}: {e}", c.id);
                 let mut g = self.inner.lock();
                 g.view.live.remove(&c.id);
@@ -349,7 +395,10 @@ impl Browser {
                 self.changed();
             }
             EngineEvent::FaviconChanged { tab, url } => {
-                self.inner.lock().ws.update_tab(&tab, None, None, Some(&url));
+                self.inner
+                    .lock()
+                    .ws
+                    .update_tab(&tab, None, None, Some(&url));
                 self.changed();
             }
             EngineEvent::LoadingChanged { tab, loading } => {
@@ -365,7 +414,11 @@ impl Browser {
                 drop(g);
                 self.changed();
             }
-            EngineEvent::HistoryChanged { tab, can_go_back, can_go_forward } => {
+            EngineEvent::HistoryChanged {
+                tab,
+                can_go_back,
+                can_go_forward,
+            } => {
                 if let Some(r) = self.inner.lock().runtime.get_mut(&tab) {
                     r.can_go_back = can_go_back;
                     r.can_go_forward = can_go_forward;
@@ -379,8 +432,16 @@ impl Browser {
                 self.changed();
             }
             EngineEvent::NewTabRequested { from, url } => {
-                let url = if url == "about:blank" { urlutil::NEW_TAB_URL.to_string() } else { url };
-                self.open_tab(OpenArgs { url: Some(url), parent: Some(from), ..Default::default() });
+                let url = if url == "about:blank" {
+                    urlutil::NEW_TAB_URL.to_string()
+                } else {
+                    url
+                };
+                self.open_tab(OpenArgs {
+                    url: Some(url),
+                    parent: Some(from),
+                    ..Default::default()
+                });
             }
             EngineEvent::Shortcut { combo, .. } => self.shortcut(&combo),
             EngineEvent::ContextAction { action, data, .. } => {
@@ -389,10 +450,14 @@ impl Browser {
                     let this = self.clone();
                     std::thread::spawn(move || {
                         match crate::boards::inbox_id(&this.paths).and_then(|id| {
-                            crate::boards::add_from_url(&this.paths, &id, &data, 0.0, 0.0).map(|()| id)
+                            crate::boards::add_from_url(&this.paths, &id, &data, 0.0, 0.0)
+                                .map(|()| id)
                         }) {
                             Ok(id) => {
-                                let _ = this.app.emit("athanor://board-changed", serde_json::json!({ "id": id }));
+                                let _ = this.app.emit(
+                                    "athanor://board-changed",
+                                    serde_json::json!({ "id": id }),
+                                );
                                 this.toast("success", "Image added to the Inbox board");
                             }
                             Err(e) => this.toast("error", format!("Couldn't add image: {e}")),
@@ -443,7 +508,9 @@ impl Browser {
                             let _ = a;
                             None
                         }
-                        Some((a, _)) if g.runtime.get(a).is_some_and(|r| r.can_go_back) => Some((a.to_string(), false)),
+                        Some((a, _)) if g.runtime.get(a).is_some_and(|r| r.can_go_back) => {
+                            Some((a.to_string(), false))
+                        }
                         Some((a, t)) if t.parent.is_some() => Some((a.to_string(), true)),
                         _ => None,
                     }
@@ -454,7 +521,9 @@ impl Browser {
                     }
                     Some((t, true)) => self.close_tab(&t),
                     None => {
-                        let _ = self.app.emit("athanor://shortcut", serde_json::json!({ "combo": "Back" }));
+                        let _ = self
+                            .app
+                            .emit("athanor://shortcut", serde_json::json!({ "combo": "Back" }));
                     }
                 }
             }
@@ -476,7 +545,10 @@ impl Browser {
             "Ctrl+Shift+T" => {
                 let url = self.inner.lock().closed.pop();
                 if let Some(u) = url {
-                    self.open_tab(OpenArgs { url: Some(u), ..Default::default() });
+                    self.open_tab(OpenArgs {
+                        url: Some(u),
+                        ..Default::default()
+                    });
                 }
             }
             "Ctrl+\\" => {
@@ -484,8 +556,11 @@ impl Browser {
                     let g = self.inner.lock();
                     let space = g.ws.active_space.clone();
                     let list = g.ws.visible_tabs(&space);
-                    let pos = list.iter().position(|t| Some(&t.id) == g.ws.active_tab.as_ref());
-                    pos.and_then(|p| list.get((p + 1) % list.len().max(1))).map(|t| t.id.clone())
+                    let pos = list
+                        .iter()
+                        .position(|t| Some(&t.id) == g.ws.active_tab.as_ref());
+                    pos.and_then(|p| list.get((p + 1) % list.len().max(1)))
+                        .map(|t| t.id.clone())
                 };
                 if let Some(n) = next {
                     self.split_with(&n, Dir::Row, false);
@@ -496,7 +571,11 @@ impl Browser {
                 let target = {
                     let g = self.inner.lock();
                     let list = g.ws.visible_tabs(&g.ws.active_space);
-                    if n == 9 { list.last().map(|t| t.id.clone()) } else { list.get(n.saturating_sub(1)).map(|t| t.id.clone()) }
+                    if n == 9 {
+                        list.last().map(|t| t.id.clone())
+                    } else {
+                        list.get(n.saturating_sub(1)).map(|t| t.id.clone())
+                    }
                 };
                 if let Some(t) = target {
                     self.activate_tab(&t);
@@ -504,7 +583,9 @@ impl Browser {
             }
             // UI-only combos: the shell owns them.
             other => {
-                let _ = self.app.emit("athanor://shortcut", serde_json::json!({ "combo": other }));
+                let _ = self
+                    .app
+                    .emit("athanor://shortcut", serde_json::json!({ "combo": other }));
             }
         }
     }
@@ -516,7 +597,10 @@ impl Browser {
             if list.is_empty() {
                 return;
             }
-            let pos = list.iter().position(|t| Some(&t.id) == g.ws.active_tab.as_ref()).unwrap_or(0) as i32;
+            let pos = list
+                .iter()
+                .position(|t| Some(&t.id) == g.ws.active_tab.as_ref())
+                .unwrap_or(0) as i32;
             let n = list.len() as i32;
             list[(((pos + delta) % n + n) % n) as usize].id.clone()
         };
@@ -540,7 +624,13 @@ impl Browser {
                 background: a.background.unwrap_or(false),
             };
             let id = g.ws.open_tab(&url, opts, now());
-            g.runtime.insert(id.clone(), TabRuntime { secure: urlutil::is_secure(&url), ..Default::default() });
+            g.runtime.insert(
+                id.clone(),
+                TabRuntime {
+                    secure: urlutil::is_secure(&url),
+                    ..Default::default()
+                },
+            );
             self.auto_file_locked(&mut g, &id);
             if a.background.unwrap_or(false) {
                 g.view.want_live.insert(id.clone());
@@ -599,7 +689,9 @@ impl Browser {
     fn close_tab_quiet(self: &Arc<Self>, tab: &str) -> bool {
         let closed_url = {
             let mut g = self.inner.lock();
-            let Some(t) = g.ws.tab(tab).cloned() else { return false };
+            let Some(t) = g.ws.tab(tab).cloned() else {
+                return false;
+            };
             if !urlutil::is_internal(&t.url) {
                 g.closed.push(t.url.clone());
                 if g.closed.len() > 25 {
@@ -615,7 +707,10 @@ impl Browser {
                 let space = g.ws.active_space.clone();
                 g.ws.open_tab(
                     urlutil::NEW_TAB_URL,
-                    OpenOptions { space: Some(space), ..Default::default() },
+                    OpenOptions {
+                        space: Some(space),
+                        ..Default::default()
+                    },
                     now(),
                 );
                 let id = g.ws.active_tab.clone().unwrap_or_default();
@@ -646,7 +741,9 @@ impl Browser {
 
     pub fn tabs_to_close(&self, tab: &str, below_only: bool) -> Vec<Id> {
         let g = self.inner.lock();
-        let Some(t) = g.ws.tab(tab) else { return vec![] };
+        let Some(t) = g.ws.tab(tab) else {
+            return vec![];
+        };
         let space = t.space.clone();
         let mut out = vec![];
         let mut after = !below_only;
@@ -668,7 +765,13 @@ impl Browser {
             let t = g.ws.tab(tab)?;
             (t.url.clone(), t.folder.clone(), t.space.clone())
         };
-        Some(self.open_tab(OpenArgs { url: Some(url), parent: Some(tab.to_string()), folder, space: Some(space), ..Default::default() }))
+        Some(self.open_tab(OpenArgs {
+            url: Some(url),
+            parent: Some(tab.to_string()),
+            folder,
+            space: Some(space),
+            ..Default::default()
+        }))
     }
 
     pub fn with_ws<R>(self: &Arc<Self>, f: impl FnOnce(&mut Workspace) -> R) -> R {
@@ -701,7 +804,11 @@ impl Browser {
             if hours == 0 && !force {
                 return;
             }
-            let ttl = if force { 0 } else { Millis::from(hours) * 3_600_000 };
+            let ttl = if force {
+                0
+            } else {
+                Millis::from(hours) * 3_600_000
+            };
             let n = g.ws.archive_inactive(now(), ttl).len();
             g.ws.prune_empty_auto_folders();
             n
@@ -715,7 +822,12 @@ impl Browser {
         {
             let mut g = self.inner.lock();
             let filer = g.filer.clone();
-            let ids: Vec<Id> = g.ws.tabs.iter().filter(|t| t.folder.is_none() && !t.pinned).map(|t| t.id.clone()).collect();
+            let ids: Vec<Id> =
+                g.ws.tabs
+                    .iter()
+                    .filter(|t| t.folder.is_none() && !t.pinned)
+                    .map(|t| t.id.clone())
+                    .collect();
             for id in ids {
                 g.ws.auto_file(&id, &filer);
             }
@@ -742,7 +854,12 @@ impl Browser {
         let g = self.inner.lock();
         let s = g.ws.split.as_ref()?;
         Some(SplitRects {
-            panes: s.root.rects(g.view.bounds, SPLIT_GAP).into_iter().map(|(tab, rect)| Pane { tab, rect }).collect(),
+            panes: s
+                .root
+                .rects(g.view.bounds, SPLIT_GAP)
+                .into_iter()
+                .map(|(tab, rect)| Pane { tab, rect })
+                .collect(),
             dividers: s.root.dividers(g.view.bounds, SPLIT_GAP),
         })
     }
@@ -800,8 +917,12 @@ impl Browser {
             g.settings.apply(patch);
             g.settings.clone()
         };
-        self.filter.https_upgrade.store(s.https_upgrade, std::sync::atomic::Ordering::Relaxed);
-        self.filter.strip_tracking.store(s.strip_tracking, std::sync::atomic::Ordering::Relaxed);
+        self.filter
+            .https_upgrade
+            .store(s.https_upgrade, std::sync::atomic::Ordering::Relaxed);
+        self.filter
+            .strip_tracking
+            .store(s.strip_tracking, std::sync::atomic::Ordering::Relaxed);
         self.changed();
     }
 
@@ -835,10 +956,21 @@ impl Browser {
                 command: None,
             }),
         }
-        for t in g.ws.tabs.iter().filter(|t| !t.archived).filter(|t| t.title.to_lowercase().contains(&ql) || t.url.to_lowercase().contains(&ql)).take(5) {
+        for t in g
+            .ws
+            .tabs
+            .iter()
+            .filter(|t| !t.archived)
+            .filter(|t| t.title.to_lowercase().contains(&ql) || t.url.to_lowercase().contains(&ql))
+            .take(5)
+        {
             out.push(Suggestion {
                 kind: "tab",
-                title: if t.title.is_empty() { urlutil::display_host(&t.url) } else { t.title.clone() },
+                title: if t.title.is_empty() {
+                    urlutil::display_host(&t.url)
+                } else {
+                    t.title.clone()
+                },
                 subtitle: t.url.clone(),
                 url: Some(t.url.clone()),
                 tab: Some(t.id.clone()),
@@ -852,7 +984,11 @@ impl Browser {
             }
             out.push(Suggestion {
                 kind: "history",
-                title: if e.title.is_empty() { urlutil::display_host(&e.url) } else { e.title.clone() },
+                title: if e.title.is_empty() {
+                    urlutil::display_host(&e.url)
+                } else {
+                    e.title.clone()
+                },
                 subtitle: e.url.clone(),
                 url: Some(e.url.clone()),
                 tab: None,
@@ -891,13 +1027,25 @@ impl Browser {
             return Err("the captured page is too large".into());
         }
         let size = imagesize::blob_size(&png).map_err(|e| e.to_string())?;
-        let hash = crate::boards::assets(&self.paths).put(&png, "image/png").map_err(|e| e.to_string())?;
+        let hash = crate::boards::assets(&self.paths)
+            .put(&png, "image/png")
+            .map_err(|e| e.to_string())?;
         let url = self.copy_url(tab);
-        crate::boards::add_asset(&self.paths, board_id, &hash, "image/png", size.width as f64, size.height as f64, url)?;
-        let _ = self.app.emit("athanor://board-changed", serde_json::json!({ "id": board_id }));
+        crate::boards::add_asset(
+            &self.paths,
+            board_id,
+            &hash,
+            "image/png",
+            size.width as f64,
+            size.height as f64,
+            url,
+        )?;
+        let _ = self.app.emit(
+            "athanor://board-changed",
+            serde_json::json!({ "id": board_id }),
+        );
         Ok(())
     }
-
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]

@@ -29,18 +29,26 @@ pub fn resolve_input(input: &str, search: &str) -> Resolved {
     }
     let lower = s.to_ascii_lowercase();
     // Script / data URLs typed into the omnibox are never navigated to; they become searches.
-    let blocked = lower.starts_with("javascript:") || lower.starts_with("data:") || lower.starts_with("vbscript:");
+    let blocked = lower.starts_with("javascript:")
+        || lower.starts_with("data:")
+        || lower.starts_with("vbscript:");
     if !blocked {
         if lower.starts_with("athanor://") || lower.starts_with("about:") {
             return Resolved::Url(s.to_string());
         }
         if let Ok(u) = Url::parse(s) {
-            if matches!(u.scheme(), "http" | "https" | "file" | "ftp") && u.has_host() || u.scheme() == "file" {
+            if matches!(u.scheme(), "http" | "https" | "file" | "ftp") && u.has_host()
+                || u.scheme() == "file"
+            {
                 return Resolved::Url(u.to_string());
             }
         }
         if !s.contains(char::is_whitespace) && looks_like_host(s) {
-            let scheme = if is_local_host(host_of(s)) { "http" } else { "https" };
+            let scheme = if is_local_host(host_of(s)) {
+                "http"
+            } else {
+                "https"
+            };
             if let Ok(u) = Url::parse(&format!("{scheme}://{s}")) {
                 return Resolved::Url(u.to_string());
             }
@@ -54,7 +62,9 @@ fn host_of(s: &str) -> &str {
     if s.starts_with('[') {
         return s.split(']').next().map(|h| &s[..h.len() + 1]).unwrap_or(s);
     }
-    s.rsplit_once(':').filter(|(_, p)| p.chars().all(|c| c.is_ascii_digit())).map_or(s, |(h, _)| h)
+    s.rsplit_once(':')
+        .filter(|(_, p)| p.chars().all(|c| c.is_ascii_digit()))
+        .map_or(s, |(h, _)| h)
 }
 
 fn looks_like_host(s: &str) -> bool {
@@ -72,7 +82,10 @@ fn looks_like_host(s: &str) -> bool {
     }
     let valid = |l: &&str| l.chars().all(|c| c.is_alphanumeric() || c == '-');
     labels.iter().all(valid)
-        && (host.parse::<std::net::Ipv4Addr>().is_ok() || labels.last().is_some_and(|t| t.len() >= 2 && t.chars().all(|c| c.is_alphabetic())))
+        && (host.parse::<std::net::Ipv4Addr>().is_ok()
+            || labels
+                .last()
+                .is_some_and(|t| t.len() >= 2 && t.chars().all(|c| c.is_alphabetic())))
 }
 
 /// Hosts that should default to plain http and never be filtered/upgraded.
@@ -83,7 +96,9 @@ pub fn is_local_host(host: &str) -> bool {
         || h.ends_with(".local")
         || h.ends_with(".test")
         || h.parse::<std::net::IpAddr>().is_ok_and(|ip| match ip {
-            std::net::IpAddr::V4(v4) => v4.is_loopback() || v4.is_private() || v4.is_link_local() || v4.is_unspecified(),
+            std::net::IpAddr::V4(v4) => {
+                v4.is_loopback() || v4.is_private() || v4.is_link_local() || v4.is_unspecified()
+            }
             std::net::IpAddr::V6(v6) => v6.is_loopback() || v6.is_unspecified(),
         })
 }
@@ -92,8 +107,22 @@ pub fn is_local_host(host: &str) -> bool {
 pub fn display_host(url: &str) -> String {
     Url::parse(url)
         .ok()
-        .and_then(|u| u.host_str().map(|h| h.trim_start_matches("www.").to_string()))
+        .and_then(|u| {
+            u.host_str()
+                .map(|h| h.trim_start_matches("www.").to_string())
+        })
         .unwrap_or_else(|| url.to_string())
+}
+
+/// Display title for the built-in `athanor://` pages (they have no document title of their own).
+pub fn internal_title(url: &str) -> Option<&'static str> {
+    match url.strip_prefix("athanor://")?.trim_end_matches('/') {
+        "newtab" => Some("New tab"),
+        "settings" => Some("Settings"),
+        "boards" => Some("Boards"),
+        "extensions" => Some("Extensions"),
+        _ => None,
+    }
 }
 
 pub fn is_internal(url: &str) -> bool {
@@ -116,16 +145,43 @@ mod tests {
 
     #[test]
     fn urls_hosts_and_searches() {
-        assert_eq!(r("https://example.com/a b"), Resolved::Url("https://example.com/a%20b".into()));
-        assert_eq!(r("example.com"), Resolved::Url("https://example.com/".into()));
-        assert_eq!(r("sub.example.co.jp/path?x=1"), Resolved::Url("https://sub.example.co.jp/path?x=1".into()));
-        assert_eq!(r("localhost:5173"), Resolved::Url("http://localhost:5173/".into()));
-        assert_eq!(r("192.168.0.1:8080/x"), Resolved::Url("http://192.168.0.1:8080/x".into()));
-        assert_eq!(r("athanor://settings"), Resolved::Url("athanor://settings".into()));
+        assert_eq!(
+            r("https://example.com/a b"),
+            Resolved::Url("https://example.com/a%20b".into())
+        );
+        assert_eq!(
+            r("example.com"),
+            Resolved::Url("https://example.com/".into())
+        );
+        assert_eq!(
+            r("sub.example.co.jp/path?x=1"),
+            Resolved::Url("https://sub.example.co.jp/path?x=1".into())
+        );
+        assert_eq!(
+            r("localhost:5173"),
+            Resolved::Url("http://localhost:5173/".into())
+        );
+        assert_eq!(
+            r("192.168.0.1:8080/x"),
+            Resolved::Url("http://192.168.0.1:8080/x".into())
+        );
+        assert_eq!(
+            r("athanor://settings"),
+            Resolved::Url("athanor://settings".into())
+        );
         assert_eq!(r(""), Resolved::Url(NEW_TAB_URL.into()));
-        assert_eq!(r("rust lifetimes"), Resolved::Search("https://duckduckgo.com/?q=rust%20lifetimes".into()));
-        assert_eq!(r("hello"), Resolved::Search("https://duckduckgo.com/?q=hello".into()));
-        assert_eq!(r("file.txt is here"), Resolved::Search("https://duckduckgo.com/?q=file%2Etxt%20is%20here".into()));
+        assert_eq!(
+            r("rust lifetimes"),
+            Resolved::Search("https://duckduckgo.com/?q=rust%20lifetimes".into())
+        );
+        assert_eq!(
+            r("hello"),
+            Resolved::Search("https://duckduckgo.com/?q=hello".into())
+        );
+        assert_eq!(
+            r("file.txt is here"),
+            Resolved::Search("https://duckduckgo.com/?q=file%2Etxt%20is%20here".into())
+        );
     }
 
     #[test]
@@ -142,6 +198,14 @@ mod tests {
         assert!(is_local_host("app.test"));
         assert!(!is_local_host("example.com"));
         assert!(!is_local_host("8.8.8.8"));
+    }
+
+    #[test]
+    fn internal_pages_have_titles() {
+        assert_eq!(internal_title("athanor://newtab"), Some("New tab"));
+        assert_eq!(internal_title("athanor://settings/"), Some("Settings"));
+        assert_eq!(internal_title("https://example.com"), None);
+        assert_eq!(internal_title("athanor://unknown"), None);
     }
 
     #[test]
