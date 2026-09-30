@@ -18,6 +18,7 @@ mod platform;
 #[cfg(mobile)]
 #[path = "platform_mobile.rs"]
 mod platform;
+mod shield;
 mod state;
 #[cfg(windows)]
 mod win;
@@ -97,12 +98,30 @@ pub fn run() {
             }
             app.manage(ext_host);
 
+            let paths_for_shield = paths.clone();
             let browser = platform::init(app, filter.clone(), paths)?;
-            {
+                        {
+                let shield = shield::Shield::new(paths_for_shield);
+                app.manage(shield.clone());
                 let b = browser.clone();
+                let filter_for_apply = filter.clone();
+                let host = app.state::<Arc<ExtHost>>().inner().clone();
+                let first = std::sync::Once::new();
                 filter.start(
                     browser.settings().adblock_enabled,
-                    Arc::new(move || b.emit_adblock()),
+                    Arc::new(move || {
+                        // After the first rules load, add extension lists and the user's own filters.
+                        first.call_once(|| {
+                            let (s, f, h) = (shield.clone(), filter_for_apply.clone(), host.clone());
+                            std::thread::spawn(move || {
+                                s.apply(&f, &h);
+                                if h.refresh_remote_filter_lists() {
+                                    s.apply(&f, &h);
+                                }
+                            });
+                        });
+                        b.emit_adblock();
+                    }),
                 );
             }
             {
@@ -176,6 +195,8 @@ pub fn run() {
             commands::open_board_window,
             commands::set_board_always_on_top,
             commands::send_page_image_to_board,
+            commands::get_user_filters,
+            commands::set_user_filters,
             commands::get_adblock_status,
             commands::set_adblock_enabled,
             commands::set_adblock_list_enabled,

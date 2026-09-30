@@ -1,12 +1,14 @@
 //! Tauri commands: the shell-facing API described in `docs/IPC.md`. Thin wrappers over [`Browser`].
 
 use crate::{
+    shield::Shield,
     boards::{self, BoardSummary},
     browser::{Browser, OpenArgs},
     devservers,
     ext_host::{CommandInfo, ExtHost, ExtensionInfo, PanelInfo, ThemeInfo},
     state::*,
 };
+use athanor_adblock::user::LineIssue;
 use athanor_core::{
     board::Board,
     devtools::Tool,
@@ -591,8 +593,40 @@ pub async fn list_extensions(host: State<'_, Arc<ExtHost>>) -> R<Vec<ExtensionIn
     Ok(host.extensions())
 }
 
+/// Extension filter lists changed: recompile the engine off the UI path and tell the shell.
+fn reapply_shield(b: &B<'_>, host: &State<'_, Arc<ExtHost>>, shield: &State<'_, Arc<Shield>>) {
+    let (browser, host, shield) = (b.inner().clone(), host.inner().clone(), shield.inner().clone());
+    tauri::async_runtime::spawn_blocking(move || {
+        host.refresh_remote_filter_lists();
+        shield.apply(&browser.filter, &host);
+        browser.emit_adblock();
+    });
+}
+
 fn refresh_shell_css(app: &AppHandle, b: &Browser, host: &ExtHost) {
     let _ = app.emit("athanor://shell-css", host.shell_css(&b.settings().theme));
+}
+
+#[tauri::command]
+pub async fn get_user_filters(shield: State<'_, Arc<Shield>>) -> R<String> {
+    Ok(shield.user_filters())
+}
+
+/// Save "My filters" and recompile; returns the lines the engine cannot parse.
+#[tauri::command]
+pub async fn set_user_filters(
+    b: B<'_>,
+    shield: State<'_, Arc<Shield>>,
+    host: State<'_, Arc<ExtHost>>,
+    text: String,
+) -> R<Vec<LineIssue>> {
+    let issues = shield.set_user_filters(text)?;
+    let (browser, shield, host) = (b.inner().clone(), shield.inner().clone(), host.inner().clone());
+    tauri::async_runtime::spawn_blocking(move || {
+        shield.apply(&browser.filter, &host);
+        browser.emit_adblock();
+    });
+    Ok(issues)
 }
 
 #[tauri::command]
@@ -600,10 +634,12 @@ pub async fn set_extension_enabled(
     b: B<'_>,
     app: AppHandle,
     host: State<'_, Arc<ExtHost>>,
+    shield: State<'_, Arc<Shield>>,
     id: String,
     enabled: bool,
 ) -> R {
     host.set_enabled(&id, enabled);
+    reapply_shield(&b, &host, &shield);
     refresh_shell_css(&app, &b, &host);
     Ok(())
 }
@@ -613,9 +649,11 @@ pub async fn install_extension(
     b: B<'_>,
     app: AppHandle,
     host: State<'_, Arc<ExtHost>>,
+    shield: State<'_, Arc<Shield>>,
     path: String,
 ) -> R {
     host.install(std::path::Path::new(&path))?;
+    reapply_shield(&b, &host, &shield);
     refresh_shell_css(&app, &b, &host);
     Ok(())
 }
@@ -625,9 +663,11 @@ pub async fn remove_extension(
     b: B<'_>,
     app: AppHandle,
     host: State<'_, Arc<ExtHost>>,
+    shield: State<'_, Arc<Shield>>,
     id: String,
 ) -> R {
     host.remove(&id)?;
+    reapply_shield(&b, &host, &shield);
     refresh_shell_css(&app, &b, &host);
     Ok(())
 }

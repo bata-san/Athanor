@@ -7,7 +7,7 @@ use athanor_ext::{Permission, Registry, RegistryState, RunAt, Source};
 use parking_lot::RwLock;
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, fs, sync::Arc};
 use tauri::Emitter;
 
 #[derive(Serialize, Clone)]
@@ -152,6 +152,63 @@ impl ExtHost {
                 keybinding: c.command.keybinding,
             })
             .collect()
+    }
+
+    /// Filter lists contributed by enabled extensions as `(engine list id, text)`. Local files are read
+    /// directly; remote ones come from the on-disk cache filled by [`ExtHost::refresh_remote_filter_lists`].
+    pub fn filter_list_texts(&self) -> Vec<(String, String)> {
+        const MAX: u64 = 8 * 1024 * 1024;
+        let clean = |s: &str| -> String {
+            s.chars().map(|c| if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') { c } else { '-' }).collect()
+        };
+        let mut out = Vec::new();
+        for c in self.registry.read().filter_lists() {
+            let id = format!("ext-{}-{}", clean(&c.ext_id), clean(&c.list.id));
+            let path = match (&c.local_file, &c.list.url) {
+                (Some(p), _) => p.clone(),
+                (None, Some(_)) => self.paths.file("ext-filters").join(format!("{id}.txt")),
+                (None, None) => continue,
+            };
+            if fs::metadata(&path).map_or(true, |m| m.len() > MAX) {
+                continue;
+            }
+            if let Ok(text) = fs::read_to_string(&path) {
+                out.push((id, text));
+            }
+        }
+        out
+    }
+
+    /// Download remote filter lists contributed by extensions (https only, size and time limited) into the
+    /// cache. Returns true if anything changed.
+    pub fn refresh_remote_filter_lists(&self) -> bool {
+        const MAX: u64 = 8 * 1024 * 1024;
+        let dir = self.paths.file("ext-filters");
+        let _ = fs::create_dir_all(&dir);
+        let mut changed = false;
+        for c in self.registry.read().filter_lists() {
+            let (None, Some(url)) = (&c.local_file, &c.list.url) else { continue };
+            if !url.starts_with("https://") {
+                continue;
+            }
+            let id: String = format!("ext-{}-{}", c.ext_id, c.list.id)
+                .chars()
+                .map(|ch| if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.') { ch } else { '-' })
+                .collect();
+            let agent = ureq::AgentBuilder::new().timeout(std::time::Duration::from_secs(20)).build();
+            let Ok(resp) = agent.get(url).call() else { continue };
+            let mut body = String::new();
+            if std::io::Read::read_to_string(&mut std::io::Read::take(resp.into_reader(), MAX + 1), &mut body).is_err()
+                || body.len() as u64 > MAX
+            {
+                continue;
+            }
+            let path = dir.join(format!("{id}.txt"));
+            if fs::read_to_string(&path).ok().as_deref() != Some(body.as_str()) && fs::write(&path, body).is_ok() {
+                changed = true;
+            }
+        }
+        changed
     }
 
     pub fn extensions(&self) -> Vec<ExtensionInfo> {

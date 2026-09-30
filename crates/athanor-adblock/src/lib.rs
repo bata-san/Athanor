@@ -8,6 +8,7 @@
 //! `Fetch` maps to adblock-rust's XHR request type.
 
 pub mod privacy;
+pub mod user;
 
 use adblock::{lists::ParseOptions, Engine, FilterSet};
 use parking_lot::{Mutex, RwLock};
