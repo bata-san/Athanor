@@ -29,6 +29,9 @@ jobs:
         run: |
           npm ci
           npm run build
+      - name: Adblock JS runtime tests
+        shell: bash
+        run: NODE_PATH="$PWD/app/node_modules" node --test crates/athanor-adblock/js-tests/*.test.cjs
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
