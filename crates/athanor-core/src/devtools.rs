@@ -115,8 +115,8 @@ pub fn timestamp(s: &str) -> Result<String, String> {
         return Ok(format!("{}\n{}", now.unix_timestamp(), now.format(&Rfc3339).map_err(|e| e.to_string())?));
     }
     if let Ok(n) = s.parse::<i64>() {
-        // 13+ digits => milliseconds
-        let secs = if s.trim_start_matches('-').len() >= 13 { n / 1000 } else { n };
+        // 13+ digits => milliseconds. Floor, do not truncate: -1500 ms is -2 s, not -1 s.
+        let secs = if s.trim_start_matches('-').len() >= 13 { n.div_euclid(1000) } else { n };
         let dt = OffsetDateTime::from_unix_timestamp(secs).map_err(|e| e.to_string())?;
         return dt.format(&Rfc3339).map_err(|e| e.to_string());
     }
@@ -207,6 +207,15 @@ mod tests {
         assert!(timestamp("2023-11-14T22:13:20Z").unwrap().starts_with("1700000000 (s)"));
         assert!(timestamp("garbage").is_err());
         assert!(timestamp("").unwrap().contains('T'));
+    }
+
+    #[test]
+    fn negative_millisecond_timestamps_floor() {
+        // -1700000000500 ms is half a second *before* -1700000000 s, so it must land on the
+        // second below it. Truncating towards zero would report ...:40 instead.
+        assert_eq!(timestamp("-1700000000500").unwrap(), "1916-02-18T01:46:39Z");
+        assert_eq!(timestamp("-1700000000000").unwrap(), "1916-02-18T01:46:40Z");
+        assert_eq!(timestamp("-999").unwrap(), "1969-12-31T23:43:21Z", "a plain negative seconds value is unchanged");
     }
 
     #[test]

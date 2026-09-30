@@ -12,21 +12,19 @@ use athanor_core::{
     history::History,
     layout::{Dir, Rect},
     model::{MoveDest, OpenOptions},
+    plan::{self, ViewState, SPLIT_GAP},
     store, urlutil, Id, Millis, Workspace,
 };
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     path::PathBuf,
-    sync::Arc,
+    sync::{Arc, OnceLock},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Emitter};
 use tokio::sync::Notify;
-
-/// Gap between split panes in CSS px.
-const SPLIT_GAP: f64 = 4.0;
 
 pub fn now() -> Millis {
     SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as Millis)
@@ -62,39 +60,21 @@ struct Session {
     filer: Option<Filer>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct Live {
-    visible: bool,
-    rect: Rect,
-}
-
 struct Inner {
     ws: Workspace,
     runtime: HashMap<Id, TabRuntime>,
     settings: Settings,
     filer: Filer,
     history: History,
-    bounds: Rect,
-    overlay: bool,
-    live: HashMap<Id, Live>,
-    /// Tabs that must have a (hidden) webview even though they are not on screen.
-    want_live: HashSet<Id>,
-    emulation: HashMap<Id, (f64, f64)>,
+    /// Everything the pure planner in [`athanor_core::plan`] needs: content bounds, overlay
+    /// state, which tabs own a webview, viewport emulation and the pending focus request.
+    view: ViewState,
     blocked_total: u64,
-    focus_next: bool,
     closed: Vec<String>,
     had_split: bool,
 }
 
-#[derive(Default)]
-struct Plan {
-    discard: Vec<Id>,
-    create: Vec<(Id, String, Rect, bool)>,
-    place: Vec<(Id, Rect)>,
-    show: Vec<Id>,
-    hide: Vec<Id>,
-    focus: Option<Id>,
-}
+type ThemeHook = Box<dyn Fn(&str) + Send + Sync>;
 
 pub struct Browser {
     app: AppHandle,
@@ -105,13 +85,18 @@ pub struct Browser {
     apply_lock: Mutex<()>,
     snap_notify: Notify,
     save_notify: Notify,
+    /// Called with the effective theme id whenever it changes (settings theme or the active space's override).
+    theme_hook: OnceLock<ThemeHook>,
+    last_theme: Mutex<String>,
 }
 
 impl Browser {
     pub fn new(app: AppHandle, engine: Arc<dyn EngineBackend>, filter: Arc<Filter>, paths: Paths) -> Arc<Self> {
         let settings: Settings = store::load_or_default(&paths.file("settings.json")).unwrap_or_default();
         let session: Session = store::load_or_default(&paths.file("session.json")).unwrap_or_default();
-        let history: History = store::load_or_default(&paths.file("history.json")).unwrap_or_default();
+        let history: History = store::load_or_default::<History>(&paths.file("history.json")).map(History::sanitized).unwrap_or_default();
+        let mut settings = settings;
+        settings.sanitize();
         let mut ws = if settings.restore_session { session.workspace.unwrap_or_default() } else { Workspace::default() };
         if ws.spaces.is_empty() {
             ws = Workspace::default();
@@ -129,6 +114,10 @@ impl Browser {
                 }
             }
         }
+        // A session edited by hand (or from an older version) may point at an archived active tab.
+        if let Some(active) = ws.active_tab.clone() {
+            ws.activate(&active, now());
+        }
         let runtime = ws
             .tabs
             .iter()
@@ -142,13 +131,8 @@ impl Browser {
             settings,
             filer: session.filer.unwrap_or_default(),
             history,
-            bounds: Rect::new(0.0, 0.0, 1.0, 1.0),
-            overlay: false,
-            live: HashMap::new(),
-            want_live: HashSet::new(),
-            emulation: HashMap::new(),
+            view: ViewState::default(),
             blocked_total: 0,
-            focus_next: false,
             closed: vec![],
             had_split: false,
         };
@@ -161,6 +145,8 @@ impl Browser {
             apply_lock: Mutex::new(()),
             snap_notify: Notify::new(),
             save_notify: Notify::new(),
+            theme_hook: OnceLock::new(),
+            last_theme: Mutex::new(String::new()),
         })
     }
 
@@ -217,7 +203,25 @@ impl Browser {
         }
     }
 
+    /// Install the callback that (re)sends the shell CSS when the effective theme changes.
+    pub fn set_theme_hook(&self, hook: impl Fn(&str) + Send + Sync + 'static) {
+        let _ = self.theme_hook.set(Box::new(hook));
+    }
+
+    fn effective_theme(&self) -> String {
+        let g = self.inner.lock();
+        g.ws.space(&g.ws.active_space).and_then(|s| s.theme.clone()).unwrap_or_else(|| g.settings.theme.clone())
+    }
+
     fn emit_snapshot(&self) {
+        let theme = self.effective_theme();
+        if let Some(hook) = self.theme_hook.get() {
+            let mut last = self.last_theme.lock();
+            if *last != theme {
+                *last = theme.clone();
+                hook(&theme);
+            }
+        }
         let _ = self.app.emit("athanor://snapshot", self.snapshot());
         if let Some(rects) = self.split_rects() {
             let _ = self.app.emit("athanor://split-rects", rects);
@@ -258,106 +262,29 @@ impl Browser {
 
     // ---------- engine sync ----------
 
-    fn desired_panes(g: &Inner) -> Vec<(Id, Rect)> {
-        if g.overlay {
-            return vec![];
-        }
-        let Some(active) = g.ws.active_tab.as_deref() else { return vec![] };
-        let mut panes: Vec<(Id, Rect)> = match &g.ws.split {
-            Some(s) if s.root.contains(active) => s.root.rects(g.bounds, SPLIT_GAP),
-            _ => match g.ws.tab(active) {
-                Some(t) if !urlutil::is_internal(&t.url) => vec![(t.id.clone(), g.bounds)],
-                _ => vec![],
-            },
-        };
-        panes.retain(|(id, _)| g.ws.tab(id).is_some_and(|t| !urlutil::is_internal(&t.url)));
-        for (id, rect) in &mut panes {
-            if let Some(&(w, h)) = g.emulation.get(id) {
-                let (nw, nh) = (w.min(rect.w), h.min(rect.h));
-                *rect = Rect::new(rect.x + (rect.w - nw) / 2.0, rect.y, nw, nh);
-            }
-        }
-        panes
-    }
-
-    fn plan(g: &mut Inner) -> Plan {
-        let mut plan = Plan::default();
-        let panes = Self::desired_panes(g);
-        let visible: HashSet<&Id> = panes.iter().map(|(id, _)| id).collect();
-
-        // Tabs that no longer deserve a renderer: gone, archived, or navigated to an internal page.
-        let stale: Vec<Id> = g
-            .live
-            .keys()
-            .filter(|id| g.ws.tab(id).is_none_or(|t| t.archived || urlutil::is_internal(&t.url)))
-            .cloned()
-            .collect();
-        for id in stale {
-            g.live.remove(&id);
-            g.want_live.remove(&id);
-            plan.discard.push(id);
-        }
-
-        for (id, rect) in &panes {
-            match g.live.get_mut(id) {
-                None => {
-                    let url = g.ws.tab(id).map(|t| t.url.clone()).unwrap_or_default();
-                    plan.create.push((id.clone(), url, *rect, true));
-                    g.live.insert(id.clone(), Live { visible: true, rect: *rect });
-                }
-                Some(l) => {
-                    if l.rect != *rect {
-                        plan.place.push((id.clone(), *rect));
-                        l.rect = *rect;
-                    }
-                    if !l.visible {
-                        plan.show.push(id.clone());
-                        l.visible = true;
-                    }
-                }
-            }
-        }
-        let pending: Vec<Id> = g.want_live.iter().filter(|id| !g.live.contains_key(*id)).cloned().collect();
-        for id in pending {
-            if let Some(t) = g.ws.tab(&id).filter(|t| !t.archived && !urlutil::is_internal(&t.url)) {
-                let rect = g.bounds;
-                plan.create.push((id.clone(), t.url.clone(), rect, false));
-                g.live.insert(id.clone(), Live { visible: false, rect });
-            }
-            g.want_live.remove(&id);
-        }
-        for (id, l) in g.live.iter_mut() {
-            if !visible.contains(id) && l.visible {
-                plan.hide.push(id.clone());
-                l.visible = false;
-            }
-        }
-        if g.focus_next {
-            g.focus_next = false;
-            plan.focus = g.ws.active_tab.clone().filter(|a| visible.contains(a));
-        }
-        plan
-    }
-
     fn reconcile(&self) {
+        // Plan and apply under the same lock so two threads can never apply their plans out of order
+        // (which would leave `view.live` and the real webviews permanently out of sync).
+        let _guard = self.apply_lock.lock();
         let plan = {
             let mut g = self.inner.lock();
-            let plan = Self::plan(&mut g);
             g.had_split = g.ws.split.is_some();
-            plan
+            // Split the borrow once: the planner needs the workspace immutably and the view
+            // state mutably, which a `MutexGuard` deref cannot do field by field.
+            let Inner { ws, view, .. } = &mut *g;
+            plan::plan(ws, view)
         };
-        let _guard = self.apply_lock.lock();
         for id in &plan.discard {
             if let Err(e) = self.engine.discard(id) {
                 log::debug!("discard {id}: {e}");
             }
         }
-        for (id, url, rect, visible) in &plan.create {
+        for c in &plan.create {
             let opts = TabOptions::default();
-            if let Err(e) = self.engine.create_tab(id, url, *rect, *visible, &opts) {
-                log::error!("create_tab {id}: {e}");
+            if let Err(e) = self.engine.create_tab(&c.id, &c.url, c.rect, c.visible, &opts) {
+                log::error!("create_tab {}: {e}", c.id);
                 let mut g = self.inner.lock();
-                g.live.remove(id);
+                g.view.live.remove(&c.id);
             }
         }
         for (id, rect) in &plan.place {
@@ -458,15 +385,19 @@ impl Browser {
             EngineEvent::Shortcut { combo, .. } => self.shortcut(&combo),
             EngineEvent::ContextAction { action, data, .. } => {
                 if action == "send-image-to-board" {
-                    match crate::boards::inbox_id(&self.paths).and_then(|id| {
-                        crate::boards::add_from_url(&self.paths, &id, &data, 0.0, 0.0).map(|()| id)
-                    }) {
-                        Ok(id) => {
-                            let _ = self.app.emit("athanor://board-changed", serde_json::json!({ "id": id }));
-                            self.toast("success", "Image added to the Inbox board");
+                    // Downloading can take many seconds; never do it on the serial engine-event loop.
+                    let this = self.clone();
+                    std::thread::spawn(move || {
+                        match crate::boards::inbox_id(&this.paths).and_then(|id| {
+                            crate::boards::add_from_url(&this.paths, &id, &data, 0.0, 0.0).map(|()| id)
+                        }) {
+                            Ok(id) => {
+                                let _ = this.app.emit("athanor://board-changed", serde_json::json!({ "id": id }));
+                                this.toast("success", "Image added to the Inbox board");
+                            }
+                            Err(e) => this.toast("error", format!("Couldn't add image: {e}")),
                         }
-                        Err(e) => self.toast("error", format!("Couldn't add image: {e}")),
-                    }
+                    });
                 }
             }
             EngineEvent::Blocked { tab, .. } => {
@@ -508,7 +439,7 @@ impl Browser {
                 let action = {
                     let g = self.inner.lock();
                     match active.as_deref().and_then(|a| g.ws.tab(a).map(|t| (a, t))) {
-                        Some((a, _)) if g.overlay => {
+                        Some((a, _)) if g.view.overlay => {
                             let _ = a;
                             None
                         }
@@ -612,9 +543,9 @@ impl Browser {
             g.runtime.insert(id.clone(), TabRuntime { secure: urlutil::is_secure(&url), ..Default::default() });
             self.auto_file_locked(&mut g, &id);
             if a.background.unwrap_or(false) {
-                g.want_live.insert(id.clone());
+                g.view.want_live.insert(id.clone());
             } else {
-                g.focus_next = url != urlutil::NEW_TAB_URL;
+                g.view.focus_next = url != urlutil::NEW_TAB_URL;
             }
             (id, url)
         };
@@ -630,7 +561,7 @@ impl Browser {
                 return;
             }
             let url = urlutil::resolve_input(input, &g.settings.search_engine).into_url();
-            let was_live = g.live.contains_key(tab);
+            let was_live = g.view.live.contains_key(tab);
             g.ws.update_tab(tab, Some(&url), Some(""), None);
             if let Some(r) = g.runtime.get_mut(tab) {
                 r.secure = urlutil::is_secure(&url);
@@ -639,7 +570,7 @@ impl Browser {
             if was_live && !urlutil::is_internal(&url) {
                 engine_nav = Some(url);
             }
-            g.focus_next = true;
+            g.view.focus_next = true;
         }
         if let Some(url) = engine_nav {
             let _ = self.engine.navigate(tab, &url);
@@ -653,15 +584,22 @@ impl Browser {
             if !g.ws.activate(tab, now()) {
                 return;
             }
-            g.focus_next = true;
+            g.view.focus_next = true;
         }
         self.sync();
     }
 
     pub fn close_tab(self: &Arc<Self>, tab: &str) {
+        if self.close_tab_quiet(tab) {
+            self.sync();
+        }
+    }
+
+    /// Close without reconciling; returns whether the tab existed.
+    fn close_tab_quiet(self: &Arc<Self>, tab: &str) -> bool {
         let closed_url = {
             let mut g = self.inner.lock();
-            let Some(t) = g.ws.tab(tab).cloned() else { return };
+            let Some(t) = g.ws.tab(tab).cloned() else { return false };
             if !urlutil::is_internal(&t.url) {
                 g.closed.push(t.url.clone());
                 if g.closed.len() > 25 {
@@ -670,9 +608,9 @@ impl Browser {
             }
             let out = g.ws.close_tab(tab);
             g.runtime.remove(tab);
-            g.emulation.remove(tab);
-            g.want_live.remove(tab);
-            g.live.remove(tab);
+            g.view.emulation.remove(tab);
+            g.view.want_live.remove(tab);
+            g.view.live.remove(tab);
             if g.ws.tabs.is_empty() {
                 let space = g.ws.active_space.clone();
                 g.ws.open_tab(
@@ -683,19 +621,26 @@ impl Browser {
                 let id = g.ws.active_tab.clone().unwrap_or_default();
                 g.runtime.insert(id, TabRuntime::default());
             } else if out.next_active.is_some() {
-                g.focus_next = true;
+                g.view.focus_next = true;
             }
             g.ws.prune_empty_auto_folders();
             t.url
         };
         let _ = closed_url;
-        let _ = self.engine.close_tab(tab);
-        self.sync();
+        {
+            let _guard = self.apply_lock.lock();
+            let _ = self.engine.close_tab(tab);
+        }
+        true
     }
 
     pub fn close_many(self: &Arc<Self>, ids: Vec<Id>) {
+        let mut any = false;
         for id in ids {
-            self.close_tab(&id);
+            any |= self.close_tab_quiet(&id);
+        }
+        if any {
+            self.sync();
         }
     }
 
@@ -710,7 +655,7 @@ impl Browser {
                 after = true;
                 continue;
             }
-            if after && !x.pinned {
+            if after && !x.pinned && !x.archived {
                 out.push(x.id.clone());
             }
         }
@@ -797,8 +742,8 @@ impl Browser {
         let g = self.inner.lock();
         let s = g.ws.split.as_ref()?;
         Some(SplitRects {
-            panes: s.root.rects(g.bounds, SPLIT_GAP).into_iter().map(|(tab, rect)| Pane { tab, rect }).collect(),
-            dividers: s.root.dividers(g.bounds, SPLIT_GAP),
+            panes: s.root.rects(g.view.bounds, SPLIT_GAP).into_iter().map(|(tab, rect)| Pane { tab, rect }).collect(),
+            dividers: s.root.dividers(g.view.bounds, SPLIT_GAP),
         })
     }
 
@@ -807,10 +752,10 @@ impl Browser {
     pub fn set_content_bounds(self: &Arc<Self>, r: Rect) {
         {
             let mut g = self.inner.lock();
-            if g.bounds == r {
+            if g.view.bounds == r {
                 return;
             }
-            g.bounds = r;
+            g.view.bounds = r;
         }
         self.sync();
     }
@@ -818,10 +763,10 @@ impl Browser {
     pub fn set_overlay_open(self: &Arc<Self>, open: bool) {
         {
             let mut g = self.inner.lock();
-            if g.overlay == open {
+            if g.view.overlay == open {
                 return;
             }
-            g.overlay = open;
+            g.view.overlay = open;
         }
         self.sync();
     }
@@ -830,13 +775,13 @@ impl Browser {
         {
             let mut g = self.inner.lock();
             match preset {
-                Some("mobile") => g.emulation.insert(tab.to_string(), (390.0, 844.0)),
-                Some("tablet") => g.emulation.insert(tab.to_string(), (820.0, 1180.0)),
-                Some("laptop") => g.emulation.insert(tab.to_string(), (1280.0, 800.0)),
-                _ => g.emulation.remove(tab),
+                Some("mobile") => g.view.emulation.insert(tab.to_string(), (390.0, 844.0)),
+                Some("tablet") => g.view.emulation.insert(tab.to_string(), (820.0, 1180.0)),
+                Some("laptop") => g.view.emulation.insert(tab.to_string(), (1280.0, 800.0)),
+                _ => g.view.emulation.remove(tab),
             };
             // force a re-place even if the pane rect is otherwise unchanged
-            if let Some(l) = g.live.get_mut(tab) {
+            if let Some(l) = g.view.live.get_mut(tab) {
                 l.rect = Rect::default();
             }
         }
@@ -942,6 +887,9 @@ impl Browser {
     /// Screenshot a tab into a board (PureRef-style capture).
     pub fn capture_to_board(&self, tab: &str, board_id: &str) -> Result<(), String> {
         let png = self.engine.capture_png(tab).map_err(|e| e.to_string())?;
+        if png.len() > 40 * 1024 * 1024 {
+            return Err("the captured page is too large".into());
+        }
         let size = imagesize::blob_size(&png).map_err(|e| e.to_string())?;
         let hash = crate::boards::assets(&self.paths).put(&png, "image/png").map_err(|e| e.to_string())?;
         let url = self.copy_url(tab);

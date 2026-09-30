@@ -35,16 +35,14 @@ impl Rule {
         self.host.is_some() || self.path_prefix.is_some() || self.title_contains.is_some()
     }
 
+    /// `title` must already be lowercased ([`Filer::suggest`] lowercases it once per call).
     fn matches(&self, host: &str, path: &str, title: &str) -> bool {
         if !self.enabled || !self.has_condition() {
             return false;
         }
         self.host.as_deref().is_none_or(|p| host_matches(host, p))
             && self.path_prefix.as_deref().is_none_or(|p| path.starts_with(p))
-            && self
-                .title_contains
-                .as_deref()
-                .is_none_or(|t| title.to_lowercase().contains(&t.to_lowercase()))
+            && self.title_contains.as_deref().is_none_or(|t| title.contains(&t.to_lowercase()))
     }
 }
 
@@ -130,7 +128,9 @@ impl Filer {
         }
         let host = parsed.host_str()?;
         let path = parsed.path();
-        if let Some(r) = self.rules.iter().find(|r| r.matches(host, path, title)) {
+        // One lowercase per call, not one per rule.
+        let title = title.to_lowercase();
+        if let Some(r) = self.rules.iter().find(|r| r.matches(host, path, &title)) {
             return Some(r.folder.clone());
         }
         if !self.builtin {
@@ -197,5 +197,23 @@ mod tests {
         };
         assert_eq!(f.suggest("https://x.org/", "Best Kyoto Cafes").as_deref(), Some("Trip"));
         assert_eq!(f.suggest("https://x.org/", "other"), None, "a rule without conditions never matches");
+    }
+
+    /// Title matching is case-insensitive on both sides, for every rule in the list.
+    #[test]
+    fn title_rules_are_case_insensitive_whatever_their_order() {
+        let f = Filer {
+            builtin: false,
+            rules: vec![
+                Rule { id: "a".into(), folder: "Trip".into(), host: Some("x.org".into()), path_prefix: None, title_contains: Some("KYOTO".into()), enabled: true },
+                Rule { id: "b".into(), folder: "Food".into(), host: Some("y.org".into()), path_prefix: None, title_contains: Some("ramen".into()), enabled: true },
+                Rule { id: "c".into(), folder: "Ünïcode".into(), host: Some("z.org".into()), path_prefix: None, title_contains: Some("straße".into()), enabled: true },
+            ],
+        };
+        assert_eq!(f.suggest("https://x.org/", "Best KyOtO Cafes").as_deref(), Some("Trip"));
+        assert_eq!(f.suggest("https://y.org/", "Late Night RAMEN").as_deref(), Some("Food"));
+        assert_eq!(f.suggest("https://z.org/", "Straße 42").as_deref(), Some("Ünïcode"));
+        assert_eq!(f.suggest("https://y.org/", "Late Night Sushi"), None, "no rule matches, so nothing is filed");
+        assert_eq!(f.suggest("https://x.org/issues", "no title word here"), None, "every condition has to hold");
     }
 }

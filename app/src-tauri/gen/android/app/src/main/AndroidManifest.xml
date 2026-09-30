@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
@@ -9,12 +15,14 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/Theme.athanor"
+        android:hardwareAccelerated="true"
         android:usesCleartextTraffic="${usesCleartextTraffic}">
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
             android:launchMode="singleTask"
             android:label="@string/main_activity_title"
             android:name=".MainActivity"
+            android:windowSoftInputMode="adjustResize"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

@@ -1,4 +1,8 @@
 # Add project specific ProGuard rules here.
+# Keep the native plugin entrypoint and JNI callback methods in release builds.
+-keep class dev.athanor.browser.AthanorEngine { *; }
+-keep class dev.athanor.browser.MainActivity { *; }
+-keepclasseswithmembernames class * { native <methods>; }
 # You can control the set of applied configuration files using the
 # proguardFiles setting in build.gradle.
 #

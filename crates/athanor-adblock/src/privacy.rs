@@ -74,6 +74,46 @@ pub fn upgrade_https(input: &str) -> Option<String> {
     Some(input.replacen("http:", "https:", 1))
 }
 
+/// Unwrap a small allowlisted set of well-known tracker redirect endpoints.
+/// Targets are accepted only as absolute HTTP(S) URLs.
+pub fn unwrap_tracker_redirect(input: &str) -> Option<String> {
+    let parsed = Url::parse(input).ok()?;
+    let host = parsed.host_str()?.to_ascii_lowercase();
+    const REDIRECTS: &[(&str, bool, &str, &[&str])] = &[
+        ("l.facebook.com", false, "/l.php", &["u"]),
+        ("google.com", true, "/url", &["q", "url"]),
+        ("out.reddit.com", false, "", &["url"]),
+    ];
+    if let Some((_, _, _, parameters)) =
+        REDIRECTS.iter().find(|(rule_host, subdomains, path, _)| {
+            let host_matches =
+                host == *rule_host || (*subdomains && host.ends_with(&format!(".{rule_host}")));
+            host_matches && (path.is_empty() || parsed.path() == *path)
+        })
+    {
+        let target = parsed.query_pairs().find_map(|(key, value)| {
+            parameters
+                .contains(&key.as_ref())
+                .then(|| value.into_owned())
+        })?;
+        return safe_redirect_target(&target);
+    }
+    if host == "href.li" {
+        if let Some(target) = parsed.path().strip_prefix("/https://") {
+            return safe_redirect_target(&format!("https://{target}"));
+        }
+        if let Some(target) = parsed.query().filter(|query| query.starts_with("https://")) {
+            return safe_redirect_target(target);
+        }
+    }
+    None
+}
+
+fn safe_redirect_target(target: &str) -> Option<String> {
+    let url = Url::parse(target).ok()?;
+    matches!(url.scheme(), "http" | "https").then(|| url.into())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -93,5 +133,37 @@ mod tests {
         );
         assert!(upgrade_https("http://127.0.0.1/x").is_none());
         assert!(upgrade_https("http://foo.local/x").is_none());
+    }
+    #[test]
+    fn unwraps_only_allowlisted_tracker_redirects() {
+        assert_eq!(
+            unwrap_tracker_redirect(
+                "https://l.facebook.com/l.php?u=https%3A%2F%2Fexample.com%2Fa%3Fx%3D1"
+            )
+            .as_deref(),
+            Some("https://example.com/a?x=1")
+        );
+        assert_eq!(
+            unwrap_tracker_redirect("https://www.google.com/url?q=https%3A%2F%2Fexample.net%2F")
+                .as_deref(),
+            Some("https://example.net/")
+        );
+        assert_eq!(
+            unwrap_tracker_redirect("https://out.reddit.com/?url=https%3A%2F%2Fexample.org%2F")
+                .as_deref(),
+            Some("https://example.org/")
+        );
+        assert_eq!(
+            unwrap_tracker_redirect("https://href.li/?https://example.org/path").as_deref(),
+            Some("https://example.org/path")
+        );
+        assert_eq!(
+            unwrap_tracker_redirect("https://l.facebook.com/l.php?u=javascript%3Aalert(1)"),
+            None
+        );
+        assert_eq!(
+            unwrap_tracker_redirect("https://example.com/url?q=https%3A%2F%2Fsafe.test/"),
+            None
+        );
     }
 }

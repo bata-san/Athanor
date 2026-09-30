@@ -11,7 +11,11 @@ pub struct Entry {
     pub last: Millis,
 }
 
+/// Oldest entries are dropped once `cap` is exceeded. A file written before `cap` existed
+/// deserialises with the default; see [`History::sanitized`] for the bounds a loaded `cap`
+/// must be clamped to.
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
 pub struct History {
     entries: Vec<Entry>,
     cap: usize,
@@ -24,13 +28,24 @@ impl Default for History {
 }
 
 impl History {
+    /// Clamp a freshly loaded history into sane bounds. Callers should run this right after
+    /// deserialising: `cap` comes from a file, and `0` would make [`Self::record`] evict the
+    /// entry it just pushed while an enormous cap would grow the file without limit.
+    pub fn sanitized(mut self) -> Self {
+        self.cap = self.cap.clamp(100, 100_000);
+        self
+    }
+
     /// Record a visit. Only http(s) pages are kept; the fragment is ignored for identity.
+    /// A revisit of a known page counts as a visit; callers that already counted one
+    /// elsewhere should use [`Self::bump`] instead of calling this twice.
     pub fn record(&mut self, url: &str, title: &str, now: Millis) {
         if !(url.starts_with("http://") || url.starts_with("https://")) {
             return;
         }
         let key = url.split('#').next().unwrap_or(url);
         if let Some(e) = self.entries.iter_mut().find(|e| e.url == key) {
+            e.visits = e.visits.saturating_add(1);
             e.last = now;
             if !title.is_empty() {
                 e.title = title.to_string();
@@ -52,7 +67,9 @@ impl History {
         }
     }
 
-    /// Count a repeat visit (call when a page finishes loading again).
+    /// Count a visit on an existing entry only. For callers that already called
+    /// [`Self::record`] for the same page load (and so already counted it) use this; a fresh
+    /// [`Self::record`] counts on its own.
     pub fn bump(&mut self, url: &str) {
         let key = url.split('#').next().unwrap_or(url);
         if let Some(e) = self.entries.iter_mut().find(|e| e.url == key) {
@@ -117,8 +134,38 @@ mod tests {
         h.record("https://a.test/x#other", "A2", 2);
         h.record("athanor://newtab", "", 3);
         assert_eq!(h.len(), 1);
-        h.bump("https://a.test/x");
+        // The revisit counted itself; `bump` is for callers that already recorded the visit.
         assert_eq!(h.search("a2", 5, 10)[0].visits, 2);
+        h.bump("https://a.test/x");
+        assert_eq!(h.search("a2", 5, 10)[0].visits, 3);
+        assert_eq!(h.search("a2", 5, 10)[0].last, 2, "the last visit wins");
+    }
+
+    #[test]
+    fn a_file_without_cap_loads_and_sanitized_clamps_it() {
+        let h: History = serde_json::from_str(r#"{"entries":[{"url":"https://a.test/","title":"A","visits":1,"last":5}]}"#).unwrap();
+        assert_eq!(h.len(), 1);
+        assert_eq!(h.cap, 3000, "a missing cap falls back to the default");
+        for (raw, want) in [
+            (r#"{"entries":[],"cap":0}"#, 100),
+            (r#"{"entries":[],"cap":7}"#, 100),
+            (r#"{"entries":[],"cap":100}"#, 100),
+            (r#"{"entries":[],"cap":4321}"#, 4321),
+            (r#"{"entries":[],"cap":100000}"#, 100_000),
+            (r#"{"entries":[],"cap":99999999}"#, 100_000),
+        ] {
+            let h = serde_json::from_str::<History>(raw).unwrap().sanitized();
+            assert_eq!(h.cap, want, "{raw}");
+        }
+    }
+
+    #[test]
+    fn a_sanitized_cap_never_evicts_the_entry_it_just_recorded() {
+        let mut h = serde_json::from_str::<History>(r#"{"entries":[],"cap":0}"#).unwrap().sanitized();
+        for i in 0..3u64 {
+            h.record(&format!("https://e{i}.test/"), "", i);
+        }
+        assert_eq!(h.len(), 3, "a cap of 0 would drop every entry it stored");
     }
 
     #[test]
@@ -138,6 +185,8 @@ mod tests {
 
     #[test]
     fn cap_evicts_stale_low_visit_entries() {
+        // Built directly, so `sanitized`'s lower bound does not apply - this is the eviction
+        // rule itself, not the file-format guard.
         let mut h = History { entries: vec![], cap: 3 };
         for i in 0..5u64 {
             h.record(&format!("https://e{i}.test/"), "", i);

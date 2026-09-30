@@ -20,6 +20,7 @@ export function bootStore() {
       const [snapshot, panels, commands, servers, adblock] = await Promise.all([api.getSnapshot(), api.getPanels(), api.getCommands(), api.listDevServers(), api.getAdblockStatus()])
       const forced = mockGetPlatformFromUrl()
       useAppStore.setState({ snapshot: forced ? { ...snapshot, platform: forced } : snapshot, panels, commands, servers, adblock, ready: true })
+      document.documentElement.dataset.themeDark = String(snapshot.settings.theme !== 'paper')
       const css = await api.getShellCss()
       let style = document.getElementById('athanor-shell-css') as HTMLStyleElement | null
       if (!style) { style = document.createElement('style'); style.id = 'athanor-shell-css'; document.head.append(style) }

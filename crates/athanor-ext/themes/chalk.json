@@ -1,0 +1,20 @@
+{
+  "id": "chalk", "name": "Chalk", "dark": false,
+  "colors": {
+    "background": "#fafafa", "foreground": "#0a0a0a",
+    "card": "#ffffff", "cardForeground": "#0a0a0a",
+    "popover": "#ffffff", "popoverForeground": "#0a0a0a",
+    "primary": "#0a0a0a", "primaryForeground": "#fafafa",
+    "secondary": "#f0f0f0", "secondaryForeground": "#0a0a0a",
+    "muted": "#efefef", "mutedForeground": "#5c5c5c",
+    "accent": "#e8e8e8", "accentForeground": "#0a0a0a",
+    "destructive": "#c0392b",
+    "border": "#dcdcdc", "input": "#e5e5e5", "ring": "#737373",
+    "sidebar": "#f3f3f3", "sidebarForeground": "#0a0a0a",
+    "sidebarAccent": "#e6e6e6", "sidebarAccentForeground": "#0a0a0a", "sidebarBorder": "#dcdcdc",
+    "tabActive": "#e6e6e6", "tabHover": "#ececec", "spaceAccent": "#0a0a0a"
+  },
+  "radius": "0.6rem",
+  "fonts": { "ui": "system-ui, sans-serif", "mono": "ui-monospace, monospace" },
+  "ui": { "sidebarSide": "left", "density": "comfortable", "tabHeight": 34, "sidebarWidth": 260, "blur": 0, "showFavicons": true }
+}

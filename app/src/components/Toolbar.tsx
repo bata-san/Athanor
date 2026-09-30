@@ -13,7 +13,7 @@ export function Toolbar({ snapshot, activeTab, omniboxRef, openPalette, openPage
     <IconAction title="Back (Alt+Left)" onClick={() => activeTab && api.goBack(activeTab.id)} disabled={!activeTab || !snapshot.runtime[activeTab.id]?.canGoBack}><AppIcon name="ArrowLeft" /></IconAction>
     <IconAction title="Forward (Alt+Right)" onClick={() => activeTab && api.goForward(activeTab.id)} disabled={!activeTab || !snapshot.runtime[activeTab.id]?.canGoForward}><AppIcon name="ArrowRight" /></IconAction>
     <IconAction title={snapshot.runtime[activeTab?.id ?? '']?.loading ? 'Stop loading' : 'Reload'} onClick={() => activeTab && (snapshot.runtime[activeTab.id]?.loading ? api.stop(activeTab.id) : api.reload(activeTab.id))}><AppIcon name={snapshot.runtime[activeTab?.id ?? '']?.loading ? 'X' : 'RotateCw'} /></IconAction>
-  </div><Omnibox snapshot={snapshot} activeTab={activeTab} inputRef={omniboxRef} onOverlay={onOverlay} /><span className="toolbar-spacer" />
+  </div><Omnibox snapshot={snapshot} activeTab={activeTab} inputRef={omniboxRef} onOverlay={onOverlay} openPage={openPage} /><span className="toolbar-spacer" />
     <button className="icon-button" data-part="nav-button" title="Split view" aria-label="Split view" onClick={() => { const next = snapshot.workspace.tabs.find((tab) => tab.id !== activeTab?.id && tab.space === snapshot.workspace.activeSpace && !tab.archived); if (snapshot.workspace.split) void api.unsplit(); else if (next) void api.splitWith({ tab: next.id, dir: 'row' }) }}><AppIcon name="Split" /></button>
     <button className="icon-button" data-part="nav-button" title="Developer panel (Ctrl+Shift+D)" aria-label="Developer panel" onClick={toggleDev}><AppIcon name="Terminal" /></button>
     <button className="icon-button" data-part="nav-button" title="Reference boards" aria-label="Reference boards" onClick={() => openPage('boards')}><AppIcon name="PanelsTopLeft" /></button>
@@ -21,10 +21,10 @@ export function Toolbar({ snapshot, activeTab, omniboxRef, openPalette, openPage
     <button className="icon-button" data-part="nav-button" title="Command palette (Ctrl+K)" aria-label="Command palette" onClick={openPalette}><AppIcon name="Command" /></button>
   </div>
 }
-export function MobileBar({ snapshot, activeTab, omniboxRef, openSwitcher, openPalette, onOverlay }: { snapshot: Snapshot; activeTab: Tab | null; omniboxRef: RefObject<HTMLInputElement | null>; openSwitcher: () => void; openPalette: () => void; onOverlay: (open: boolean) => void }) {
-  return <div className="mobile-topbar" data-part="toolbar"><Omnibox snapshot={snapshot} activeTab={activeTab} inputRef={omniboxRef} mobile onOverlay={onOverlay} /><button className="icon-button" data-part="nav-button" aria-label="Open tabs" onClick={openSwitcher}><AppIcon name="PanelsTopLeft" /></button><button className="icon-button" data-part="nav-button" aria-label="Menu" onClick={openPalette}><AppIcon name="Menu" /></button></div>
+export function MobileBar({ snapshot, activeTab, omniboxRef, openSwitcher, openPalette, onOverlay, openPage }: { snapshot: Snapshot; activeTab: Tab | null; omniboxRef: RefObject<HTMLInputElement | null>; openSwitcher: () => void; openPalette: () => void; onOverlay: (open: boolean) => void; openPage: (page: Page) => void }) {
+  return <div className="mobile-topbar" data-part="toolbar"><Omnibox snapshot={snapshot} activeTab={activeTab} inputRef={omniboxRef} mobile onOverlay={onOverlay} openPage={openPage} /><button className="icon-button" data-part="nav-button" aria-label="Open tabs" onClick={openSwitcher}><AppIcon name="PanelsTopLeft" /></button><button className="icon-button" data-part="nav-button" aria-label="Menu" onClick={openPalette}><AppIcon name="Menu" /></button></div>
 }
-function Omnibox({ snapshot, activeTab, inputRef, mobile = false, onOverlay }: { snapshot: Snapshot; activeTab: Tab | null; inputRef: RefObject<HTMLInputElement | null>; mobile?: boolean; onOverlay: (open: boolean) => void }) {
+function Omnibox({ snapshot, activeTab, inputRef, mobile = false, onOverlay, openPage }: { snapshot: Snapshot; activeTab: Tab | null; inputRef: RefObject<HTMLInputElement | null>; mobile?: boolean; onOverlay: (open: boolean) => void; openPage: (page: Page) => void }) {
   const [value, setValue] = useState('')
   const [focused, setFocused] = useState(false)
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
@@ -58,7 +58,7 @@ function Omnibox({ snapshot, activeTab, inputRef, mobile = false, onOverlay }: {
       <div className="shield-popover-head"><span className="shield-popover-icon"><AppIcon name={shieldEnabled ? 'ShieldCheck' : 'ShieldAlert'} /></span><div><h3>{activeHost}</h3><span className="muted-copy">Site protection</span></div><button className="icon-button" aria-label="Close protection details" onClick={() => setShieldOpen(false)}><AppIcon name="X" /></button></div>
       <div className="switch-row"><span>Block ads and trackers</span><button className="switch" data-checked={String(shieldEnabled)} role="switch" aria-checked={shieldEnabled} onClick={() => { const enabled = !shieldEnabled; setShieldEnabled(enabled); void api.setSiteShield(activeHost, enabled) }} /></div>
       <div className="shield-stats"><div><strong>{blocked}</strong><span>Blocked on this page</span></div><div><strong>{snapshot.blockedTotal}</strong><span>Blocked all time</span></div></div>
-      <button className="menu-item" onClick={() => { setShieldOpen(false); void api.setOverlayOpen(false) }}><AppIcon name="Settings" />Protection settings</button>
+      <button className="menu-item" onClick={() => { setShieldOpen(false); openPage('settings') }}><AppIcon name="Settings" />Protection settings</button>
     </div>}
   </div>
 }

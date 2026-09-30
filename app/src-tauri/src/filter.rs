@@ -3,16 +3,16 @@
 //! Adapters (WebView2 on desktop, the Android plugin via JNI) only ever see this small surface, so the
 //! blocking implementation can change without touching any engine code.
 
-use athanor_adblock::{privacy, Blocker, Decision, Request, ResourceType};
-use base64::{engine::general_purpose::STANDARD, Engine as _};
+use athanor_adblock::{Blocker, Decision, Request, ResourceType, privacy};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use parking_lot::{Mutex, RwLock};
 use serde::Serialize;
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -63,7 +63,20 @@ pub enum Verdict {
     /// Cancel / answer with an empty error response.
     Block,
     /// Answer with a neutered stand-in resource (keeps pages that expect the script/pixel working).
+    Respond {
+        mime: String,
+        body: Vec<u8>,
+    },
+}
+
+/// Detailed verdict used by adapters capable of changing a request URL. `Verdict` remains
+/// unchanged for source compatibility with adapters which can only allow, block, or synthesize.
+#[derive(Debug, PartialEq, Eq)]
+pub enum DetailedVerdict {
+    Allow,
+    Block,
     Respond { mime: String, body: Vec<u8> },
+    Rewrite { url: String },
 }
 
 #[derive(Serialize, Clone)]
@@ -89,7 +102,9 @@ pub struct AdblockStatus {
 const STALE_AFTER_SECS: u64 = 3 * 24 * 3600;
 
 fn now_secs() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs())
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
 }
 
 pub struct Filter {
@@ -126,11 +141,11 @@ impl Filter {
                 log::info!("adblock rules loaded from {report:?}");
                 this.blocker.set_enabled(enabled);
                 notify();
-                let stale = this
-                    .blocker
-                    .lists()
-                    .iter()
-                    .any(|l| l.enabled && l.updated_at.is_none_or(|t| now_secs().saturating_sub(t) > STALE_AFTER_SECS));
+                let stale = this.blocker.lists().iter().any(|l| {
+                    l.enabled
+                        && l.updated_at
+                            .is_none_or(|t| now_secs().saturating_sub(t) > STALE_AFTER_SECS)
+                });
                 if stale {
                     this.update_blocking();
                     notify();
@@ -162,10 +177,28 @@ impl Filter {
 
     /// Verdict for a request. Hot path.
     pub fn verdict(&self, url: &str, source: &str, kind: Kind) -> Verdict {
-        match self.blocker.check(&Request { url, source_url: source, resource_type: kind.into() }) {
-            Decision::Allow | Decision::Rewrite(_) => Verdict::Allow,
-            Decision::Block { .. } => Verdict::Block,
-            Decision::Redirect { to } => data_url(&to).map_or(Verdict::Block, |(mime, body)| Verdict::Respond { mime, body }),
+        match self.verdict_with_rewrite(url, source, kind) {
+            DetailedVerdict::Allow | DetailedVerdict::Rewrite { .. } => Verdict::Allow,
+            DetailedVerdict::Block => Verdict::Block,
+            DetailedVerdict::Respond { mime, body } => Verdict::Respond { mime, body },
+        }
+    }
+
+    /// Verdict that preserves `$removeparam` rewrites for native adapters that can issue a
+    /// redirected request or return a 307 response.
+    pub fn verdict_with_rewrite(&self, url: &str, source: &str, kind: Kind) -> DetailedVerdict {
+        match self.blocker.check(&Request {
+            url,
+            source_url: source,
+            resource_type: kind.into(),
+        }) {
+            Decision::Allow => DetailedVerdict::Allow,
+            Decision::Rewrite(url) => DetailedVerdict::Rewrite { url },
+            Decision::Block { .. } => DetailedVerdict::Block,
+            Decision::Redirect { to } => data_url(&to)
+                .map_or(DetailedVerdict::Block, |(mime, body)| {
+                    DetailedVerdict::Respond { mime, body }
+                }),
         }
     }
 
@@ -181,11 +214,24 @@ impl Filter {
         (!c.js.is_empty()).then_some(c.js)
     }
 
+    /// Match observed DOM classes and IDs against URL-specific generic cosmetic rules.
+    pub fn cosmetic_query(
+        &self,
+        page_url: &str,
+        classes: &[String],
+        ids: &[String],
+        exceptions: &HashSet<String>,
+    ) -> Vec<String> {
+        self.blocker
+            .cosmetic_query(page_url, classes, ids, exceptions)
+    }
+
     pub fn set_injector(&self, injector: Injector) {
         *self.injector.write() = Some(injector);
     }
 
     /// Everything to evaluate in the page at `phase`: cosmetic filters (start/end) and extension scripts.
+    #[cfg_attr(not(mobile), allow(dead_code))]
     pub fn injections(&self, page_url: &str, phase: u8) -> Vec<String> {
         let mut out = Vec::new();
         if phase <= 1 {
@@ -197,6 +243,15 @@ impl Filter {
         out
     }
 
+    /// Extension scripts only. The Windows adapter uses this at DOMContentLoaded and idle;
+    /// adblock scriptlets/cosmetics use the document-created registration path.
+    pub fn page_script_injections(&self, page_url: &str, phase: u8) -> Vec<String> {
+        self.injector
+            .read()
+            .as_ref()
+            .map_or_else(Vec::new, |injector| injector(page_url, phase))
+    }
+
     /// If the main-frame navigation to `url` should be rewritten (tracking-parameter stripping, https upgrade).
     pub fn rewrite_navigation(&self, url: &str) -> Option<String> {
         if !self.blocker.enabled() {
@@ -204,6 +259,12 @@ impl Filter {
         }
         let mut cur = url.to_string();
         let mut changed = false;
+        if let Some(rewritten) = self.blocker.rewrite_document_url(&cur) {
+            if rewritten != cur {
+                cur = rewritten;
+                changed = true;
+            }
+        }
         if self.strip_tracking.load(Ordering::Relaxed) {
             if let Some(n) = privacy::strip_tracking_params(&cur) {
                 cur = n;
@@ -212,7 +273,10 @@ impl Filter {
         }
         if self.https_upgrade.load(Ordering::Relaxed) {
             if let Some(n) = privacy::upgrade_https(&cur) {
-                let host = url::Url::parse(&n).ok().and_then(|u| u.host_str().map(str::to_string)).unwrap_or_default();
+                let host = url::Url::parse(&n)
+                    .ok()
+                    .and_then(|u| u.host_str().map(str::to_string))
+                    .unwrap_or_default();
                 if !self.no_upgrade.lock().contains(&host) {
                     let mut up = self.upgrades.lock();
                     if up.len() > 256 {
@@ -224,6 +288,12 @@ impl Filter {
                 }
             }
         }
+        if let Some(unwrapped) = privacy::unwrap_tracker_redirect(&cur) {
+            if unwrapped != cur {
+                cur = unwrapped;
+                changed = true;
+            }
+        }
         changed.then_some(cur)
     }
 
@@ -231,7 +301,10 @@ impl Filter {
     /// (and remembers not to upgrade that host again).
     pub fn upgrade_fallback(&self, url: &str) -> Option<String> {
         let from = self.upgrades.lock().remove(url)?;
-        if let Some(host) = url::Url::parse(url).ok().and_then(|u| u.host_str().map(str::to_string)) {
+        if let Some(host) = url::Url::parse(url)
+            .ok()
+            .and_then(|u| u.host_str().map(str::to_string))
+        {
             self.no_upgrade.lock().insert(host);
         }
         Some(from)
@@ -263,6 +336,11 @@ impl Filter {
 
     pub fn set_enabled(&self, on: bool) {
         self.blocker.set_enabled(on);
+    }
+
+    /// Current master switch. Native adapters use this before allocating per-request state.
+    pub fn enabled(&self) -> bool {
+        self.blocker.enabled()
     }
 
     pub fn set_list_enabled(&self, id: &str, on: bool) {
@@ -301,21 +379,46 @@ mod tests {
         Filter::new(std::env::temp_dir().join(format!("athanor-filter-{}", athanor_core::new_id())))
     }
 
+    fn filter_with_rules(rules: &str) -> Filter {
+        let dir =
+            std::env::temp_dir().join(format!("athanor-filter-rules-{}", athanor_core::new_id()));
+        std::fs::create_dir_all(dir.join("lists")).expect("create fixture list directory");
+        std::fs::write(dir.join("lists/easylist.txt"), rules).expect("write fixture rules");
+        let filter = Filter::new(dir);
+        filter.blocker.load();
+        filter
+    }
+
     #[test]
     fn data_urls() {
-        assert_eq!(data_url("data:text/plain;base64,aGk="), Some(("text/plain".into(), b"hi".to_vec())));
-        assert_eq!(data_url("data:,a%20b"), Some(("text/plain".into(), b"a b".to_vec())));
+        assert_eq!(
+            data_url("data:text/plain;base64,aGk="),
+            Some(("text/plain".into(), b"hi".to_vec()))
+        );
+        assert_eq!(
+            data_url("data:,a%20b"),
+            Some(("text/plain".into(), b"a b".to_vec()))
+        );
         assert_eq!(data_url("https://x"), None);
     }
 
     #[test]
     fn rewrite_strips_tracking_and_upgrades_with_fallback() {
         let f = filter();
-        assert_eq!(f.rewrite_navigation("https://example.com/a?utm_source=x&id=1").as_deref(), Some("https://example.com/a?id=1"));
-        let up = f.rewrite_navigation("http://example.com/a").expect("upgraded");
+        assert_eq!(
+            f.rewrite_navigation("https://example.com/a?utm_source=x&id=1")
+                .as_deref(),
+            Some("https://example.com/a?id=1")
+        );
+        let up = f
+            .rewrite_navigation("http://example.com/a")
+            .expect("upgraded");
         assert_eq!(up, "https://example.com/a");
         // upgrade failed -> fall back to http and never upgrade this host again
-        assert_eq!(f.upgrade_fallback(&up).as_deref(), Some("http://example.com/a"));
+        assert_eq!(
+            f.upgrade_fallback(&up).as_deref(),
+            Some("http://example.com/a")
+        );
         assert_eq!(f.rewrite_navigation("http://example.com/b"), None);
         // local addresses are left alone
         assert_eq!(f.rewrite_navigation("http://localhost:3000/"), None);
@@ -336,13 +439,54 @@ mod tests {
     #[test]
     fn unknown_hosts_are_allowed_by_the_fallback_rules() {
         let f = filter();
-        assert_eq!(f.verdict("https://example.com/app.js", "https://example.com/", Kind::Script), Verdict::Allow);
+        assert_eq!(
+            f.verdict(
+                "https://example.com/app.js",
+                "https://example.com/",
+                Kind::Script
+            ),
+            Verdict::Allow
+        );
+    }
+
+    #[test]
+    fn adapter_exposes_subresource_and_navigation_removeparam_rewrites() {
+        let filter = filter_with_rules(
+            "||target.test^$script,removeparam=utm_source\n||site.test^$document,removeparam=campaign\n",
+        );
+        assert_eq!(
+            filter.verdict_with_rewrite(
+                "https://target.test/a.js?utm_source=x&keep=y",
+                "https://site.test/",
+                Kind::Script,
+            ),
+            DetailedVerdict::Rewrite {
+                url: "https://target.test/a.js?keep=y".into()
+            }
+        );
+        assert_eq!(
+            filter.verdict(
+                "https://target.test/a.js?utm_source=x&keep=y",
+                "https://site.test/",
+                Kind::Script
+            ),
+            Verdict::Allow
+        );
+        assert_eq!(
+            filter
+                .rewrite_navigation("https://site.test/?campaign=spring&keep=y")
+                .as_deref(),
+            Some("https://site.test/?keep=y")
+        );
     }
 
     #[test]
     fn injections_include_registered_scripts() {
         let f = filter();
         f.set_injector(Arc::new(|url, phase| vec![format!("{url}#{phase}")]));
-        assert_eq!(f.injections("https://a.test/", 2), vec!["https://a.test/#2".to_string()]);
+        assert_eq!(
+            f.injections("https://a.test/", 2),
+            vec!["https://a.test/#2".to_string()]
+        );
     }
 }

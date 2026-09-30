@@ -11,6 +11,7 @@ pub mod filing;
 pub mod history;
 pub mod layout;
 pub mod model;
+pub mod plan;
 pub mod store;
 pub mod urlutil;
 

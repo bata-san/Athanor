@@ -12,7 +12,7 @@ const folders: Folder[] = [
   { id: 'folder-dev', name: 'Development', space: 'space-work', collapsed: false, color: null, auto: true },
   { id: 'folder-reading', name: 'Reading list', space: 'space-research', collapsed: false, color: '#a394c2', auto: false },
 ]
-const makeTab = (id: string, title: string, url: string, space: string, folder: string | null, extra: Partial<Tab> = {}): Tab => ({ id, title, url, favicon: null, space, folder, pinned: false, parent: null, created: now - 3600_000, lastActive: now - 4000, archived: false, muted: false, autoFiled: Boolean(folder), ...extra })
+const makeTab = (id: string, title: string, url: string, space: string, folder: string | null, extra: Partial<Tab> = {}): Tab => ({ id, title, url, favicon: null, space, folder, pinned: false, parent: null, created: now - 3600_000, lastActive: now - 2 * 3_600_000, archived: false, muted: false, autoFiled: Boolean(folder), ...extra })
 const initialTabs: Tab[] = [
   makeTab('tab-welcome', 'Welcome to Athanor', 'athanor://newtab', 'space-work', null, { lastActive: now }),
   makeTab('tab-github', 'GitHub · Build software', 'https://github.com', 'space-work', 'folder-dev'),
@@ -21,8 +21,9 @@ const initialTabs: Tab[] = [
   makeTab('tab-design', 'Athanor visual references', 'https://www.are.na', 'space-research', null),
 ]
 const defaultSettings: Settings = { searchEngine: 'https://www.google.com/search?q={q}', archiveAfterHours: 24, httpsUpgrade: true, stripTracking: true, autoFile: true, restoreSession: true, sidebarSide: 'left', sidebarCompact: false, sidebarWidth: 280, theme: 'ember', adblockEnabled: true }
-const initialSnapshot = (): Snapshot => ({ workspace: { spaces, folders, tabs: initialTabs, activeSpace: 'space-work', activeTab: 'tab-welcome', split: null }, runtime: Object.fromEntries(initialTabs.map((tab) => [tab.id, { loading: false, canGoBack: tab.url !== 'athanor://newtab', canGoForward: false, blocked: tab.id === 'tab-github' ? 12 : 0, audible: false, secure: tab.url.startsWith('https:') }])), settings: defaultSettings, filingRules: [{ id: 'rule-github', folder: 'Development', host: 'github.com', pathPrefix: null, titleContains: null, enabled: true }, { id: 'rule-docs', folder: 'Reading list', host: 'developer.mozilla.org', pathPrefix: null, titleContains: null, enabled: true }], platform: 'windows', version: '0.1.0 mock', blockedTotal: 128 })
+const initialSnapshot = (): Snapshot => ({ workspace: { spaces, folders, tabs: initialTabs, activeSpace: 'space-work', activeTab: 'tab-welcome', split: null }, runtime: Object.fromEntries(initialTabs.map((tab) => [tab.id, { loading: false, canGoBack: tab.url !== 'athanor://newtab', canGoForward: false, blocked: tab.id === 'tab-github' ? 12 : 0, audible: false, secure: tab.url.startsWith('https:') }])), settings: defaultSettings, filingRules: [{ id: 'rule-github', folder: 'Development', host: 'github.com', pathPrefix: null, titleContains: null, enabled: true }, { id: 'rule-docs', folder: 'Reading list', host: 'developer.mozilla.org', pathPrefix: null, titleContains: null, enabled: true }, { id: 'rule-design', folder: 'Design', host: 'figma.com', pathPrefix: null, titleContains: null, enabled: true }, { id: 'rule-shopping', folder: 'Shopping', host: 'amazon.com', pathPrefix: null, titleContains: null, enabled: true }, { id: 'rule-social', folder: 'Social', host: 'reddit.com', pathPrefix: null, titleContains: null, enabled: true }], platform: 'windows', version: '0.1.0 mock', blockedTotal: 128 })
 let state = initialSnapshot()
+if (mockGetPlatformFromUrl()) state.platform = mockGetPlatformFromUrl()!
 let maximized = false
 let overlay = false
 let bounds = { x: 0, y: 38, w: 1000, h: 700 }
@@ -50,15 +51,34 @@ export function mockListen<K extends keyof EventPayloads>(event: K, handler: (pa
 }
 function emit<K extends keyof EventPayloads>(event: K, payload: EventPayloads[K]) { for (const handler of eventListeners.get(event) ?? []) handler(payload) }
 const emitSnapshot = () => emit('athanor://snapshot', structuredClone(state))
+function archiveExpiredTabs() {
+  const hours = state.settings.archiveAfterHours
+  if (hours <= 0) return
+  const cutoff = Date.now() - hours * 3_600_000
+  let changed = false
+  for (const tab of state.workspace.tabs) {
+    if (tab.id !== state.workspace.activeTab && !tab.pinned && !tab.archived && tab.lastActive < cutoff) { tab.archived = true; changed = true }
+  }
+  if (changed) emitSnapshot()
+}
+if (typeof window !== 'undefined' && isMockMode()) window.setInterval(archiveExpiredTabs, 15_000)
 const active = () => state.workspace.tabs.find((tab) => tab.id === state.workspace.activeTab) ?? null
 const cleanUrl = (input: string) => /^(https?:|athanor:\/\/)/i.test(input) ? input : input.includes('.') && !input.includes(' ') ? `https://${input}` : state.settings.searchEngine.replace('{q}', encodeURIComponent(input || ''))
+function matchesFilingRule(rule: FilingRule, url: string, title: string) {
+  if (!rule.enabled || !(rule.host || rule.pathPrefix || rule.titleContains)) return false
+  let parsed: URL
+  try { parsed = new URL(url) } catch { return false }
+  return (!rule.host || parsed.hostname.toLowerCase().includes(rule.host.toLowerCase())) &&
+    (!rule.pathPrefix || parsed.pathname.startsWith(rule.pathPrefix)) &&
+    (!rule.titleContains || title.toLowerCase().includes(rule.titleContains.toLowerCase()))
+}
 function openTab(args: CommandArgs['open_tab']): string {
   const id = uid('tab'); const url = cleanUrl(args.url ?? 'athanor://newtab');
   const host = (() => { try { return new URL(url).hostname } catch { return '' } })()
   let folder = args.folder ?? null
   let autoFiled = false
   if (!folder && args.url && state.settings.autoFile && !args.pinned) {
-    const matched = state.filingRules.find((rule) => rule.enabled && (rule.host && host.includes(rule.host) || rule.titleContains && url.toLowerCase().includes(rule.titleContains.toLowerCase())))
+    const matched = state.filingRules.find((rule) => matchesFilingRule(rule, url, host || url))
     if (matched) { let target = state.workspace.folders.find((entry) => entry.name === matched.folder && entry.space === (args.space ?? state.workspace.activeSpace)); if (!target) { target = { id: uid('folder'), name: matched.folder, space: args.space ?? state.workspace.activeSpace, collapsed: false, color: null, auto: true }; state.workspace.folders.push(target) } folder = target.id; autoFiled = true }
   }
   const tab: Tab = makeTab(id, args.url ? host || url : 'New tab', url, args.space ?? state.workspace.activeSpace, folder, { pinned: args.pinned ?? false, parent: args.parent ?? null, autoFiled, lastActive: Date.now() })
@@ -78,7 +98,7 @@ function splitRects(): SplitRects | null {
   }
   return make(split.root, 0, 0, bounds.w, bounds.h, [])
 }
-function runTool(tool: string, input: string): string {
+async function runTool(tool: string, input: string): Promise<string> {
   try {
     if (tool === 'json-pretty') return JSON.stringify(JSON.parse(input), null, 2)
     if (tool === 'json-minify') return JSON.stringify(JSON.parse(input))
@@ -86,9 +106,10 @@ function runTool(tool: string, input: string): string {
     if (tool === 'base64-decode') return decodeURIComponent(escape(atob(input)))
     if (tool === 'url-encode') return encodeURIComponent(input)
     if (tool === 'url-decode') return decodeURIComponent(input)
-    if (tool === 'jwt') { const parts = input.split('.'); return JSON.stringify({ header: JSON.parse(atob(parts[0] ?? 'e30')), payload: JSON.parse(atob(parts[1] ?? 'e30')), note: 'Signature is not verified in the shell preview.' }, null, 2) }
+    if (tool === 'jwt') { const parts = input.split('.'); const decode = (part: string) => JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/'))); return JSON.stringify({ header: decode(parts[0] ?? 'e30'), payload: decode(parts[1] ?? 'e30'), note: 'Signature is not verified in the shell preview.' }, null, 2) }
     if (tool === 'timestamp') { const value = Number(input); const date = new Date(input ? (value < 1e12 ? value * 1000 : value) : Date.now()); return `${date.toISOString()}\nUnix seconds: ${Math.floor(date.getTime() / 1000)}\nUnix milliseconds: ${date.getTime()}` }
-    if (tool === 'uuid') return uid('uuid')
+    if (tool === 'uuid') return typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : uid('uuid')
+    if (tool === 'sha256') { const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input)); return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('') }
     if (tool === 'color') { const hex = input.trim().replace('#', ''); const n = Number.parseInt(hex, 16); return `HEX #${hex}\nRGB ${n >> 16}, ${(n >> 8) & 255}, ${n & 255}` }
     return input
   } catch (error) { return `Error: ${error instanceof Error ? error.message : 'Could not process input.'}` }
@@ -133,9 +154,9 @@ export async function mockInvoke<K extends keyof CommandArgs>(name: K, rawArgs: 
     case 'remove_space': if (state.workspace.spaces.length > 1) { state.workspace.spaces = state.workspace.spaces.filter((s) => s.id !== args.id); state.workspace.tabs = state.workspace.tabs.filter((t) => t.space !== args.id); state.workspace.activeSpace = state.workspace.spaces[0]!.id; emitSnapshot() } break
     case 'switch_space': state.workspace.activeSpace = args.id; { const candidate = state.workspace.tabs.find((t) => t.space === args.id && !t.archived); if (candidate) state.workspace.activeTab = candidate.id } emitSnapshot(); break
     case 'update_space': { const s = state.workspace.spaces.find((x) => x.id === args.id); if (s) Object.assign(s, args); emitSnapshot(); break }
-    case 'auto_file_all': { for (const tab of state.workspace.tabs) { if (tab.folder || tab.pinned) continue; let host = ''; try { host = new URL(tab.url).hostname } catch { continue }; const rule = state.filingRules.find((r) => r.enabled && r.host && host.includes(r.host)); if (rule) { let f = state.workspace.folders.find((x) => x.name === rule.folder && x.space === tab.space); if (!f) { f = { id: uid('folder'), name: rule.folder, space: tab.space, collapsed: false, color: null, auto: true }; state.workspace.folders.push(f) } tab.folder = f.id; tab.autoFiled = true } } emit('athanor://toast', { level: 'success', message: 'Tabs filed into matching folders.' }); emitSnapshot(); break }
+    case 'auto_file_all': { for (const tab of state.workspace.tabs) { if (tab.folder || tab.pinned) continue; const rule = state.filingRules.find((entry) => matchesFilingRule(entry, tab.url, tab.title)); if (rule) { let f = state.workspace.folders.find((x) => x.name === rule.folder && x.space === tab.space); if (!f) { f = { id: uid('folder'), name: rule.folder, space: tab.space, collapsed: false, color: null, auto: true }; state.workspace.folders.push(f) } tab.folder = f.id; tab.autoFiled = true } } emit('athanor://toast', { level: 'success', message: 'Tabs filed into matching folders.' }); emitSnapshot(); break }
     case 'set_filing_rules': state.filingRules = args.rules; emitSnapshot(); break
-    case 'archive_inactive_now': { const cutoff = Date.now() - 5 * 60_000; for (const tab of state.workspace.tabs) if (tab.id !== state.workspace.activeTab && !tab.pinned && tab.lastActive < cutoff) tab.archived = true; emitSnapshot(); break }
+    case 'archive_inactive_now': { const hours = state.settings.archiveAfterHours; if (hours > 0) { const cutoff = Date.now() - hours * 3_600_000; for (const tab of state.workspace.tabs) if (tab.id !== state.workspace.activeTab && !tab.pinned && !tab.archived && tab.lastActive < cutoff) tab.archived = true } emitSnapshot(); break }
     case 'split_with': { const other = active(); if (other && other.id !== args.tab) { state.workspace.split = { root: { kind: 'split', dir: args.dir, ratio: 0.5, a: { kind: 'leaf', tab: args.tab }, b: { kind: 'leaf', tab: other.id } }, focused: other.id }; result = true; emit('athanor://split-rects', splitRects()!); emitSnapshot() } else result = false; break }
     case 'unsplit': state.workspace.split = null; emitSnapshot(); break
     case 'set_split_ratio': { let node: SplitNode | null = state.workspace.split?.root ?? null; for (const branch of args.path as boolean[]) { if (node?.kind !== 'split') break; node = branch ? node.b : node.a } if (node?.kind === 'split') node.ratio = Math.min(0.8, Math.max(0.2, args.ratio)); const rects = splitRects(); if (rects) emit('athanor://split-rects', rects); break }
@@ -146,7 +167,7 @@ export async function mockInvoke<K extends keyof CommandArgs>(name: K, rawArgs: 
     case 'set_viewport_emulation': emit('athanor://toast', { level: 'info', message: args.preset ? `Viewport preset: ${args.preset}` : 'Viewport emulation cleared.' }); break
     case 'omnibox_suggest': { const query = args.query.trim().toLowerCase(); const matches: Suggestion[] = state.workspace.tabs.filter((t) => !query || t.title.toLowerCase().includes(query) || t.url.toLowerCase().includes(query)).slice(0, 4).map((t) => ({ kind: 'tab', title: t.title, subtitle: t.url, url: t.url, tab: t.id })); if (query) { matches.push({ kind: 'search', title: `Search for “${args.query}”`, subtitle: 'Search the web', url: state.settings.searchEngine.replace('{q}', encodeURIComponent(args.query)) }); if (query.includes('.') && !query.includes(' ')) matches.unshift({ kind: 'url', title: `Open ${args.query}`, subtitle: 'Go to address', url: cleanUrl(args.query) }) } result = matches.slice(0, 7); break }
     case 'open_devtools': emit('athanor://toast', { level: 'info', message: 'Developer tools opened for this page.' }); break
-    case 'run_dev_tool': result = runTool(args.tool, args.input); break
+    case 'run_dev_tool': result = await runTool(args.tool, args.input); break
     case 'list_dev_servers': result = servers; break
     case 'list_boards': result = summaries(); break
     case 'get_board': result = structuredClone(boards.find((b) => b.id === args.id) ?? boards[0]); break
@@ -168,7 +189,7 @@ export async function mockInvoke<K extends keyof CommandArgs>(name: K, rawArgs: 
     case 'set_settings': Object.assign(state.settings, args.patch); document.documentElement.dataset.themeDark = String(state.settings.theme !== 'paper'); emitSnapshot(); break
     case 'list_extensions': result = structuredClone(extensions); break
     case 'set_extension_enabled': { const ext = extensions.find((e) => e.id === args.id); if (ext) ext.enabled = args.enabled; panels = panels.filter((p) => p.ext !== args.id || args.enabled); emitSnapshot(); break }
-    case 'install_extension': emit('athanor://toast', { level: 'success', message: `Extension installed from ${args.path}.` }); break
+    case 'install_extension': { const name = String(args.path).split(/[\\/]/).filter(Boolean).at(-1) || 'Sample Extension'; const id = uid('extension'); extensions.push({ id, name, version: '1.0.0', description: 'Installed from a local directory.', enabled: true, source: 'user', permissions: ['activeTab'] }); emit('athanor://toast', { level: 'success', message: `${name} installed.` }); break }
     case 'remove_extension': extensions = extensions.filter((e) => e.id !== args.id); panels = panels.filter((p) => p.ext !== args.id); break
     case 'pick_directory': result = 'C:/Users/Guest/Extensions/sample'; break
     case 'window_minimize': case 'window_close': break

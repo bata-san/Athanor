@@ -15,13 +15,15 @@ val tauriProperties = Properties().apply {
 }
 
 android {
-    compileSdk = 37
+    compileSdk = 36
     namespace = "dev.athanor.browser"
     defaultConfig {
-        manifestPlaceholders["usesCleartextTraffic"] = "false"
+        // This is a browser and must be able to load top-level HTTP pages. Tab WebViews
+        // still forbid mixed HTTP content inside HTTPS documents.
+        manifestPlaceholders["usesCleartextTraffic"] = "true"
         applicationId = "dev.athanor.browser"
         minSdk = 24
-        targetSdk = 37
+    targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
     }

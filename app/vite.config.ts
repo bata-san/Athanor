@@ -17,9 +17,9 @@ export default defineConfig({
           if (id.includes('/src/pages/Settings')) return 'settings'
           if (id.includes('/src/pages/DevTools')) return 'devtools'
           if (id.includes('node_modules')) {
-            if (id.includes('react') || id.includes('scheduler')) return 'react-vendor'
             if (id.includes('lucide-react')) return 'icons'
             if (id.includes('zustand')) return 'state'
+            if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'react-vendor'
           }
         },
       },

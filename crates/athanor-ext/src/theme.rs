@@ -217,16 +217,18 @@ fn kebab(s: &str) -> String {
 /// Built-in baseline for partial themes.
 pub fn base_theme(dark: bool) -> Theme {
     serde_json::from_str(if dark {
-        include_str!("../themes/ember.json")
+        include_str!("../themes/monolith.json")
     } else {
-        include_str!("../themes/paper.json")
+        include_str!("../themes/chalk.json")
     })
     .expect("bundled base theme JSON")
 }
 
-/// All five bundled themes, in stable order.
+/// All bundled themes, in stable order. The first dark and first light entries are the defaults.
 pub fn builtin_themes() -> Vec<Theme> {
     [
+        include_str!("../themes/monolith.json"),
+        include_str!("../themes/chalk.json"),
         include_str!("../themes/ember.json"),
         include_str!("../themes/paper.json"),
         include_str!("../themes/midnight.json"),

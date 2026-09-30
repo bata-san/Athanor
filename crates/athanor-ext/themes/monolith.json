@@ -1,0 +1,20 @@
+{
+  "id": "monolith", "name": "Monolith", "dark": true,
+  "colors": {
+    "background": "#0a0a0a", "foreground": "#fafafa",
+    "card": "#111111", "cardForeground": "#fafafa",
+    "popover": "#141414", "popoverForeground": "#fafafa",
+    "primary": "#fafafa", "primaryForeground": "#0a0a0a",
+    "secondary": "#1c1c1c", "secondaryForeground": "#fafafa",
+    "muted": "#1a1a1a", "mutedForeground": "#a3a3a3",
+    "accent": "#262626", "accentForeground": "#fafafa",
+    "destructive": "#e5534b",
+    "border": "#262626", "input": "#1f1f1f", "ring": "#a3a3a3",
+    "sidebar": "#0e0e0e", "sidebarForeground": "#fafafa",
+    "sidebarAccent": "#1f1f1f", "sidebarAccentForeground": "#fafafa", "sidebarBorder": "#1f1f1f",
+    "tabActive": "#1f1f1f", "tabHover": "#161616", "spaceAccent": "#fafafa"
+  },
+  "radius": "0.6rem",
+  "fonts": { "ui": "system-ui, sans-serif", "mono": "ui-monospace, monospace" },
+  "ui": { "sidebarSide": "left", "density": "comfortable", "tabHeight": 34, "sidebarWidth": 260, "blur": 0, "showFavicons": true }
+}

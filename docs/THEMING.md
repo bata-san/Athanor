@@ -1,8 +1,8 @@
 # Athanor shell theming
 
-Themes are JSON files declared under an extension's `contributes.themes`, or one of the bundled `ember`, `paper`, `midnight`, `terminal`, and `mist` themes. Ember is the warm dark Athanor default. The host selects a theme, calls `Theme::to_css()`, and applies the result to the shell. It should also set `data-theme-dark`, `data-side`, and `data-density` on the shell; theme CSS does not depend on those attributes.
+Themes are JSON files declared under an extension's `contributes.themes`, or one of the bundled `monolith`, `chalk`, `ember`, `paper`, `midnight`, `terminal`, and `mist` themes. Monolith (neutral black) and Chalk (neutral white) are the defaults. The host selects a theme, calls `Theme::to_css()`, and applies the result to the shell. It should also set `data-theme-dark`, `data-side`, and `data-density` on the shell; theme CSS does not depend on those attributes.
 
-Only `id`, `name`, `dark`, and `colors.background`, `colors.foreground`, `colors.primary` are required. Missing colors and options inherit from Ember for dark themes or Paper for light themes. Color fields accept CSS color strings such as hex, `hsl()`, and `oklch()`. Interpolated values reject semicolons, braces, comments, `url(`, `@import`, `expression(`, and newlines. The optional raw `css` field is appended after variables; `@import` and `</style` are rejected. Extension source directories are trusted code packages, so review raw CSS before installation.
+Only `id`, `name`, `dark`, and `colors.background`, `colors.foreground`, `colors.primary` are required. Missing colors and options inherit from Monolith for dark themes or Chalk for light themes. Color fields accept CSS color strings such as hex, `hsl()`, and `oklch()`. Interpolated values reject semicolons, braces, comments, `url(`, `@import`, `expression(`, and newlines. The optional raw `css` field is appended after variables; `@import` and `</style` are rejected. Extension source directories are trusted code packages, so review raw CSS before installation.
 
 ```json
 {

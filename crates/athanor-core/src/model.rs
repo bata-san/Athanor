@@ -111,7 +111,9 @@ pub struct MoveDest {
     pub folder: Option<Id>,
     /// Insert before this tab; `None` appends.
     pub before: Option<Id>,
-    pub pinned: bool,
+    /// `None` keeps the tab's current pinned state - unless a folder is given, which always
+    /// unpins, because a filed tab cannot sit in a folder. `Some(b)` forces the state.
+    pub pinned: Option<bool>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -146,9 +148,12 @@ impl Workspace {
             .filter(|s| self.space(s).is_some())
             .or_else(|| parent.as_ref().map(|p| p.space.clone()))
             .unwrap_or_else(|| self.active_space.clone());
+        // A folder id that no longer exists (deleted folder, stale extension call) is dropped
+        // rather than stored, so the tab inherits its parent's folder like any other child.
+        let folder = opts.folder.filter(|f| self.folders.iter().any(|x| &x.id == f));
         // Children of a filed tab stay next to their parent (Arc behaviour).
-        let (folder, auto_filed) = match (&opts.folder, &parent) {
-            (Some(f), _) => (Some(f.clone()), false),
+        let (folder, auto_filed) = match (folder, &parent) {
+            (Some(f), _) => (Some(f), false),
             (None, Some(p)) if p.space == space && !opts.pinned => (p.folder.clone(), p.auto_filed),
             _ => (None, false),
         };
@@ -213,7 +218,7 @@ impl Workspace {
         }
         let mut next = None;
         if was_active {
-            next = self.pick_next_after_close(&closed);
+            next = self.pick_next_after_close(&closed, idx);
             self.active_tab = next.clone();
             if let Some(n) = &next {
                 let space = self.tab(n).map(|t| t.space.clone());
@@ -225,16 +230,23 @@ impl Workspace {
         CloseOutcome { removed: true, next_active: next }
     }
 
-    fn pick_next_after_close(&self, closed: &Tab) -> Option<Id> {
+    /// Pick the tab to activate after `closed` (already removed from `self.tabs` at `idx`).
+    ///
+    /// Prefers the parent, then the *display* neighbours of the closed tab's slot - creation
+    /// order is not display order, [`Self::move_tab`] reorders tabs freely, so a tab dragged in
+    /// front of its elder must stay the elder in this rule.
+    fn pick_next_after_close(&self, closed: &Tab, idx: usize) -> Option<Id> {
         if let Some(p) = closed.parent.as_deref().and_then(|p| self.tab(p)) {
             if !p.archived {
                 return Some(p.id.clone());
             }
         }
-        let list: Vec<&Tab> = self.visible_tabs(&closed.space);
-        // `closed` was already removed; choose by creation-order proximity to its old slot.
-        let after = list.iter().find(|t| t.created >= closed.created).or_else(|| list.last());
-        after.map(|t| t.id.clone()).or_else(|| self.tabs.iter().find(|t| !t.archived).map(|t| t.id.clone()))
+        let visible_here = |i: usize| self.tabs.get(i).is_some_and(|t| !t.archived && t.space == closed.space);
+        // `self.tabs[idx]` is whoever slid into the closed tab's slot; then the last one before it.
+        let next = (idx..self.tabs.len())
+            .find(|&i| visible_here(i))
+            .or_else(|| (0..idx).rev().find(|&i| visible_here(i)));
+        next.map(|i| self.tabs[i].id.clone()).or_else(|| self.tabs.iter().find(|t| !t.archived).map(|t| t.id.clone()))
     }
 
     pub fn update_tab(&mut self, id: &str, url: Option<&str>, title: Option<&str>, favicon: Option<&str>) {
@@ -273,8 +285,10 @@ impl Workspace {
         if let Some(s) = dest.space.filter(|s| self.space(s).is_some()) {
             tab.space = s;
         }
-        tab.pinned = dest.pinned;
-        tab.folder = if dest.pinned { None } else { dest.folder.filter(|f| self.folders.iter().any(|x| x.id == *f)) };
+        // `None` keeps the tab pinned unless a folder is given (a filed tab cannot be pinned).
+        let pinned = dest.pinned.unwrap_or_else(|| tab.pinned && dest.folder.is_none());
+        tab.pinned = pinned;
+        tab.folder = if pinned { None } else { dest.folder.filter(|f| self.folders.iter().any(|x| x.id == *f)) };
         tab.auto_filed = false; // the user decided; never auto-refile
         let pos = dest
             .before
@@ -299,11 +313,15 @@ impl Workspace {
         if self.spaces.len() <= 1 || self.space(id).is_none() {
             return false;
         }
-        let target = into
-            .filter(|t| *t != id && self.space(t).is_some())
-            .map(str::to_string)
-            .or_else(|| self.spaces.iter().find(|s| s.id != id).map(|s| s.id.clone()))
-            .expect("at least two spaces");
+        let target = match into.filter(|t| *t != id && self.space(t).is_some()) {
+            Some(t) => t.to_string(),
+            None => match self.spaces.iter().find(|s| s.id != id) {
+                Some(s) => s.id.clone(),
+                // A corrupt session can hold two spaces that share one id, so "not the last
+                // space" does not imply "there is another one". Refuse instead of panicking.
+                None => return false,
+            },
+        };
         self.spaces.retain(|s| s.id != id);
         for f in self.folders.iter_mut().filter(|f| f.space == id) {
             f.space = target.clone();
@@ -317,8 +335,11 @@ impl Workspace {
         true
     }
 
+    /// Create a folder in `space`; an unknown space id falls back to the active space so a
+    /// stale call cannot produce a folder that belongs to nothing.
     pub fn create_folder(&mut self, space: &str, name: &str, auto: bool) -> Id {
-        let f = Folder { id: new_id(), name: name.into(), space: space.into(), collapsed: false, color: None, auto };
+        let space = if self.space(space).is_some() { space.to_string() } else { self.active_space.clone() };
+        let f = Folder { id: new_id(), name: name.into(), space, collapsed: false, color: None, auto };
         let id = f.id.clone();
         self.folders.push(f);
         id
@@ -487,6 +508,119 @@ mod tests {
     }
 
     #[test]
+    fn closing_active_follows_display_order_not_creation_order() {
+        let mut w = ws();
+        let a = w.open_tab("https://a.test", OpenOptions::default(), 1);
+        let b = w.open_tab("https://b.test", OpenOptions::default(), 2);
+        let c = w.open_tab("https://c.test", OpenOptions::default(), 3);
+        // Drag the newest tab to the front: c,a,b. Its parent stays None, so only the
+        // display neighbours can pick the successor.
+        assert!(w.move_tab(&c, MoveDest { before: Some(a.clone()), ..Default::default() }));
+        assert_eq!(w.tabs.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(), vec![c.as_str(), a.as_str(), b.as_str()]);
+        assert!(w.activate(&c, 4));
+        let out = w.close_tab(&c);
+        assert_eq!(out.next_active.as_deref(), Some(a.as_str()), "the tab that took c's slot wins over the newer b");
+    }
+
+    #[test]
+    fn closing_the_last_visible_tab_falls_back_to_the_one_before_it() {
+        let mut w = ws();
+        let a = w.open_tab("https://a.test", OpenOptions::default(), 1);
+        let b = w.open_tab("https://b.test", OpenOptions::default(), 2);
+        let c = w.open_tab("https://c.test", OpenOptions::default(), 3);
+        assert!(w.activate(&c, 4));
+        let out = w.close_tab(&c);
+        assert_eq!(out.next_active.as_deref(), Some(b.as_str()), "nothing follows c, so the nearest visible tab before it");
+        assert_eq!(w.active_tab.as_deref(), Some(b.as_str()));
+        assert_eq!(w.active_space, w.tab(&b).unwrap().space);
+        assert!(w.tab(&a).is_some());
+    }
+
+    #[test]
+    fn closing_a_middle_tab_picks_the_one_that_slid_into_its_slot() {
+        let mut w = ws();
+        let a = w.open_tab("https://a.test", OpenOptions::default(), 1);
+        let b = w.open_tab("https://b.test", OpenOptions::default(), 2);
+        let c = w.open_tab("https://c.test", OpenOptions::default(), 3);
+        assert!(w.activate(&b, 4));
+        let out = w.close_tab(&b);
+        assert_eq!(out.next_active.as_deref(), Some(c.as_str()));
+        assert!(w.tab(&a).is_some());
+    }
+
+    #[test]
+    fn closing_active_ignores_archived_neighbours() {
+        let mut w = ws();
+        let a = w.open_tab("https://a.test", OpenOptions::default(), 1);
+        let b = w.open_tab("https://b.test", OpenOptions::default(), 2);
+        w.tab_mut(&b).unwrap().archived = true;
+        assert!(w.activate(&a, 3));
+        let out = w.close_tab(&a);
+        assert_eq!(out.next_active, None, "an archived tab is not a successor");
+    }
+
+    #[test]
+    fn move_dest_pinned_none_keeps_a_pinned_tab_pinned() {
+        let mut w = ws();
+        let a = w.open_tab("https://a.test", OpenOptions { pinned: true, ..Default::default() }, 1);
+        w.move_tab(&a, MoveDest::default());
+        assert!(w.tab(&a).unwrap().pinned, "no folder, no explicit state: nothing changes");
+        assert_eq!(w.tab(&a).unwrap().folder, None);
+    }
+
+    #[test]
+    fn move_dest_pinned_none_with_a_folder_unpins_and_files() {
+        let mut w = ws();
+        let a = w.open_tab("https://a.test", OpenOptions { pinned: true, ..Default::default() }, 1);
+        let f = w.create_folder(&w.active_space.clone(), "Work", false);
+        w.move_tab(&a, MoveDest { folder: Some(f.clone()), ..Default::default() });
+        let t = w.tab(&a).unwrap();
+        assert!(!t.pinned, "a tab cannot be pinned and filed at once");
+        assert_eq!(t.folder.as_deref(), Some(f.as_str()));
+        assert!(!t.auto_filed, "the user placed it, so it is never auto-refiled");
+    }
+
+    #[test]
+    fn move_dest_pinned_is_honoured_explicitly() {
+        let mut w = ws();
+        let a = w.open_tab("https://a.test", OpenOptions::default(), 1);
+        let f = w.create_folder(&w.active_space.clone(), "Work", false);
+        // Some(true) drops the folder...
+        w.move_tab(&a, MoveDest { folder: Some(f.clone()), pinned: Some(true), ..Default::default() });
+        assert!(w.tab(&a).unwrap().pinned);
+        assert_eq!(w.tab(&a).unwrap().folder, None);
+        // ...and Some(false) files it even though it was pinned.
+        w.set_pinned(&a, true);
+        w.move_tab(&a, MoveDest { folder: Some(f.clone()), pinned: Some(false), ..Default::default() });
+        assert!(!w.tab(&a).unwrap().pinned);
+        assert_eq!(w.tab(&a).unwrap().folder.as_deref(), Some(f.as_str()));
+    }
+
+    #[test]
+    fn open_and_create_reject_dangling_ids() {
+        let mut w = ws();
+        let home = w.active_space.clone();
+        // A folder that does not exist is dropped, not stored.
+        let a = w.open_tab("https://a.test", OpenOptions { folder: Some("ghost".into()), ..Default::default() }, 1);
+        assert_eq!(w.tab(&a).unwrap().folder, None);
+        // A space that does not exist falls back to the active one.
+        let b = w.open_tab("https://b.test", OpenOptions { space: Some("ghost".into()), ..Default::default() }, 2);
+        assert_eq!(w.tab(&b).unwrap().space, home);
+        let f = w.create_folder("ghost", "Orphan", false);
+        assert_eq!(w.folders.iter().find(|x| x.id == f).unwrap().space, home, "no folder belongs to a space that is not there");
+    }
+
+    #[test]
+    fn open_keeps_an_existing_folder_and_inherits_it_for_children() {
+        let mut w = ws();
+        let f = w.create_folder(&w.active_space.clone(), "Work", false);
+        let a = w.open_tab("https://a.test", OpenOptions { folder: Some(f.clone()), ..Default::default() }, 1);
+        assert_eq!(w.tab(&a).unwrap().folder.as_deref(), Some(f.as_str()));
+        let b = w.open_tab("https://b.test", OpenOptions { parent: Some(a), ..Default::default() }, 2);
+        assert_eq!(w.tab(&b).unwrap().folder.as_deref(), Some(f.as_str()));
+    }
+
+    #[test]
     fn auto_file_creates_folder_once_and_respects_user_choice() {
         let mut w = ws();
         let filer = Filer::default();
@@ -563,6 +697,18 @@ mod tests {
         assert_eq!(w.tab(&t).unwrap().space, home);
         assert_eq!(w.active_space, home);
         assert!(!w.remove_space(&home, None), "cannot remove the last space");
+    }
+
+    #[test]
+    fn remove_space_refuses_when_every_space_shares_one_id() {
+        let mut w = ws();
+        let dup = w.active_space.clone();
+        // A corrupt session: two entries, one id, so no other space exists to fall back to.
+        let other = Space { id: dup.clone(), name: "Home (copy)".into(), icon: "flame".into(), color: "#f59e0b".into(), theme: None };
+        w.spaces.push(other);
+        assert!(!w.remove_space(&dup, None), "no target space means no removal, and never a panic");
+        assert_eq!(w.spaces.len(), 2, "the workspace is left as it was");
+        assert_eq!(w.active_space, dup);
     }
 
     #[test]

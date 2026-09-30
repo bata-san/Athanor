@@ -99,7 +99,7 @@ impl ExtHost {
     /// CSS for the shell: the theme's variables, then every enabled extension's shell CSS.
     pub fn shell_css(&self, theme: &str) -> String {
         let reg = self.registry.read();
-        let base = reg.theme(theme).or_else(|| reg.theme("ember")).map(|t| t.to_css()).unwrap_or_default();
+        let base = reg.theme(theme).or_else(|| reg.theme("monolith")).map(|t| t.to_css()).unwrap_or_default();
         format!("{base}\n{}", reg.shell_css())
     }
 
@@ -217,7 +217,8 @@ impl ExtHost {
             "storage.get" | "storage.set" => {
                 self.check(ext, Permission::Storage)?;
                 let path = self.storage_path(ext)?;
-                let mut map: BTreeMap<String, Value> = store::load_or_default(&path).unwrap_or_default();
+                // Only a missing file means "empty"; a corrupt one must not be silently overwritten.
+                let mut map: BTreeMap<String, Value> = store::load_or_default(&path).map_err(|e| format!("extension storage unreadable: {e}"))?;
                 let key = params.get("key").and_then(Value::as_str).ok_or("key required")?.to_string();
                 if method == "storage.get" {
                     return Ok(map.get(&key).cloned().unwrap_or(Value::Null));

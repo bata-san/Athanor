@@ -1,8 +1,9 @@
 export function normalizeShortcut(input: string): string {
-  const aliases: Record<string, string> = { CONTROL: 'Ctrl', CTRL: 'Ctrl', CMD: 'Meta', COMMAND: 'Meta', OPTION: 'Alt', ESC: 'Escape', 'ARROWLEFT': 'Left', 'ARROWRIGHT': 'Right', 'ARROWUP': 'Up', 'ARROWDOWN': 'Down', ' ': 'Space' }
+  const aliases: Record<string, string> = { CONTROL: 'Ctrl', CTRL: 'Ctrl', CMD: 'Meta', COMMAND: 'Meta', OPTION: 'Alt', ESC: 'Escape', LEFT: 'Left', RIGHT: 'Right', UP: 'Up', DOWN: 'Down', ARROWLEFT: 'Left', ARROWRIGHT: 'Right', ARROWUP: 'Up', ARROWDOWN: 'Down', ' ': 'Space' }
+  const modifierAliases: Record<string, string> = { SHIFT: 'Shift', ALT: 'Alt', META: 'Meta', CONTROL: 'Ctrl', CTRL: 'Ctrl' }
   const parts = input.split('+').map((part) => {
     const value = part.trim(), upper = value.toUpperCase()
-    return aliases[upper] ?? ({ SHIFT: 'Shift', ALT: 'Alt', META: 'Meta', CONTROL: 'Ctrl', CTRL: 'Ctrl' }[upper] ?? (value.length === 1 ? value.toUpperCase() : value))
+    return aliases[upper] ?? modifierAliases[upper] ?? (value.length === 1 ? value.toUpperCase() : value)
   })
   const order = ['Ctrl', 'Alt', 'Shift', 'Meta']
   const modifiers = order.filter((key) => parts.includes(key))

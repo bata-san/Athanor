@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Athanor",
+        "width": 420,
+        "height": 800,
+        "resizable": true
+      }
+    ]
+  }
+}

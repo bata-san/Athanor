@@ -26,7 +26,7 @@ use browser::{Browser, Paths};
 use ext_host::ExtHost;
 use filter::Filter;
 use std::sync::Arc;
-use tauri::{http::Response, Manager, RunEvent};
+use tauri::{http::Response, Emitter, Manager, RunEvent};
 
 fn asset_response(app: &tauri::AppHandle, hash: &str) -> Response<Vec<u8>> {
     let not_found = || Response::builder().status(404).body(Vec::new()).expect("static response");
@@ -36,6 +36,8 @@ fn asset_response(app: &tauri::AppHandle, hash: &str) -> Response<Vec<u8>> {
             .header("Content-Type", mime)
             .header("Access-Control-Allow-Origin", "*")
             .header("Cache-Control", "max-age=31536000, immutable")
+            .header("X-Content-Type-Options", "nosniff")
+            .header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
             .body(bytes)
             .unwrap_or_else(|_| not_found()),
         Err(_) => not_found(),
@@ -44,9 +46,10 @@ fn asset_response(app: &tauri::AppHandle, hash: &str) -> Response<Vec<u8>> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let app = tauri::Builder::default()
-        #[cfg(target_os = "android")]
-        .plugin(engine_mobile::plugin())
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(engine_mobile::plugin());
+    let app = builder
         .plugin(tauri_plugin_dialog::init())
         .register_uri_scheme_protocol("athanor-ext", |ctx, req| {
             let not_found = || Response::builder().status(404).body(Vec::new()).expect("static response");
@@ -81,6 +84,13 @@ pub fn run() {
             {
                 let b = browser.clone();
                 filter.start(browser.settings().adblock_enabled, Arc::new(move || b.emit_adblock()));
+            }
+            {
+                let host = app.state::<Arc<ExtHost>>().inner().clone();
+                let handle = app.handle().clone();
+                browser.set_theme_hook(move |theme| {
+                    let _ = handle.emit("athanor://shell-css", host.shell_css(theme));
+                });
             }
             app.manage(browser);
             Ok(())

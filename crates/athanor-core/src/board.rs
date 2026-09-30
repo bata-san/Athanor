@@ -4,7 +4,7 @@
 use crate::{new_id, Id};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{fs, io, path::{Path, PathBuf}};
+use std::{collections::HashSet, fs, io, path::{Path, PathBuf}};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -50,7 +50,10 @@ fn one() -> f64 {
     1.0
 }
 
+/// Canvas pan/zoom. Missing fields fall back to [`View::default`] (`zoom: 1.0`), so a board
+/// written before the zoom was stored still opens.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct View {
     pub x: f64,
     pub y: f64,
@@ -105,8 +108,10 @@ impl Board {
         Self { id: new_id(), name: name.into(), items: vec![], view: View::default(), background: default_bg(), always_on_top: false }
     }
 
+    /// One above the topmost item. Saturates: a board whose z already reached `i32::MAX`
+    /// (hand-edited or long-lived) must not panic on the next insert.
     fn next_z(&self) -> i32 {
-        self.items.iter().map(|i| i.z).max().map_or(0, |z| z + 1)
+        self.items.iter().map(|i| i.z).max().map_or(0, |z| z.saturating_add(1))
     }
 
     /// Add an image centred on `(cx, cy)` (board coordinates), scaled so its longest edge is at most 400.
@@ -169,7 +174,7 @@ impl Board {
     }
 
     pub fn send_to_back(&mut self, id: &str) {
-        let z = self.items.iter().map(|i| i.z).min().map_or(0, |z| z - 1);
+        let z = self.items.iter().map(|i| i.z).min().map_or(0, |z| z.saturating_sub(1));
         if let Some(i) = self.items.iter_mut().find(|i| i.id == id) {
             i.z = z;
         }
@@ -271,8 +276,55 @@ impl AssetStore {
         Ok((bytes, mime))
     }
 
+    /// Delete the asset and its `.mime` sidecar. A hash that is not stored is not an error;
+    /// a hash that is not 64 hex chars is rejected like in [`Self::get`].
+    pub fn remove(&self, hash: &str) -> io::Result<()> {
+        if !Self::valid(hash) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "bad asset hash"));
+        }
+        remove_file_if_exists(&self.root.join(hash))?;
+        remove_file_if_exists(&self.root.join(format!("{hash}.mime")))
+    }
+
+    /// Delete every stored asset whose hash is not in `keep` and return how many were removed.
+    ///
+    /// Only files named with 64 hex chars count as assets (plus their `.mime` sidecar), so
+    /// anything else living in the store directory is left alone. A store that was never
+    /// written to holds nothing to collect.
+    pub fn gc(&self, keep: &HashSet<String>) -> io::Result<usize> {
+        let entries = match fs::read_dir(&self.root) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(0),
+            Err(e) => return Err(e),
+        };
+        let mut removed = 0;
+        for entry in entries {
+            let entry = entry?;
+            if !entry.file_type()?.is_file() {
+                continue;
+            }
+            let Some(name) = entry.file_name().to_str().map(str::to_string) else { continue };
+            if !Self::valid(&name) || keep.contains(&name) {
+                continue;
+            }
+            remove_file_if_exists(&entry.path())?;
+            remove_file_if_exists(&self.root.join(format!("{name}.mime")))?;
+            removed += 1;
+        }
+        Ok(removed)
+    }
+
     pub fn root(&self) -> &Path {
         &self.root
+    }
+}
+
+/// `fs::remove_file` that treats "already gone" as success, so deleting is idempotent.
+fn remove_file_if_exists(path: &Path) -> io::Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e),
     }
 }
 
@@ -354,5 +406,73 @@ mod tests {
         assert_eq!(s.get(&h1).unwrap(), (b"bytes".to_vec(), "image/png".to_string()));
         assert!(s.get("../secret").is_err());
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn asset_store_remove_drops_bytes_and_mime() {
+        let dir = std::env::temp_dir().join(format!("athanor-assets-{}", new_id()));
+        let s = AssetStore::new(&dir);
+        let h = s.put(b"bytes", "image/png").unwrap();
+        s.remove(&h).unwrap();
+        assert!(!dir.join(&h).exists() && !dir.join(format!("{h}.mime")).exists());
+        assert!(s.get(&h).is_err());
+        s.remove(&h).expect("removing an asset twice is not an error");
+        assert!(s.remove("../secret").is_err(), "the hash is still validated");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn asset_store_gc_keeps_referenced_assets_only() {
+        let dir = std::env::temp_dir().join(format!("athanor-assets-{}", new_id()));
+        let s = AssetStore::new(&dir);
+        let keep = s.put(b"keep", "image/png").unwrap();
+        let doomed = s.put(b"drop", "image/png").unwrap();
+        let other = s.put(b"other", "image/webp").unwrap();
+        // Not an asset: a stray file in the store directory must survive.
+        let stray = dir.join("notes.txt");
+        fs::write(&stray, b"mine").unwrap();
+        let keep_set: HashSet<String> = [keep.clone(), other.clone()].into_iter().collect();
+        assert_eq!(s.gc(&keep_set).unwrap(), 1);
+        assert!(dir.join(&keep).exists() && dir.join(&other).exists());
+        assert!(dir.join(format!("{keep}.mime")).exists());
+        assert!(!dir.join(&doomed).exists() && !dir.join(format!("{doomed}.mime")).exists());
+        assert!(stray.exists(), "gc only touches 64-char hex names");
+        assert_eq!(s.gc(&keep_set).unwrap(), 0, "a second pass finds nothing left");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn asset_store_gc_on_an_empty_store_is_a_no_op() {
+        let dir = std::env::temp_dir().join(format!("athanor-assets-{}", new_id()));
+        assert_eq!(AssetStore::new(&dir).gc(&HashSet::new()).unwrap(), 0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn view_defaults_to_unit_zoom_when_the_field_is_missing() {
+        let b: Board = serde_json::from_str(r#"{"id":"b","name":"old","view":{"x":10.0,"y":20.0}}"#).unwrap();
+        assert_eq!(b.view, View { x: 10.0, y: 20.0, zoom: 1.0 });
+        let b: Board = serde_json::from_str(r#"{"id":"b","name":"no view at all"}"#).unwrap();
+        assert_eq!(b.view, View::default());
+        assert!(b.items.is_empty() && b.background == "#1e1e1e");
+    }
+
+    #[test]
+    fn z_order_saturates_instead_of_overflowing() {
+        let mut b = Board::new("t");
+        let a = b.add_text("a", 0.0, 0.0);
+        b.add_text("c", 0.0, 0.0);
+        b.items[0].z = i32::MAX;
+        b.bring_to_front(&a);
+        assert_eq!(b.items[0].z, i32::MAX, "clamped, not wrapped");
+        b.add_text("d", 0.0, 0.0);
+        assert_eq!(b.items[2].z, i32::MAX, "a new item still gets the top z");
+        b.add_image(ImageSpec::new("h", "image/png", 10.0, 10.0), 0.0, 0.0);
+        assert_eq!(b.items[3].z, i32::MAX);
+
+        b.items[0].z = i32::MIN;
+        b.send_to_back(&a);
+        assert_eq!(b.items[0].z, i32::MIN, "clamped, not wrapped");
+        assert_eq!(b.items[2].z, i32::MAX, "the rest of the stack is untouched");
     }
 }

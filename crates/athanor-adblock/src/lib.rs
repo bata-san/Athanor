@@ -9,7 +9,7 @@
 
 pub mod privacy;
 
-use adblock::{lists::ParseOptions, Engine, FilterSet};
+use adblock::{Engine, FilterSet, lists::ParseOptions};
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -18,14 +18,18 @@ use std::{
     fs,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-const VERSION: u32 = 2;
+const VERSION: u32 = 4;
 const FALLBACK: &str = include_str!("fallback.txt");
+/// Small document-created script which reports DOM class and ID tokens to the native host.
+/// Adapters should register this for all frames before starting navigation.
+pub const COSMETIC_BRIDGE_JS: &str = include_str!("../assets/cosmetic-bridge.js");
+const PROCEDURAL_RUNTIME_JS: &str = include_str!("../assets/procedural-runtime.js");
 
 /// Native resource category.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -140,21 +144,111 @@ pub struct ListSource {
 /// Brave-class default sources; nuisance and Japanese lists start disabled.
 pub fn default_lists() -> Vec<ListSource> {
     let rows = [
-        ("easylist", "EasyList", "https://easylist.to/easylist/easylist.txt", ListKind::Network, true),
-        ("easyprivacy", "EasyPrivacy", "https://easylist.to/easylist/easyprivacy.txt", ListKind::Network, true),
-        ("ubo-filters", "uBlock filters", "https://ublockorigin.github.io/uAssets/filters/filters.txt", ListKind::Network, true),
-        ("ubo-badware", "uBlock badware", "https://ublockorigin.github.io/uAssets/filters/badware.txt", ListKind::Network, true),
-        ("ubo-privacy", "uBlock privacy", "https://ublockorigin.github.io/uAssets/filters/privacy.txt", ListKind::Network, true),
-        ("ubo-quick-fixes", "uBlock quick fixes", "https://ublockorigin.github.io/uAssets/filters/quick-fixes.txt", ListKind::Network, true),
-        ("ubo-unbreak", "uBlock unbreak", "https://ublockorigin.github.io/uAssets/filters/unbreak.txt", ListKind::Network, true),
-        ("peter-lowe", "Peter Lowe's ad servers", "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&mimetype=plaintext", ListKind::Network, true),
-        ("brave-unbreak", "Brave unbreak", "https://raw.githubusercontent.com/brave/adblock-lists/master/brave-unbreak.txt", ListKind::Network, true),
-        ("brave-specific", "Brave specific", "https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-specific.txt", ListKind::Network, true),
-        ("brave-social", "Brave social", "https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-social.txt", ListKind::Network, true),
-        ("urlhaus", "URLhaus malicious URLs", "https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-ag-online.txt", ListKind::Network, true),
-        ("easylist-cookie", "EasyList Cookie", "https://secure.fanboy.co.nz/fanboy-cookiemonster.txt", ListKind::Annoyances, false),
-        ("adguard-japanese", "AdGuard Japanese", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_7_Japanese/filter.txt", ListKind::Regional, false),
-        ("brave-resources", "Brave resources", "https://raw.githubusercontent.com/brave/adblock-resources/master/dist/resources.json", ListKind::Resources, true),
+        (
+            "easylist",
+            "EasyList",
+            "https://easylist.to/easylist/easylist.txt",
+            ListKind::Network,
+            true,
+        ),
+        (
+            "easyprivacy",
+            "EasyPrivacy",
+            "https://easylist.to/easylist/easyprivacy.txt",
+            ListKind::Network,
+            true,
+        ),
+        (
+            "ubo-filters",
+            "uBlock filters",
+            "https://ublockorigin.github.io/uAssets/filters/filters.txt",
+            ListKind::Network,
+            true,
+        ),
+        (
+            "ubo-badware",
+            "uBlock badware",
+            "https://ublockorigin.github.io/uAssets/filters/badware.txt",
+            ListKind::Network,
+            true,
+        ),
+        (
+            "ubo-privacy",
+            "uBlock privacy",
+            "https://ublockorigin.github.io/uAssets/filters/privacy.txt",
+            ListKind::Network,
+            true,
+        ),
+        (
+            "ubo-quick-fixes",
+            "uBlock quick fixes",
+            "https://ublockorigin.github.io/uAssets/filters/quick-fixes.txt",
+            ListKind::Network,
+            true,
+        ),
+        (
+            "ubo-unbreak",
+            "uBlock unbreak",
+            "https://ublockorigin.github.io/uAssets/filters/unbreak.txt",
+            ListKind::Network,
+            true,
+        ),
+        (
+            "peter-lowe",
+            "Peter Lowe's ad servers",
+            "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&mimetype=plaintext",
+            ListKind::Network,
+            true,
+        ),
+        (
+            "brave-unbreak",
+            "Brave unbreak",
+            "https://raw.githubusercontent.com/brave/adblock-lists/master/brave-unbreak.txt",
+            ListKind::Network,
+            true,
+        ),
+        (
+            "brave-specific",
+            "Brave specific",
+            "https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-specific.txt",
+            ListKind::Network,
+            true,
+        ),
+        (
+            "brave-social",
+            "Brave social",
+            "https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-social.txt",
+            ListKind::Network,
+            true,
+        ),
+        (
+            "urlhaus",
+            "URLhaus malicious URLs",
+            "https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-ag-online.txt",
+            ListKind::Network,
+            true,
+        ),
+        (
+            "easylist-cookie",
+            "EasyList Cookie",
+            "https://secure.fanboy.co.nz/fanboy-cookiemonster.txt",
+            ListKind::Annoyances,
+            false,
+        ),
+        (
+            "adguard-japanese",
+            "AdGuard Japanese",
+            "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_7_Japanese/filter.txt",
+            ListKind::Regional,
+            false,
+        ),
+        (
+            "brave-resources",
+            "Brave resources",
+            "https://raw.githubusercontent.com/brave/adblock-resources/master/dist/resources.json",
+            ListKind::Resources,
+            true,
+        ),
     ];
     rows.into_iter()
         .map(|(id, name, url, kind, default_enabled)| ListSource {
@@ -173,6 +267,12 @@ pub struct Cosmetic {
     pub css: String,
     /// Self-contained injection IIFE.
     pub js: String,
+    /// Site exceptions supplied by the compiled engine. Callers must not source these from page messages.
+    pub exceptions: HashSet<String>,
+    /// True when the page's `$generichide` exception disables generic class/ID queries.
+    pub generichide: bool,
+    /// Serialized adblock-rust procedural filters not representable as ordinary CSS.
+    pub procedural_actions: Vec<String>,
 }
 /// Blocking counter snapshot.
 #[derive(Debug, Clone, Default)]
@@ -307,13 +407,17 @@ struct Metadata {
 struct CacheHeader {
     version: u32,
     hash: String,
-    generic_selectors: Vec<String>,
     rule_counts: HashMap<String, usize>,
+    #[serde(default)]
+    denyallow: HashMap<String, Vec<String>>,
+    #[serde(default)]
+    plain_rule_lines: HashSet<String>,
 }
 struct Compiled {
     engine: Engine,
-    generic_selectors: Vec<String>,
     rule_counts: HashMap<String, usize>,
+    denyallow: HashMap<String, Vec<String>>,
+    plain_rule_lines: HashSet<String>,
 }
 struct Inner {
     dir: PathBuf,
@@ -344,8 +448,9 @@ impl Blocker {
                 dir: data_dir.into(),
                 compiled: RwLock::new(Arc::new(Compiled {
                     engine,
-                    generic_selectors: generic_selectors(FALLBACK),
                     rule_counts: HashMap::new(),
+                    denyallow: HashMap::new(),
+                    plain_rule_lines: HashSet::new(),
                 })),
                 config: RwLock::new(Config::default()),
                 enabled: AtomicBool::new(true),
@@ -475,6 +580,22 @@ impl Blocker {
         let compiled = self.inner.compiled.read().clone();
         let result = compiled.engine.check_network_request(&parsed);
         if result.should_block() {
+            if let Some(rule) = result
+                .filter
+                .as_ref()
+                .and_then(|filter| filter.raw_line.as_ref())
+            {
+                if !compiled.plain_rule_lines.contains(rule.trim())
+                    && compiled.denyallow.get(rule.trim()).is_some_and(|domains| {
+                        domains.iter().any(|domain| {
+                            parsed.hostname == *domain
+                                || parsed.hostname.ends_with(&format!(".{domain}"))
+                        })
+                    })
+                {
+                    return Decision::Allow;
+                }
+            }
             self.inner.blocked.fetch_add(1, Ordering::Relaxed);
             *self
                 .inner
@@ -489,10 +610,32 @@ impl Blocker {
                 rule: result.filter.and_then(|f| f.raw_line),
             };
         }
+        if let Some(to) = result.redirect {
+            self.inner.blocked.fetch_add(1, Ordering::Relaxed);
+            *self
+                .inner
+                .by_host
+                .lock()
+                .entry(parsed.hostname)
+                .or_default() += 1;
+            return Decision::Redirect { to };
+        }
         if let Some(rewrite) = result.rewritten_url {
             return Decision::Rewrite(rewrite);
         }
         Decision::Allow
+    }
+    /// Return an engine-directed main-frame rewrite without recording a block counter.
+    pub fn rewrite_document_url(&self, url: &str) -> Option<String> {
+        if !self.enabled() || self.site_disabled(url) {
+            return None;
+        }
+        let request = adblock::request::Request::new(url, url, "document", "get").ok()?;
+        let compiled = self.inner.compiled.read().clone();
+        compiled
+            .engine
+            .check_network_request(&request)
+            .rewritten_url
     }
     /// Return CSS and a safe-to-evaluate injection snippet for a page.
     pub fn cosmetic(&self, page_url: &str) -> Cosmetic {
@@ -501,18 +644,9 @@ impl Blocker {
         }
         let compiled = self.inner.compiled.read().clone();
         let specific = compiled.engine.url_cosmetic_resources(page_url);
-        let mut css = if specific.generichide {
-            String::new()
-        } else {
-            selector_css(
-                &compiled
-                    .generic_selectors
-                    .iter()
-                    .filter(|s| !specific.exceptions.contains(*s))
-                    .cloned()
-                    .collect::<Vec<_>>(),
-            )
-        };
+        // url_cosmetic_resources includes the small set of non-class/id generic rules, along
+        // with host-specific selectors. Class and ID rules are deliberately fetched on demand.
+        let mut css = String::new();
         let mut selectors: Vec<_> = specific
             .hide_selectors
             .iter()
@@ -521,6 +655,7 @@ impl Blocker {
             .collect();
         selectors.sort();
         css.push_str(&selector_css(&selectors));
+        let mut procedural_actions = Vec::new();
         for action in &specific.procedural_actions {
             if let Ok(parsed) = serde_json::from_str::<
                 adblock::cosmetic_filter_cache::ProceduralOrActionFilter,
@@ -533,12 +668,87 @@ impl Blocker {
                         css.push_str(&style);
                         css.push_str("}\n");
                     }
+                } else {
+                    procedural_actions.push(action.clone());
                 }
             }
         }
+        procedural_actions.sort();
+        procedural_actions.dedup();
         let css_json = serde_json::to_string(&css).unwrap_or_else(|_| "\"\"".into());
-        let js = format!("(()=>{{const css={css_json};if(css){{const s=document.createElement('style');s.textContent=css;(document.head||document.documentElement).appendChild(s);}}{} }})();", specific.injected_script);
-        Cosmetic { css, js }
+        let actions_json = procedural_actions
+            .iter()
+            .filter_map(|action| serde_json::from_str::<serde_json::Value>(action).ok())
+            .collect::<Vec<_>>();
+        let actions_json = serde_json::to_string(&actions_json).unwrap_or_else(|_| "[]".into());
+        let mut js = String::new();
+        if !procedural_actions.is_empty() {
+            js.push_str(PROCEDURAL_RUNTIME_JS);
+        }
+        if !css.is_empty() || !procedural_actions.is_empty() || !specific.injected_script.is_empty()
+        {
+            js.push_str("\n(()=>{const css=");
+            js.push_str(&css_json);
+            js.push_str(";if(css){const s=document.createElement('style');s.textContent=css;(document.head||document.documentElement).appendChild(s);}");
+            if !procedural_actions.is_empty() {
+                js.push_str(
+                    "globalThis.__athanorApplyProcedural&&globalThis.__athanorApplyProcedural(",
+                );
+                js.push_str(&actions_json);
+                js.push_str(");");
+            }
+            js.push_str(&specific.injected_script);
+            js.push_str("})();");
+        }
+        Cosmetic {
+            css,
+            js,
+            exceptions: specific.exceptions,
+            generichide: specific.generichide,
+            procedural_actions,
+        }
+    }
+    /// Match observed class and ID tokens against generic selectors for a particular page.
+    /// The supplied exception set is treated as untrusted and intersected with the engine's
+    /// current URL-specific exceptions before matching.
+    pub fn cosmetic_query(
+        &self,
+        page_url: &str,
+        classes: &[String],
+        ids: &[String],
+        exceptions: &HashSet<String>,
+    ) -> Vec<String> {
+        if !self.enabled() || self.site_disabled(page_url) || classes.len() + ids.len() > 4096 {
+            return Vec::new();
+        }
+        let compiled = self.inner.compiled.read().clone();
+        let resources = compiled.engine.url_cosmetic_resources(page_url);
+        if resources.generichide {
+            return Vec::new();
+        }
+        let mut trusted_exceptions = resources.exceptions;
+        // Keep the argument useful for adapters which cache the initial resource response, but
+        // never let a document invent an exception that did not come from the current engine.
+        let supplied_exceptions = exceptions
+            .iter()
+            .filter(|item| trusted_exceptions.contains(*item))
+            .cloned()
+            .collect::<Vec<_>>();
+        trusted_exceptions.extend(supplied_exceptions);
+        let class_tokens = classes.iter().filter(|item| {
+            !item.is_empty() && item.len() <= 256 && !item.chars().any(char::is_control)
+        });
+        let id_tokens = ids.iter().filter(|item| {
+            !item.is_empty() && item.len() <= 256 && !item.chars().any(char::is_control)
+        });
+        let mut selectors =
+            compiled
+                .engine
+                .hidden_class_id_selectors(class_tokens, id_tokens, &trusted_exceptions);
+        selectors.retain(|selector| valid_selector(selector));
+        selectors.sort_unstable();
+        selectors.dedup();
+        selectors
     }
     /// Snapshot the block counters and loaded line counts.
     pub fn stats(&self) -> Stats {
@@ -643,8 +853,9 @@ impl Blocker {
         let header = CacheHeader {
             version: VERSION,
             hash: hash.into(),
-            generic_selectors: compiled.generic_selectors.clone(),
             rule_counts: compiled.rule_counts.clone(),
+            denyallow: compiled.denyallow.clone(),
+            plain_rule_lines: compiled.plain_rule_lines.clone(),
         };
         if let Ok(mut bytes) = serde_json::to_vec(&header) {
             bytes.push(b'\n');
@@ -659,12 +870,86 @@ impl Blocker {
         }
     }
 }
+fn normalize_denyallow(text: &str, denyallow: &mut HashMap<String, Vec<String>>) -> String {
+    let mut normalized = String::with_capacity(text.len());
+    for line in text.lines() {
+        let Some((pattern, options)) = line.split_once('$') else {
+            normalized.push_str(line);
+            normalized.push('\n');
+            continue;
+        };
+        let mut retained = Vec::new();
+        let mut targets = Vec::new();
+        let mut found = false;
+        let mut changed = false;
+        let mut valid = true;
+        for option in options.split(',') {
+            if let Some(value) = option.trim().strip_prefix("denyallow=") {
+                found = true;
+                for domain in value.split('|') {
+                    let Ok(url) = url::Url::parse(&format!("https://{domain}/")) else {
+                        valid = false;
+                        break;
+                    };
+                    let Some(host) = url.host_str() else {
+                        valid = false;
+                        break;
+                    };
+                    if host != domain && !domain.starts_with('[') {
+                        // Domain exceptions are plain hostnames, not URLs, wildcards, or ports.
+                        valid = false;
+                        break;
+                    }
+                    targets.push(host.to_ascii_lowercase());
+                }
+            } else if option.trim() == "popup" {
+                found = true;
+                changed = true;
+                retained.push("document");
+            } else if option.trim() == "~popup" {
+                found = true;
+                changed = true;
+                retained.push("~document");
+            } else {
+                retained.push(option.trim());
+            }
+        }
+        if !found {
+            normalized.push_str(line);
+        } else if !valid {
+            // Leave invalid syntax untouched; adblock-rust will ignore it, which fails open.
+            normalized.push_str(line);
+        } else {
+            let clean = if retained.is_empty() {
+                pattern.to_owned()
+            } else {
+                format!("{pattern}${}", retained.join(","))
+            };
+            let has_targets = !targets.is_empty();
+            if has_targets {
+                let entries = denyallow.entry(clean.clone()).or_default();
+                entries.extend(targets);
+                entries.sort_unstable();
+                entries.dedup();
+            }
+            if changed || has_targets {
+                normalized.push_str(&clean);
+            } else {
+                normalized.push_str(line);
+            }
+        }
+        normalized.push('\n');
+    }
+    normalized
+}
+
 fn compile(raw: &[(ListSource, String)]) -> Compiled {
     let mut set = FilterSet::new(true);
     let mut css_text = String::new();
     let mut counts = HashMap::new();
     let mut any = false;
     let mut resources = Vec::new();
+    let mut denyallow = HashMap::<String, Vec<String>>::new();
     for (source, text) in raw {
         if source.kind == ListKind::Resources {
             if let Ok(r) = parse_resources(text) {
@@ -684,6 +969,7 @@ fn compile(raw: &[(ListSource, String)]) -> Compiled {
         );
         css_text.push_str(text);
         css_text.push('\n');
+        let normalized_text = normalize_denyallow(text, &mut denyallow);
         let permissions = if source.id.starts_with("brave-") {
             adblock::resources::PermissionMask::from_bits(0b10)
         } else if source.id.starts_with("ubo-") {
@@ -692,7 +978,7 @@ fn compile(raw: &[(ListSource, String)]) -> Compiled {
             Default::default()
         };
         set.add_filter_list(
-            text.clone(),
+            normalized_text,
             ParseOptions {
                 permissions,
                 ..ParseOptions::default()
@@ -705,10 +991,25 @@ fn compile(raw: &[(ListSource, String)]) -> Compiled {
     }
     let mut engine = Engine::new_with_filter_set(set);
     engine.use_resources(resources);
+    let denyallow_keys = denyallow.keys().cloned().collect::<HashSet<_>>();
+    let mut plain_rule_lines = HashSet::new();
+    if !denyallow_keys.is_empty() {
+        for (_, text) in raw
+            .iter()
+            .filter(|(source, _)| source.kind != ListKind::Resources)
+        {
+            for line in text.lines().map(str::trim) {
+                if !line.contains("$denyallow=") && denyallow_keys.contains(line) {
+                    plain_rule_lines.insert(line.to_owned());
+                }
+            }
+        }
+    }
     Compiled {
         engine,
-        generic_selectors: generic_selectors(&css_text),
         rule_counts: counts,
+        denyallow,
+        plain_rule_lines,
     }
 }
 fn parse_resources(text: &str) -> Result<Vec<adblock::resources::Resource>, serde_json::Error> {
@@ -731,8 +1032,9 @@ fn decode_cache(bytes: &[u8], hash: &str, raw: &[(ListSource, String)]) -> Optio
     engine.use_resources(resources);
     Some(Compiled {
         engine,
-        generic_selectors: header.generic_selectors,
         rule_counts: header.rule_counts,
+        denyallow: header.denyallow,
+        plain_rule_lines: header.plain_rule_lines,
     })
 }
 fn valid_selector(s: &str) -> bool {
@@ -747,22 +1049,6 @@ fn valid_selector(s: &str) -> bool {
         && !s.contains(":remove(")
         && !s.contains("+js(")
         && !s.contains("##")
-}
-fn generic_selectors(text: &str) -> Vec<String> {
-    let mut selectors = Vec::new();
-    let mut seen = HashSet::new();
-    for line in text.lines() {
-        if let Some(s) = line.strip_prefix("##") {
-            let s = s.trim();
-            if valid_selector(s) && seen.insert(s) {
-                selectors.push(s.to_owned());
-                if selectors.len() == 10_000 {
-                    break;
-                }
-            }
-        }
-    }
-    selectors
 }
 fn selector_css(selectors: &[String]) -> String {
     let mut css = String::new();
@@ -844,9 +1130,22 @@ mod tests {
             resource_type: ResourceType::Script,
         }
     }
+    fn typed_request<'a>(
+        url: &'a str,
+        source: &'a str,
+        resource_type: ResourceType,
+    ) -> Request<'a> {
+        Request {
+            url,
+            source_url: source,
+            resource_type,
+        }
+    }
     #[test]
     fn network_rules_and_stats() {
-        let blocker = fixture("||ads.example^$script,third-party\n@@||ads.example/ok.js$script\n||hard.example^$important\n@@||hard.example^\n||first.example^$script\n");
+        let blocker = fixture(
+            "||ads.example^$script,third-party\n@@||ads.example/ok.js$script\n||hard.example^$important\n@@||hard.example^\n||first.example^$script\n",
+        );
         assert!(matches!(
             blocker.check(&request("https://ads.example/a.js", "https://site.test/")),
             Decision::Block { .. }
@@ -875,16 +1174,139 @@ mod tests {
         assert_eq!(ResourceType::parse("xmlhttprequest"), ResourceType::Xhr);
     }
     #[test]
+    fn network_option_precedence_and_resource_types() {
+        let blocker = fixture(
+            "||bad.example^$script\n||bad.example^$script,badfilter\n||hard.example^$script,important\n@@||hard.example^$script\n||domain.example^$script,domain=site.test\n||popup.example^$popup\n||ping.example^$ping\n||socket.example^$websocket\n||third.example^$script,3p\n||first.example^$script,1p\n",
+        );
+        assert_eq!(
+            blocker.check(&request("https://bad.example/x.js", "https://site.test/")),
+            Decision::Allow
+        );
+        assert!(matches!(
+            blocker.check(&request("https://hard.example/x.js", "https://site.test/")),
+            Decision::Block { .. }
+        ));
+        assert!(matches!(
+            blocker.check(&request(
+                "https://domain.example/x.js",
+                "https://site.test/"
+            )),
+            Decision::Block { .. }
+        ));
+        assert_eq!(
+            blocker.check(&request(
+                "https://domain.example/x.js",
+                "https://other.test/"
+            )),
+            Decision::Allow
+        );
+        assert!(matches!(
+            blocker.check(&typed_request(
+                "https://popup.example/",
+                "https://site.test/",
+                ResourceType::Document
+            )),
+            Decision::Block { .. }
+        ));
+        assert!(matches!(
+            blocker.check(&typed_request(
+                "https://ping.example/p",
+                "https://site.test/",
+                ResourceType::Ping
+            )),
+            Decision::Block { .. }
+        ));
+        assert!(matches!(
+            blocker.check(&typed_request(
+                "wss://socket.example/socket",
+                "https://site.test/",
+                ResourceType::WebSocket
+            )),
+            Decision::Block { .. }
+        ));
+        assert!(matches!(
+            blocker.check(&request("https://third.example/a.js", "https://site.test/")),
+            Decision::Block { .. }
+        ));
+        assert_eq!(
+            blocker.check(&request(
+                "https://third.example/a.js",
+                "https://third.example/"
+            )),
+            Decision::Allow
+        );
+        assert!(matches!(
+            blocker.check(&request(
+                "https://first.example/a.js",
+                "https://first.example/"
+            )),
+            Decision::Block { .. }
+        ));
+        assert_eq!(
+            blocker.check(&request("https://first.example/a.js", "https://site.test/")),
+            Decision::Allow
+        );
+    }
+    #[test]
+    fn denyallow_does_not_weaken_an_overlapping_plain_block_rule() {
+        let blocker = fixture("*$script\n*$script,denyallow=trusted.test\n");
+        assert!(matches!(
+            blocker.check(&request("https://trusted.test/a.js", "https://site.test/")),
+            Decision::Block { .. }
+        ));
+    }
+    #[test]
+    fn denyallow_exempts_only_matching_request_destination_hosts() {
+        let blocker = fixture("*$script,denyallow=trusted.test,domain=site.test\n");
+        assert_eq!(
+            blocker.check(&request(
+                "https://trusted.test/lib.js",
+                "https://site.test/"
+            )),
+            Decision::Allow
+        );
+        assert!(matches!(
+            blocker.check(&request("https://deny.example/x.js", "https://site.test/")),
+            Decision::Block { .. }
+        ));
+    }
+    #[test]
     fn cosmetic_and_generichide() {
-        let blocker = fixture("##.generic-ad\nexample.com##.local-ad\nexample.com##.styled:style(color: red)\n@@||example.com^$generichide\n##div:has-text(ad)\n");
+        let blocker = fixture(
+            "##.generic-ad\n###generic-slot\nexample.com##.local-ad\nexample.com##.styled:style(color: red)\n@@||example.com^$generichide\n",
+        );
         let normal = blocker.cosmetic("https://elsewhere.test/");
-        assert!(normal.css.contains(".generic-ad"));
-        assert!(!normal.css.contains(":has-text"));
-        assert!(normal.js.contains("document.createElement('style')"));
+        assert!(!normal.css.contains(".generic-ad"));
+        assert!(normal.css.len() < 128);
+        let classes = vec!["generic-ad".to_string()];
+        let ids = vec!["generic-slot".to_string()];
+        let matched =
+            blocker.cosmetic_query("https://elsewhere.test/", &classes, &ids, &HashSet::new());
+        assert!(matched.contains(&".generic-ad".to_string()));
+        assert!(matched.contains(&"#generic-slot".to_string()));
         let exception = blocker.cosmetic("https://example.com/");
-        assert!(!exception.css.contains(".generic-ad"));
         assert!(exception.css.contains(".local-ad"));
         assert!(exception.css.contains(".styled{color: red}"));
+        assert!(
+            blocker
+                .cosmetic_query(
+                    "https://example.com/",
+                    &classes,
+                    &ids,
+                    &exception.exceptions
+                )
+                .is_empty()
+        );
+        assert!(exception.generichide);
+    }
+    #[test]
+    fn procedural_filters_are_preserved_for_the_embedded_runtime() {
+        let blocker = fixture("example.com##div:has-text(ad)\nexample.com##.sponsor:remove()\n");
+        let cosmetic = blocker.cosmetic("https://example.com/");
+        assert!(!cosmetic.procedural_actions.is_empty());
+        assert!(cosmetic.js.contains("__athanorApplyProcedural"));
+        assert!(cosmetic.js.contains("has-text"));
+        assert!(cosmetic.js.contains("\"selector\":["));
     }
     #[test]
     fn persistence_cache_and_disable() {
@@ -950,6 +1372,17 @@ mod tests {
             Decision::Rewrite("https://site.test/a?keep=y".into())
         );
     }
+    #[test]
+    fn document_removeparam_is_available_without_counting_a_block() {
+        let blocker = fixture("||site.test^$document,removeparam=utm_source\n");
+        assert_eq!(
+            blocker
+                .rewrite_document_url("https://site.test/a?utm_source=x&keep=y")
+                .as_deref(),
+            Some("https://site.test/a?keep=y")
+        );
+        assert_eq!(blocker.stats().blocked_total, 0);
+    }
     struct FakeFetcher;
     impl Fetcher for FakeFetcher {
         fn fetch(
@@ -988,14 +1421,18 @@ mod tests {
             Decision::Block { .. }
         ));
         let second = blocker.update_lists(false);
-        assert!(second
-            .iter()
-            .any(|r| r.id == "easylist" && !r.changed && r.error.is_none()));
+        assert!(
+            second
+                .iter()
+                .any(|r| r.id == "easylist" && !r.changed && r.error.is_none())
+        );
     }
     #[test]
     fn redirect_resource() {
-        use base64::{engine::general_purpose::STANDARD, Engine as _};
-        let blocker = fixture("||redirect.example^$script,redirect=noop.js\n");
+        use base64::{Engine as _, engine::general_purpose::STANDARD};
+        let blocker = fixture(
+            "||redirect.example^$script,redirect=noop.js\n||redirect-rule.example^$script,redirect-rule=noop.js\n",
+        );
         let resources = serde_json::json!([{"name":"noop.js","aliases":[],"kind":{"mime":"application/javascript"},"content":STANDARD.encode("void 0;"),"dependencies":[]}]);
         atomic_write(
             &blocker.raw_path("brave-resources"),
@@ -1006,6 +1443,13 @@ mod tests {
         assert!(matches!(
             blocker.check(&request(
                 "https://redirect.example/a.js",
+                "https://site.test/"
+            )),
+            Decision::Redirect { .. }
+        ));
+        assert!(matches!(
+            blocker.check(&request(
+                "https://redirect-rule.example/a.js",
                 "https://site.test/"
             )),
             Decision::Redirect { .. }

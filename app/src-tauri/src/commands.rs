@@ -162,7 +162,7 @@ pub async fn set_muted(b: B<'_>, tab: Id, muted: bool) -> R {
 
 #[tauri::command]
 pub async fn move_tab(b: B<'_>, tab: Id, space: Option<Id>, folder: Option<Id>, before: Option<Id>, pinned: Option<bool>) -> R {
-    b.move_tab(&tab, MoveDest { space, folder, before, pinned: pinned.unwrap_or(false) });
+    b.move_tab(&tab, MoveDest { space, folder, before, pinned });
     Ok(())
 }
 
@@ -277,14 +277,20 @@ pub async fn remove_space(b: B<'_>, id: Id) -> R {
 
 #[tauri::command]
 pub async fn switch_space(b: B<'_>, id: Id) -> R {
+    let exists = b.with_ws(|w| w.space(&id).is_some());
+    if !exists {
+        return Ok(());
+    }
+    // prefer the most recently used tab of that space; an empty space gets a fresh new-tab page
     let target = b.with_ws(|w| {
-        w.space(&id)?;
         w.active_space = id.clone();
-        // prefer the most recently used tab of that space
         w.visible_tabs(&id).iter().max_by_key(|t| t.last_active).map(|t| t.id.clone())
     });
-    if let Some(t) = target {
-        b.activate_tab(&t);
+    match target {
+        Some(t) => b.activate_tab(&t),
+        None => {
+            b.open_tab(OpenArgs { space: Some(id), ..Default::default() });
+        }
     }
     Ok(())
 }

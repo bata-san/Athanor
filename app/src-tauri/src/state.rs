@@ -43,7 +43,7 @@ impl Default for Settings {
             sidebar_side: "left".into(),
             sidebar_compact: false,
             sidebar_width: 260,
-            theme: "ember".into(),
+            theme: "monolith".into(),
             adblock_enabled: true,
         }
     }
@@ -75,10 +75,21 @@ impl Settings {
             search_engine, archive_after_hours, https_upgrade, strip_tracking, auto_file, restore_session,
             sidebar_side, sidebar_compact, sidebar_width, theme, adblock_enabled
         );
+        self.sanitize();
+    }
+
+    /// Bring every field back into its valid range (also used for settings read from disk).
+    pub fn sanitize(&mut self) {
         if !self.search_engine.contains("{q}") {
             self.search_engine = Settings::default().search_engine;
         }
+        if self.sidebar_side != "left" && self.sidebar_side != "right" {
+            self.sidebar_side = "left".into();
+        }
         self.sidebar_width = self.sidebar_width.clamp(180, 520);
+        if self.theme.trim().is_empty() {
+            self.theme = Settings::default().theme;
+        }
     }
 }
 
@@ -157,6 +168,16 @@ mod tests {
         assert_eq!(s.sidebar_width, 520);
         assert_eq!(s.search_engine, Settings::default().search_engine, "template without {{q}} is rejected");
         assert_eq!(s.theme, "paper");
+    }
+
+    #[test]
+    fn sanitize_repairs_hand_edited_settings() {
+        let mut s: Settings = serde_json::from_str(r#"{"searchEngine":"","sidebarWidth":0,"sidebarSide":"middle","theme":" "}"#).unwrap();
+        s.sanitize();
+        assert_eq!(s.search_engine, Settings::default().search_engine);
+        assert_eq!(s.sidebar_width, 180);
+        assert_eq!(s.sidebar_side, "left");
+        assert_eq!(s.theme, "monolith");
     }
 
     #[test]
