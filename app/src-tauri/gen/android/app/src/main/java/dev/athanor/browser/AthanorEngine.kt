@@ -533,6 +533,75 @@ class AthanorEngine(private val activity: Activity) : Plugin(activity) {
         return documentStartEnabled
     }
 
+    /**
+     * Wire the on-demand generic-cosmetic bridge into one tab WebView, in every frame.
+     *
+     * Both halves must be registered before any URL is loaded: `addDocumentStartJavaScript` puts the
+     * collector at document start, and `addWebMessageListener` injects the `athanorShield` transport
+     * object the collector posts JSON strings to. Everything is feature-checked and guarded, so on an
+     * older Android System WebView this simply does nothing and the page loads without cosmetics.
+     * `addJavascriptInterface` is deliberately not used.
+     */
+    private fun installCosmeticBridge(view: WebView, tabId: String) {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER) ||
+            !WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            Log.i(TAG, "Generic cosmetic bridge unsupported by this WebView provider")
+            return
+        }
+        val script = cosmeticBridgeSource()
+        if (script == null) {
+            Log.w(TAG, "Cosmetic bridge script unavailable from the Rust core")
+            return
+        }
+        var listenerInstalled = false
+        runCatching {
+            WebViewCompat.addWebMessageListener(view, COSMETIC_BRIDGE_OBJECT, COSMETIC_BRIDGE_ORIGINS) { messageView, message, sourceOrigin, isMainFrame, replyProxy ->
+                onCosmeticMessage(tabId, messageView, message, sourceOrigin, isMainFrame, replyProxy)
+            }
+        }.onSuccess { listenerInstalled = true }
+            .onFailure { Log.w(TAG, "Cosmetic web message listener registration failed", it) }
+        if (!listenerInstalled) return
+        runCatching { WebViewCompat.addDocumentStartJavaScript(view, script, COSMETIC_BRIDGE_ORIGINS) }
+            .onFailure { Log.w(TAG, "Cosmetic document-start registration failed", it) }
+        Log.i(TAG, "Generic cosmetic bridge installed for tab $tabId")
+    }
+
+    /** Fetch the bridge source from Rust once; an empty or failed fetch disables the bridge. */
+    private fun cosmeticBridgeSource(): String? {
+        cosmeticBridge?.let { return it }
+        val script = runCatching { cosmeticBridgeScript() }.getOrNull()
+        if (script.isNullOrBlank()) return null
+        cosmeticBridge = script
+        return script
+    }
+
+    /**
+     * Handle one `athanorShield.postMessage(string)` from a frame. The reply goes back on that same
+     * frame's `JavaScriptReplyProxy` and only when the shared Rust validator accepted the query.
+     *
+     * The query URL comes from native data only: the WebView's current URL for the main frame, and
+     * `sourceOrigin` for subframes. Android's WebMessageListener does not expose a subframe's full
+     * URL (path and query are lost), so subframe cosmetics are matched against their origin.
+     */
+    private fun onCosmeticMessage(
+        tabId: String,
+        view: WebView,
+        message: WebMessageCompat?,
+        sourceOrigin: Uri?,
+        isMainFrame: Boolean,
+        replyProxy: JavaScriptReplyProxy,
+    ) {
+        // `data` is null for anything that is not a string message (e.g. an ArrayBuffer).
+        val raw = message?.data?.takeIf { it.isNotEmpty() && it.length <= COSMETIC_QUERY_MAX_CHARS } ?: return
+        val origin = sourceOrigin?.toString().orEmpty()
+        if (!origin.startsWith("http://", true) && !origin.startsWith("https://", true)) return
+        val pageUrl = if (isMainFrame) view.url.orEmpty() else origin
+        if (pageUrl.isEmpty()) return
+        val response = runCatching { cosmeticQuery(pageUrl, raw) }.getOrNull()?.takeIf { it.isNotEmpty() } ?: return
+        runCatching { replyProxy.postMessage(response) }
+            .onFailure { Log.d(TAG, "Cosmetic reply could not be posted for tab $tabId", it) }
+    }
+
     private fun shortcutCombo(event: KeyEvent): String? {
         val ctrl = event.isCtrlPressed
         val shift = event.isShiftPressed

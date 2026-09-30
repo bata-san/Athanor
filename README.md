@@ -17,6 +17,18 @@
 - **Deeply customisable**: themes are JSON; every UI part exposes `data-part` hooks; extensions add themes, shell CSS, userscripts, panels, commands, filter lists and filing rules.
 - **Light**: no bundled Chromium. Uses the system engine (WebView2 / Android System WebView), so it stays small and always current.
 
+## Status (v0.1)
+
+Working and verified on real WebView2 / an Android emulator: vertical tabs, spaces, folders, **auto tab filing**,
+split view, command palette, developer tools, reference boards, themes, extension host, and the **Shield** content
+blocker (network blocking, redirect resources, on-demand generic cosmetics, procedural filters, scriptlets,
+`$removeparam`, HTTPS upgrade + fallback, tracking-parameter stripping, tracker-redirect unwrapping, per-site
+shield, *My filters*). Automated end-to-end check: [`e2e/`](e2e/README.md).
+
+Not finished yet (contributions welcome): Brave-style privacy hardening (GPC/referrer trimming, fingerprint
+farbling, third-party storage), element picker / zapper, uBO-style dynamic filtering matrix, loading unpacked
+Chrome extensions, Android generic-cosmetic parity and release signing, downloads UI.
+
 ## Architecture in one picture
 
 ```
