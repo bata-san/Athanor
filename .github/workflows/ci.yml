@@ -76,9 +76,8 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.1.12297006" "platforms;android-36" "build-tools;36.0.0"
       - working-directory: app
-        env:
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
-          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.1.12297006
         run: |
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          export NDK_HOME="$ANDROID_HOME/ndk/27.1.12297006"
           npm ci
           npx tauri android build --debug --target aarch64 --apk
