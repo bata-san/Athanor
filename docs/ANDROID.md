@@ -114,3 +114,33 @@ device where the on-demand cosmetic bridge is unsupported so the fail-open path 
 When Chromium/WebView behavior changes, update this Android adapter and its feature checks;
 the Rust `EngineBackend`/`Browser` contract and desktop adapter remain independent of those
 Android-specific changes.
+
+## Building on Windows without Developer Mode
+
+`tauri android build` symlinks the compiled `libathanor_lib.so` into the Gradle project, which needs Windows
+Developer Mode (or the "create symbolic links" privilege). If you do not want to change that setting, let the CLI
+compile Rust (it stops at the symlink step), then copy the library and run Gradle yourself:
+
+```powershell
+cd app
+npx tauri android build --target aarch64 --apk          # compiles Rust; fails at the symlink step
+Copy-Item ..\target\aarch64-linux-android\release\libathanor_lib.so `
+  src-tauri\gen\android\app\src\main\jniLibs\arm64-v8a\ -Force
+cd src-tauri\gen\android
+.\gradlew.bat :app:assembleArm64Release -x :app:rustBuildArm64Release
+```
+
+The result is an *unsigned* APK. Sign it (for sideloading/testing you can use the debug key):
+
+```powershell
+$bt = "$env:LOCALAPPDATA\Android\Sdk\build-tools\36.0.0"
+& "$bt\zipalign.exe" -p -f 4 app\build\outputs\apk\arm64\release\app-arm64-release-unsigned.apk aligned.apk
+& "$bt\apksigner.bat" sign --ks "$env:USERPROFILE\.android\debug.keystore" --ks-pass pass:android `
+  --key-pass pass:android --ks-key-alias androiddebugkey --out Athanor.apk aligned.apk
+```
+
+## Testing on an emulator
+
+An x86_64 `google_apis` image works (Windows Hypervisor Platform is enough). Build with `--target x86_64`, install
+the debug APK, and use `e2e/shield/check-android.cjs` (see `e2e/README.md`). First run: the filter lists are
+downloaded in the background, so generic cosmetic rules only apply once that finishes.
