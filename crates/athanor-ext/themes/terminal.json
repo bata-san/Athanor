@@ -1,0 +1,6 @@
+{
+  "id":"terminal", "name":"Terminal", "dark":true,
+  "colors":{"background":"#101810","foreground":"#e0f4d8","primary":"#a5e985","primaryForeground":"#11200d","mutedForeground":"#b8cdb0","spaceAccent":"#a5e985","tabActive":"#254028","sidebar":"#111d14","sidebarAccent":"#254028"},
+  "radius":"0px", "fonts":{"ui":"ui-monospace, Consolas, monospace","mono":"ui-monospace, Consolas, monospace"},
+  "ui":{"density":"compact","tabHeight":28,"sidebarWidth":220}
+}

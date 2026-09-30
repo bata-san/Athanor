@@ -1,0 +1,25 @@
+[workspace]
+resolver = "2"
+members = ["crates/athanor-core", "crates/athanor-adblock", "crates/athanor-ext", "app/src-tauri"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/bata-san/Athanor"
+authors = ["Athanor contributors"]
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+url = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+parking_lot = "0.12"
+
+[profile.release]
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -1,0 +1,6 @@
+{
+  "id":"ember", "name":"Ember", "dark":true,
+  "colors":{"background":"#1b1917","foreground":"#f5eee4","card":"#26221e","cardForeground":"#f5eee4","popover":"#302820","popoverForeground":"#f5eee4","primary":"#e9a857","primaryForeground":"#23180c","secondary":"#393029","secondaryForeground":"#f5eee4","muted":"#332c26","mutedForeground":"#c8b8a6","accent":"#6c4129","accentForeground":"#fff4e5","destructive":"#e68175","border":"#54483d","input":"#332c26","ring":"#e9a857","sidebar":"#211d19","sidebarForeground":"#f5eee4","sidebarAccent":"#493222","sidebarAccentForeground":"#fff4e5","sidebarBorder":"#54483d","tabActive":"#493222","tabHover":"#352a22","spaceAccent":"#e9a857"},
+  "radius":"0.6rem", "fonts":{"ui":"system-ui, sans-serif","mono":"ui-monospace, monospace"},
+  "ui":{"sidebarSide":"left","density":"comfortable","tabHeight":34,"sidebarWidth":260,"blur":0,"showFavicons":true}
+}

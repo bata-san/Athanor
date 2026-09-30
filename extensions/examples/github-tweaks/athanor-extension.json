@@ -1,0 +1,5 @@
+{
+  "id":"dev.athanor.github-tweaks","name":"GitHub Tweaks","version":"1.0.0","description":"A copy-permalink button on GitHub headings","author":"Athanor contributors","athanor":">=0.1",
+  "permissions":["pages.inject"],
+  "contributes":{"userScripts":[{"id":"copy-permalink","matches":["https://github.com/*"],"excludeMatches":["https://github.com/login*"],"js":["copy-permalink.js"],"css":["copy-permalink.css"],"runAt":"document_idle","allFrames":false}]}
+}

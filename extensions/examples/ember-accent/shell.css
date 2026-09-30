@@ -1,0 +1,2 @@
+[data-part="tab"][data-active="true"] { box-shadow: inset 3px 0 var(--ath-space-accent); }
+[data-part="omnibox"] { border-color: var(--primary); }

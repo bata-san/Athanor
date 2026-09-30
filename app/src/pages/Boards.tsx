@@ -1,0 +1,108 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type * as React from 'react'
+import type { Board, BoardItem, BoardSummary } from '@/lib/types'
+import { api } from '@/lib/api'
+import { useAppStore } from '@/lib/store'
+import { assetUrl } from '@/lib/asset'
+import { arrangeBoardItems, fitBoardView, hitTestBoardItem, screenToWorld, zoomAround } from '@/lib/boardMath'
+import { AppIcon } from '@/components/Icons'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+
+type Gesture = { type: 'pan'; x: number; y: number; view: Board['view'] } | { type: 'move'; x: number; y: number; origins: Map<string, { x: number; y: number }> } | { type: 'resize'; id: string; x: number; y: number; w: number; h: number; aspect: number } | { type: 'rotate'; id: string; angle: number; rotation: number } | { type: 'marquee'; x: number; y: number; cx: number; cy: number }
+const newText: BoardItem = { id: '', kind: 'text', text: 'A note for later', size: 24, color: 'var(--foreground)', x: 0, y: 0, w: 280, h: 120, rotation: 0, opacity: 1, flipX: false, grayscale: false, locked: false, z: 0 }
+
+export default function BoardsPage({ standaloneId = null }: { standaloneId?: string | null }) {
+  const snapshot = useAppStore((state) => state.snapshot)
+  const [summaries, setSummaries] = useState<BoardSummary[]>([])
+  const [board, setBoard] = useState<Board | null>(null)
+  const [selected, setSelected] = useState<string[]>([])
+  const [fitSize, setFitSize] = useState({ w: 800, h: 600 })
+  const [spaceDown, setSpaceDown] = useState(false)
+  const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+  const [renameId, setRenameId] = useState<string | null>(null)
+  const canvasRef = useRef<HTMLDivElement>(null)
+  const gestureRef = useRef<Gesture | null>(null)
+  const saveTimer = useRef<number | null>(null)
+  const loadingRef = useRef(false)
+  const platform = snapshot?.platform ?? 'windows'
+  const selectedItems = useMemo(() => board?.items.filter((item) => selected.includes(item.id)) ?? [], [board, selected])
+
+  const refreshList = useCallback(async () => { const list = await api.listBoards(); setSummaries(list); return list }, [])
+  const loadBoard = useCallback(async (id: string) => { loadingRef.current = true; const loaded = await api.getBoard(id); setBoard(loaded); setSelected([]); loadingRef.current = false }, [])
+  useEffect(() => { void refreshList().then((list) => { const id = standaloneId && list.some((entry) => entry.id === standaloneId) ? standaloneId : list[0]?.id; if (id) void loadBoard(id) }) }, [refreshList, loadBoard, standaloneId])
+  useEffect(() => { const listener = (event: KeyboardEvent) => { if (event.code === 'Space' && !['INPUT', 'TEXTAREA'].includes((event.target as HTMLElement).tagName)) { event.preventDefault(); setSpaceDown(true) }; if ((event.key === 'Delete' || event.key === 'Backspace') && selected.length && board) { setBoard({ ...board, items: board.items.filter((item) => !selected.includes(item.id)) }); setSelected([]) }; if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v') void pasteImages() }; const up = (event: KeyboardEvent) => { if (event.code === 'Space') setSpaceDown(false) }; window.addEventListener('keydown', listener); window.addEventListener('keyup', up); return () => { window.removeEventListener('keydown', listener); window.removeEventListener('keyup', up) } }, [selected, board])
+  useEffect(() => {
+    if (!board || loadingRef.current) return
+    if (saveTimer.current) window.clearTimeout(saveTimer.current)
+    saveTimer.current = window.setTimeout(() => { void api.saveBoard(board); void refreshList() }, 400)
+    return () => { if (saveTimer.current) window.clearTimeout(saveTimer.current) }
+  }, [board, refreshList])
+  useEffect(() => { const node = canvasRef.current; if (!node) return; const observer = new ResizeObserver(() => setFitSize({ w: node.clientWidth, h: node.clientHeight })); observer.observe(node); return () => observer.disconnect() }, [])
+
+  const updateItems = (fn: (items: BoardItem[]) => BoardItem[]) => setBoard((value) => value ? { ...value, items: fn(value.items) } : value)
+  const selectItem = (id: string, shift: boolean) => setSelected((current) => shift ? current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id] : current.includes(id) ? current : [id])
+  const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!board) return
+    const box = canvasRef.current!.getBoundingClientRect(), px = event.clientX - box.left, py = event.clientY - box.top
+    const isPan = event.button === 1 || spaceDown || (event.button === 0 && (event.target as HTMLElement).classList.contains('board-canvas'))
+    if (isPan && (event.button === 1 || spaceDown)) { gestureRef.current = { type: 'pan', x: event.clientX, y: event.clientY, view: board.view }; event.currentTarget.setPointerCapture(event.pointerId); return }
+    const world = screenToWorld({ x: px, y: py }, board.view)
+    const hit = hitTestBoardItem(board.items, world.x, world.y)
+    if (hit) {
+      if (!selected.includes(hit.id) || event.shiftKey) selectItem(hit.id, event.shiftKey)
+      if (!hit.locked && event.button === 0 && !event.shiftKey) { const ids = selected.includes(hit.id) ? selected : [hit.id]; const origins = new Map(board.items.filter((item) => ids.includes(item.id)).map((item) => [item.id, { x: item.x, y: item.y }])); gestureRef.current = { type: 'move', x: world.x, y: world.y, origins }; event.currentTarget.setPointerCapture(event.pointerId) }
+    } else if (event.button === 0 && !event.shiftKey) { setSelected([]); gestureRef.current = { type: 'marquee', x: px, y: py, cx: px, cy: py }; event.currentTarget.setPointerCapture(event.pointerId) }
+  }
+  const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const gesture = gestureRef.current; if (!gesture || !board) return
+    if (gesture.type === 'pan') setBoard((value) => value ? { ...value, view: { ...gesture.view, x: gesture.view.x + event.clientX - gesture.x, y: gesture.view.y + event.clientY - gesture.y } } : value)
+    if (gesture.type === 'move') { const box = canvasRef.current!.getBoundingClientRect(), world = screenToWorld({ x: event.clientX - box.left, y: event.clientY - box.top }, board.view), dx = world.x - gesture.x, dy = world.y - gesture.y; updateItems((items) => items.map((item) => { const origin = gesture.origins.get(item.id); return origin ? { ...item, x: origin.x + dx, y: origin.y + dy } : item })) }
+    if (gesture.type === 'resize') { const dx = (event.clientX - gesture.x) / board.view.zoom, dy = (event.clientY - gesture.y) / board.view.zoom; const w = Math.max(80, gesture.w + dx), rawH = Math.max(60, gesture.h + dy); updateItems((items) => items.map((item) => item.id === gesture.id ? { ...item, w, h: event.shiftKey ? w / gesture.aspect : rawH } : item)) }
+    if (gesture.type === 'rotate') { const rect = canvasRef.current!.getBoundingClientRect(), world = screenToWorld({ x: event.clientX - rect.left, y: event.clientY - rect.top }, board.view), item = board.items.find((entry) => entry.id === gesture.id); if (item) { const center = { x: item.x + item.w / 2, y: item.y + item.h / 2 }; updateItems((items) => items.map((entry) => entry.id === gesture.id ? { ...entry, rotation: gesture.rotation + Math.atan2(world.y - center.y, world.x - center.x) * 180 / Math.PI - gesture.angle } : entry)) } }
+    if (gesture.type === 'marquee') { const cx = event.clientX - canvasRef.current!.getBoundingClientRect().left, cy = event.clientY - canvasRef.current!.getBoundingClientRect().top; gesture.cx = cx; gesture.cy = cy; setMarquee({ x: Math.min(gesture.x, cx), y: Math.min(gesture.y, cy), w: Math.abs(cx - gesture.x), h: Math.abs(cy - gesture.y) }); const a = screenToWorld({ x: Math.min(gesture.x, cx), y: Math.min(gesture.y, cy) }, board.view), b = screenToWorld({ x: Math.max(gesture.x, cx), y: Math.max(gesture.y, cy) }, board.view); setSelected(board.items.filter((item) => item.x + item.w >= a.x && item.x <= b.x && item.y + item.h >= a.y && item.y <= b.y).map((item) => item.id)) }
+  }
+  const onPointerUp = () => { gestureRef.current = null; setMarquee(null) }
+  const onWheel = (event: React.WheelEvent) => { if (!board) return; event.preventDefault(); const rect = canvasRef.current!.getBoundingClientRect(), screen = { x: event.clientX - rect.left, y: event.clientY - rect.top }; if (event.ctrlKey || event.metaKey) setBoard({ ...board, view: zoomAround(board.view, screen, board.view.zoom * Math.exp(-event.deltaY * 0.002)) }); else setBoard({ ...board, view: { ...board.view, x: board.view.x - event.deltaX, y: board.view.y - event.deltaY } }) }
+  const addText = () => { if (!board) return; const id = crypto.randomUUID(); const item = { ...newText, id, x: screenToWorld({ x: fitSize.w / 2, y: fitSize.h / 2 }, board.view).x, y: screenToWorld({ x: fitSize.w / 2, y: fitSize.h / 2 }, board.view).y, z: Math.max(0, ...board.items.map((value) => value.z)) + 1 }; setBoard({ ...board, items: [...board.items, item] }); setSelected([id]) }
+  const addImageFile = async (file: File, x?: number, y?: number) => { if (!board || !file.type.startsWith('image/')) return; const data = await fileToBase64(file); const hash = await api.boardPutAsset(data, file.type); const rect = canvasRef.current?.getBoundingClientRect(); const center = screenToWorld({ x: x ?? (rect?.width ?? 0) / 2, y: y ?? (rect?.height ?? 0) / 2 }, board.view); const img = new Image(); img.onload = () => { const ratio = Math.min(1, 520 / Math.max(img.width, img.height)); const item: BoardItem = { id: crypto.randomUUID(), kind: 'image', asset: hash, mime: file.type, x: center.x, y: center.y, w: img.width * ratio, h: img.height * ratio, rotation: 0, opacity: 1, flipX: false, grayscale: false, locked: false, z: Math.max(0, ...board.items.map((v) => v.z)) + 1 }; setBoard((value) => value ? { ...value, items: [...value.items, item] } : value); setSelected([item.id]) }; img.src = URL.createObjectURL(file) }
+  const pasteImages = async () => { const items = await navigator.clipboard?.read?.(); if (!items) return; for (const clipboard of items) for (const type of clipboard.types.filter((entry) => entry.startsWith('image/'))) { const blob = await clipboard.getType(type); await addImageFile(new File([blob], 'pasted-image', { type })) } }
+  const arrange = () => { if (board) updateItems((items) => arrangeBoardItems(items)) }
+  const fitAll = () => { if (board) setBoard({ ...board, view: fitBoardView(board.items, fitSize) }) }
+  const createBoard = async () => { const name = window.prompt('Board name', 'Untitled board'); if (name?.trim()) { const created = await api.createBoard(name.trim()); await refreshList(); setBoard(created); setSelected([]) } }
+  const renameBoard = async (entry: BoardSummary) => { const name = window.prompt('Rename board', entry.name); if (name?.trim() && board?.id === entry.id) setBoard({ ...board, name: name.trim() }); else if (name?.trim()) { const loaded = await api.getBoard(entry.id); await api.saveBoard({ ...loaded, name: name.trim() }); void refreshList() } }
+  const deleteBoard = async (entry: BoardSummary) => { if (!window.confirm(`Delete “${entry.name}”?`)) return; await api.deleteBoard(entry.id); const list = await refreshList(); if (board?.id === entry.id) { const next = list[0]; setBoard(next ? await api.getBoard(next.id) : null) } }
+  const addUrl = async (url: string, x: number, y: number) => { if (!board) return; const world = screenToWorld({ x, y }, board.view); await api.boardAddFromUrl(board.id, url, world.x, world.y); await loadBoard(board.id) }
+
+  return <div className="board-layout" data-part="board">
+    {!standaloneId && <aside className="board-list" aria-label="Boards"><div className="board-list-head"><strong>Boards</strong><Button variant="ghost" size="icon" aria-label="Create board" onClick={() => void createBoard()}><AppIcon name="Plus" /></Button></div>{summaries.map((entry) => <div key={entry.id} className="board-list-entry"><button className="board-list-row" data-active={String(board?.id === entry.id)} onClick={() => void loadBoard(entry.id)}><AppIcon name="PanelsTopLeft" /><span>{entry.name}</span><span className="badge">{entry.itemCount}</span></button><button className="board-list-more" aria-label={`More actions for ${entry.name}`} onClick={() => { const action = window.prompt(`${entry.name}\nType: rename or delete`); if (action === 'rename') void renameBoard(entry); if (action === 'delete') void deleteBoard(entry) }}><AppIcon name="Ellipsis" /></button></div>)}{summaries.length === 0 && <div className="board-empty">Create a board to collect references.</div>}</aside>}
+    <section className="board-workspace" data-part="board-workspace">
+      {!board ? <div className="board-empty"><div><AppIcon name="PanelsTopLeft" /><h2>No board selected</h2><Button onClick={() => void createBoard()}>Create a board</Button></div></div> : <>
+        <div className="board-toolbar" data-part="board-toolbar"><Input className="board-name" aria-label="Board name" value={board.name} onChange={(event) => setBoard({ ...board, name: event.target.value })} />
+          <Button size="icon" variant="ghost" title="Add text note" aria-label="Add text note" onClick={addText}><AppIcon name="NotebookPen" /></Button>
+          <Button size="icon" variant="ghost" title="Arrange items" aria-label="Arrange items" onClick={arrange}><AppIcon name="LayoutDashboard" /></Button>
+          <Button size="icon" variant="ghost" title="Fit all items" aria-label="Fit all items" onClick={fitAll}><AppIcon name="Maximize2" /></Button>
+          <Button size="icon" variant="ghost" title="Paste image" aria-label="Paste image" onClick={() => void pasteImages()}><AppIcon name="ImagePlus" /></Button>
+          {platform !== 'android' && <Button size="icon" variant="ghost" title="Open standalone board window" aria-label="Open standalone board window" onClick={() => void api.openBoardWindow(board.id)}><AppIcon name="SquareArrowOutUpRight" /></Button>}
+          <Button size="icon" variant={board.alwaysOnTop ? 'secondary' : 'ghost'} title="Always on top" aria-label="Always on top" onClick={() => { setBoard({ ...board, alwaysOnTop: !board.alwaysOnTop }); void api.setBoardAlwaysOnTop(board.id, !board.alwaysOnTop) }}><AppIcon name="Layers3" /></Button>
+        </div>
+        <div ref={canvasRef} className="board-canvas" data-part="board-canvas" style={{ background: board.background }} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} onWheel={onWheel} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const files = [...event.dataTransfer.files]; for (const file of files) void addImageFile(file, event.nativeEvent.offsetX, event.nativeEvent.offsetY); const uri = event.dataTransfer.getData('text/uri-list') || event.dataTransfer.getData('text/plain'); if (/^https?:\/\//i.test(uri) && /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(uri)) void addUrl(uri, event.nativeEvent.offsetX, event.nativeEvent.offsetY) }}>
+          <div className="board-world" style={{ transform: `translate(${board.view.x}px, ${board.view.y}px) scale(${board.view.zoom})` }}>{board.items.map((item) => <BoardItemView key={item.id} item={item} selected={selected.includes(item.id)} platform={platform} onText={(text) => updateItems((items) => items.map((value) => value.id === item.id && value.kind === 'text' ? { ...value, text } : value))} onResizeStart={(event) => { event.stopPropagation(); gestureRef.current = { type: 'resize', id: item.id, x: event.clientX, y: event.clientY, w: item.w, h: item.h, aspect: item.w / item.h }; event.currentTarget.closest('.board-canvas')?.setPointerCapture(event.pointerId) }} onRotateStart={(event) => { event.stopPropagation(); const rect = canvasRef.current!.getBoundingClientRect(), world = screenToWorld({ x: event.clientX - rect.left, y: event.clientY - rect.top }, board.view), center = { x: item.x + item.w / 2, y: item.y + item.h / 2 }; gestureRef.current = { type: 'rotate', id: item.id, angle: Math.atan2(world.y - center.y, world.x - center.x) * 180 / Math.PI, rotation: item.rotation }; event.currentTarget.closest('.board-canvas')?.setPointerCapture(event.pointerId) }} />)}</div>
+          {marquee && <div className="board-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h }} />}
+          {selectedItems.length === 1 && <div className="board-side-controls"><label>Opacity <input aria-label="Selected item opacity" type="range" min="0.1" max="1" step="0.05" value={selectedItems[0]!.opacity} onChange={(event) => updateItems((items) => items.map((item) => item.id === selected[0] ? { ...item, opacity: Number(event.target.value) } : item))} /></label><Button size="icon" variant="ghost" title="Flip horizontally" aria-label="Flip horizontally" onClick={() => updateItems((items) => items.map((item) => item.id === selected[0] ? { ...item, flipX: !item.flipX } : item))}><AppIcon name="ArrowLeftRight" /></Button><Button size="icon" variant="ghost" title="Toggle grayscale" aria-label="Toggle grayscale" onClick={() => updateItems((items) => items.map((item) => item.id === selected[0] ? { ...item, grayscale: !item.grayscale } : item))}><AppIcon name="Moon" /></Button><Button size="icon" variant="ghost" title="Lock or unlock" aria-label="Lock or unlock" onClick={() => updateItems((items) => items.map((item) => item.id === selected[0] ? { ...item, locked: !item.locked } : item))}><AppIcon name="LockKeyhole" /></Button><Button size="icon" variant="ghost" title="Bring to front" aria-label="Bring to front" onClick={() => updateItems((items) => items.map((item) => item.id === selected[0] ? { ...item, z: Math.max(...items.map((value) => value.z)) + 1 } : item))}><AppIcon name="ArrowUp" /></Button><Button size="icon" variant="ghost" title="Send backward" aria-label="Send backward" onClick={() => updateItems((items) => items.map((item) => item.id === selected[0] ? { ...item, z: Math.min(...items.map((value) => value.z)) - 1 } : item))}><AppIcon name="ArrowDown" /></Button><Button size="icon" variant="destructive" title="Delete selected" aria-label="Delete selected" onClick={() => { updateItems((items) => items.filter((item) => !selected.includes(item.id))); setSelected([]) }}><AppIcon name="Trash2" /></Button><label>Canvas <input type="color" aria-label="Board background color" value={board.background.startsWith('#') ? board.background : '#26231f'} onChange={(event) => setBoard({ ...board, background: event.target.value })} /></label></div>}
+          <div className="board-zoom"><Button size="icon" variant="ghost" aria-label="Zoom out" onClick={() => setBoard({ ...board, view: zoomAround(board.view, { x: fitSize.w / 2, y: fitSize.h / 2 }, board.view.zoom / 1.2) })}><AppIcon name="Minus" /></Button><span>{Math.round(board.view.zoom * 100)}%</span><Button size="icon" variant="ghost" aria-label="Zoom in" onClick={() => setBoard({ ...board, view: zoomAround(board.view, { x: fitSize.w / 2, y: fitSize.h / 2 }, board.view.zoom * 1.2) })}><AppIcon name="Plus" /></Button></div>
+        </div>
+        <div className="board-hint">Space + drag to pan · Ctrl + wheel to zoom · Shift + click to multi-select · Ctrl+V to paste</div>
+      </>}
+    </section>
+  </div>
+}
+
+function BoardItemView({ item, selected, platform, onText, onResizeStart, onRotateStart }: { item: BoardItem; selected: boolean; platform: string; onText: (text: string) => void; onResizeStart: (event: React.PointerEvent<HTMLSpanElement>) => void; onRotateStart: (event: React.PointerEvent<HTMLSpanElement>) => void }) {
+  const asset = item.kind === 'image' ? assetUrl(item.asset, platform as 'windows' | 'macos' | 'linux' | 'android' | 'ios') : ''
+  return <div className="board-item" data-part="board-item" data-selected={String(selected)} data-locked={String(item.locked)} data-grayscale={String(item.grayscale)} style={{ left: item.x, top: item.y, width: item.w, height: item.h, opacity: item.opacity, zIndex: item.z, transform: `rotate(${item.rotation}deg) scaleX(${item.flipX ? -1 : 1})` }} onDoubleClick={() => { if (item.kind === 'text') { const next = window.prompt('Edit note', item.text); if (next !== null) onText(next) } }}>
+    {item.kind === 'image' ? <img draggable="false" src={asset} alt={item.sourceUrl ? `Reference from ${item.sourceUrl}` : 'Board reference'} /> : <textarea className="board-text" aria-label="Text note" value={item.text} onChange={(event) => onText(event.target.value)} style={{ color: item.color, fontSize: `${item.size}px`, background: 'transparent', border: 0, resize: 'none' }} />}
+    {selected && !item.locked && <><span className="board-rotate-handle" role="button" aria-label="Rotate item" onPointerDown={onRotateStart}><AppIcon name="RotateCw" /></span><span className="board-handle" role="button" aria-label="Resize item" onPointerDown={onResizeStart} /></>}
+  </div>
+}
+function fileToBase64(file: File): Promise<string> { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => { const data = String(reader.result); resolve(data.split(',')[1] ?? '') }; reader.onerror = () => reject(reader.error); reader.readAsDataURL(file) }) }

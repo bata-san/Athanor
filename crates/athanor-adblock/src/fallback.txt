@@ -1,0 +1,9 @@
+! Minimal offline fallback. The downloaded lists replace this once available.
+||doubleclick.net^
+||googlesyndication.com^
+||google-analytics.com^
+||adservice.google.com^
+||facebook.com/tr^
+||ads.yahoo.com^
+##.ad-banner
+##.advertisement

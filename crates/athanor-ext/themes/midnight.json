@@ -1,0 +1,5 @@
+{
+  "id":"midnight", "name":"Midnight", "dark":true,
+  "colors":{"background":"#111923","foreground":"#e9f2fa","primary":"#83d3eb","primaryForeground":"#10212c","mutedForeground":"#b4c7d6","spaceAccent":"#83d3eb","tabActive":"#243e50","sidebar":"#141f2b","sidebarAccent":"#243e50"},
+  "radius":"0.55rem"
+}

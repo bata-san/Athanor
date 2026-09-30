@@ -1,0 +1,20 @@
+[package]
+name = "athanor-core"
+description = "Engine-agnostic browser core: tabs, spaces, auto-filing, split layout, boards, dev tools. No UI or webview dependencies."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+url.workspace = true
+uuid.workspace = true
+base64 = "0.22"
+percent-encoding = "2"
+sha2 = "0.10"
+time = { version = "0.3", features = ["formatting", "parsing"] }
+
+[dev-dependencies]
+serde_json.workspace = true

@@ -1,0 +1,5 @@
+{
+  "id":"dev.athanor.hello-panel","name":"Hello Panel","version":"1.0.0","description":"A sandboxed notes panel and palette command","author":"Athanor contributors","athanor":">=0.1",
+  "permissions":["shell.panel","commands","tabs.read","storage"],
+  "contributes":{"panels":[{"id":"hello","title":"Hello","icon":"sticky-note","entry":"panel.html","location":"sidebar"}],"commands":[{"id":"hello","title":"Open Hello Panel","keybinding":"Ctrl+Shift+H"}]}
+}

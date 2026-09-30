@@ -1,0 +1,5 @@
+{
+  "id":"mist", "name":"Mist", "dark":false,
+  "colors":{"background":"#f3f6f5","foreground":"#1c3031","primary":"#285d60","primaryForeground":"#ffffff","mutedForeground":"#455e60","spaceAccent":"#285d60","tabActive":"#d3e5e3","sidebar":"#e8f0ef","sidebarAccent":"#d3e5e3"},
+  "radius":"0.8rem", "ui":{"blur":12}
+}

@@ -1,0 +1,6 @@
+{
+  "id":"paper", "name":"Paper", "dark":false,
+  "colors":{"background":"#faf6ed","foreground":"#27231e","card":"#fffdf8","cardForeground":"#27231e","popover":"#fffdf8","popoverForeground":"#27231e","primary":"#75451d","primaryForeground":"#ffffff","secondary":"#e8dfd1","secondaryForeground":"#27231e","muted":"#eee7dc","mutedForeground":"#554d43","accent":"#dbc5a6","accentForeground":"#27231e","destructive":"#a83030","border":"#c5b9a8","input":"#e8dfd1","ring":"#75451d","sidebar":"#f2eadf","sidebarForeground":"#27231e","sidebarAccent":"#dbc5a6","sidebarAccentForeground":"#27231e","sidebarBorder":"#c5b9a8","tabActive":"#dbc5a6","tabHover":"#e8dfd1","spaceAccent":"#75451d"},
+  "radius":"0.5rem", "fonts":{"ui":"system-ui, sans-serif","mono":"ui-monospace, monospace"},
+  "ui":{"sidebarSide":"left","density":"comfortable","tabHeight":34,"sidebarWidth":260,"blur":0,"showFavicons":true}
+}

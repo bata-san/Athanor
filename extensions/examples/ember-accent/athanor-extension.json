@@ -1,0 +1,5 @@
+{
+  "id":"dev.athanor.ember-accent","name":"Ember Accent","version":"1.0.0","description":"A warmer shell and theme variant","author":"Athanor contributors","athanor":">=0.1",
+  "permissions":["shell.style"],
+  "contributes":{"themes":[{"id":"ember-accent","name":"Ember Accent","file":"themes/accent.json"}],"shellCss":["shell.css"]}
+}
