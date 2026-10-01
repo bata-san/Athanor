@@ -118,7 +118,7 @@ impl ExtHost {
         let reg = self.registry.read();
         let base = reg
             .theme(theme)
-            .or_else(|| reg.theme("monolith"))
+            .or_else(|| reg.theme("chalk"))
             .map(|t| t.to_css())
             .unwrap_or_default();
         format!("{base}\n{}", reg.shell_css())

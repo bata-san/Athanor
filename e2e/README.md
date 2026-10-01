@@ -45,3 +45,7 @@ node e2e/shield/check-android.cjs
 ```
 
 The first run waits for the filter lists to be downloaded before asserting.
+
+## UI: page context menu (`e2e/ui/context-menu.cjs`)
+
+Same launch recipe as the shield check (WebView2 with `--remote-debugging-port=9222` and the `shield-test.example.com` host mapping, `node e2e/shield/server.cjs` running). It right-clicks inside a real page through CDP and verifies that the shell draws the engine's menu, freezes the page behind it, runs the chosen engine command (Reload), cleans up on Escape, and offers Athanor's own entries for links, images and selections.

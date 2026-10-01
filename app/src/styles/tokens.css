@@ -1,37 +1,80 @@
 @import 'tailwindcss';
 
+/* Light is the default (Chalk). The host sets data-theme-dark="true" for dark themes (Monolith, ...). */
 :root {
-  color-scheme: dark;
-  --background: #0a0a0a; --foreground: #fafafa;
-  --card: #111111; --card-foreground: #fafafa;
-  --popover: #141414; --popover-foreground: #fafafa;
-  --primary: #fafafa; --primary-foreground: #0a0a0a;
-  --secondary: #1c1c1c; --secondary-foreground: #fafafa;
-  --muted: #1a1a1a; --muted-foreground: #a3a3a3;
-  --accent: #262626; --accent-foreground: #fafafa;
-  --destructive: #e5534b; --destructive-foreground: #fafafa;
-  --border: #262626; --input: #1f1f1f; --ring: #a3a3a3; --radius: 0.7rem;
-  --sidebar: #0e0e0e; --sidebar-foreground: #fafafa; --sidebar-primary: #fafafa; --sidebar-primary-foreground: #0a0a0a; --sidebar-accent: #1f1f1f; --sidebar-accent-foreground: #fafafa; --sidebar-border: #1f1f1f; --sidebar-ring: #a3a3a3;
-  --ath-tab-height: 2.25rem; --ath-sidebar-width: 17.5rem; --ath-tab-active: #1f1f1f; --ath-tab-hover: #161616; --ath-space-accent: #fafafa; --ath-blur: 1.2rem;
-  --font-ui: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; --font-mono: ui-monospace, 'Cascadia Code', 'SFMono-Regular', Consolas, monospace;
+  color-scheme: light;
+  --background: #ffffff; --foreground: #0a0a0a;
+  --card: #ffffff; --card-foreground: #0a0a0a;
+  --popover: #ffffff; --popover-foreground: #0a0a0a;
+  --primary: #0f0f10; --primary-foreground: #fafafa;
+  --secondary: #f4f4f5; --secondary-foreground: #18181b;
+  --muted: #f4f4f5; --muted-foreground: #71717a;
+  --accent: #f4f4f5; --accent-foreground: #18181b;
+  --destructive: #dc2626; --destructive-foreground: #fafafa;
+  --border: #e4e4e7; --input: #e4e4e7; --ring: #a1a1aa; --radius: 0.75rem;
+  --sidebar: #f5f5f6; --sidebar-foreground: #18181b; --sidebar-primary: #0f0f10; --sidebar-primary-foreground: #fafafa; --sidebar-accent: #ebebed; --sidebar-accent-foreground: #18181b; --sidebar-border: #e6e6e9; --sidebar-ring: #a1a1aa;
+  --ath-tab-height: 2.25rem; --ath-sidebar-width: 17rem; --ath-tab-active: #ffffff; --ath-tab-hover: #ececee; --ath-space-accent: #0f0f10; --ath-blur: 0px;
+  --font-ui: 'IBM Plex Sans JP', 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', 'Yu Gothic UI', 'Hiragino Sans', sans-serif; --font-mono: ui-monospace, 'Cascadia Code', 'SFMono-Regular', Consolas, monospace;
   --ath-font-size: 0.875rem; --ath-font-body: 0.875rem; --ath-font-small: 0.75rem; --ath-font-tiny: 0.6875rem; --ath-font-heading: 1.25rem; --ath-font-title: 1.5rem;
-  --ath-space-default-color: #a3a3a3; --ath-board-default: #141414; --ath-dialog-dim: oklch(0 0 0 / 0.5); --ath-board-text-size: 24; --ath-board-note-width-px: 280; --ath-board-note-height-px: 120; --ath-board-min-width-px: 80; --ath-board-min-height-px: 60;
+  --ath-space-default-color: #71717a; --ath-board-default: #f4f4f5; --ath-dialog-dim: oklch(0 0 0 / 0.32); --ath-board-text-size: 24; --ath-board-note-width-px: 280; --ath-board-note-height-px: 120; --ath-board-min-width-px: 80; --ath-board-min-height-px: 60;
   --ath-s0: 0.125rem; --ath-s1: 0.25rem; --ath-s2: 0.375rem; --ath-s3: 0.5rem; --ath-s4: 0.75rem; --ath-s5: 1rem; --ath-s6: 1.25rem; --ath-s7: 1.5rem; --ath-s8: 2rem; --ath-s9: 2.5rem; --ath-s10: 3rem; --ath-s11: 4rem;
   --ath-icon-size: 1rem; --ath-icon-small: 0.875rem; --ath-avatar-size: 1.75rem; --ath-control-height: 2.25rem; --ath-touch-target: 2.75rem;
-  --ath-titlebar-height: 2.375rem; --ath-toolbar-height: 3.5rem; --ath-mobile-top-height: 3.75rem; --ath-mobile-bottom-height: 4rem;
-  --ath-sidebar-min: 13rem; --ath-sidebar-max: 25rem; --ath-rail-width: 4.25rem;
-  --ath-settings-nav-width: 12.5rem; --ath-toolbar-omnibox: 52rem; --ath-board-list-width: 14rem; --ath-board-list-mobile: 8rem; --ath-board-name-width: 12rem; --ath-board-image-max-px: 520;
-  --ath-round-small: 0.4rem; --ath-round-medium: 0.7rem; --ath-round-large: 1rem; --ath-round-pill: 999px;
-  --ath-shadow: 0 0.75rem 2.5rem oklch(0 0 0 / 0.26); --ath-motion: 160ms;
+  --ath-titlebar-height: 2.5rem; --ath-toolbar-height: 3rem; --ath-mobile-top-height: 3.75rem; --ath-mobile-bottom-height: 4rem;
+  --ath-sidebar-min: 13rem; --ath-sidebar-max: 25rem; --ath-rail-width: 3.75rem;
+  --ath-settings-nav-width: 14rem; --ath-toolbar-omnibox: 40rem; --ath-board-list-width: 14rem; --ath-board-list-mobile: 8rem; --ath-board-name-width: 12rem; --ath-board-image-max-px: 520;
+  --ath-round-small: 0.5rem; --ath-round-medium: 0.75rem; --ath-round-large: 1rem; --ath-round-pill: 999px;
+  --ath-shadow: 0 8px 30px oklch(0 0 0 / 0.1); --ath-shadow-menu: 0 0 0 1px oklch(0 0 0 / 0.02), 0 10px 32px -6px oklch(0 0 0 / 0.14), 0 2px 6px oklch(0 0 0 / 0.05); --ath-motion: 140ms; --ease-snap: cubic-bezier(0.2, 0.9, 0.25, 1); --ease-spring: linear(0, 0.2 4%, 0.55 9%, 0.84 15%, 1.02 22%, 1.07 28%, 1.06 34%, 1.02 44%, 0.995 56%, 1 70%, 1);
 }
-:root[data-theme-dark='false'] {
-  color-scheme: light;
-  --background: #fafafa; --foreground: #0a0a0a; --card: #ffffff; --card-foreground: #0a0a0a; --popover: #ffffff; --popover-foreground: #0a0a0a;
-  --primary: #0a0a0a; --primary-foreground: #fafafa; --secondary: #f0f0f0; --secondary-foreground: #0a0a0a; --muted: #efefef; --muted-foreground: #5c5c5c; --accent: #e8e8e8; --accent-foreground: #0a0a0a; --destructive: #c0392b; --destructive-foreground: #fafafa;
-  --border: #dcdcdc; --input: #e5e5e5; --ring: #737373; --sidebar: #f3f3f3; --sidebar-foreground: #0a0a0a; --sidebar-primary: #0a0a0a; --sidebar-primary-foreground: #fafafa; --sidebar-accent: #e6e6e6; --sidebar-accent-foreground: #0a0a0a; --sidebar-border: #dcdcdc; --sidebar-ring: #737373;
-  --ath-tab-active: #e6e6e6; --ath-tab-hover: #ececec; --ath-space-accent: #0a0a0a; --ath-shadow: 0 0.75rem 2.5rem oklch(0.3 0.02 60 / 0.12);
-  --ath-dialog-dim: oklch(0 0 0 / 0.28); --ath-board-default: #efefef;
+:root[data-theme-dark='true'] {
+  color-scheme: dark;
+  --background: #09090b; --foreground: #fafafa;
+  --card: #0c0c0e; --card-foreground: #fafafa;
+  --popover: #111113; --popover-foreground: #fafafa;
+  --primary: #fafafa; --primary-foreground: #0a0a0a;
+  --secondary: #18181b; --secondary-foreground: #fafafa;
+  --muted: #18181b; --muted-foreground: #a1a1aa;
+  --accent: #1c1c1f; --accent-foreground: #fafafa;
+  --destructive: #ef4444; --destructive-foreground: #fafafa;
+  --border: #27272a; --input: #27272a; --ring: #71717a;
+  --sidebar: #111113; --sidebar-foreground: #fafafa; --sidebar-primary: #fafafa; --sidebar-primary-foreground: #0a0a0a; --sidebar-accent: #1c1c1f; --sidebar-accent-foreground: #fafafa; --sidebar-border: #232326; --sidebar-ring: #71717a;
+  --ath-tab-active: #1f1f23; --ath-tab-hover: #19191c; --ath-space-accent: #fafafa;
+  --ath-space-default-color: #a1a1aa; --ath-board-default: #111113; --ath-dialog-dim: oklch(0 0 0 / 0.6);
+  --ath-shadow: 0 10px 40px oklch(0 0 0 / 0.5); --ath-shadow-menu: 0 0 0 1px oklch(1 0 0 / 0.04), 0 12px 36px -6px oklch(0 0 0 / 0.65), 0 2px 6px oklch(0 0 0 / 0.4);
 }
+@custom-variant rail ([data-collapsed='true'] &);
 @theme inline {
-  --color-background: var(--background); --color-foreground: var(--foreground); --color-card: var(--card); --color-card-foreground: var(--card-foreground); --color-popover: var(--popover); --color-popover-foreground: var(--popover-foreground); --color-primary: var(--primary); --color-primary-foreground: var(--primary-foreground); --color-secondary: var(--secondary); --color-secondary-foreground: var(--secondary-foreground); --color-muted: var(--muted); --color-muted-foreground: var(--muted-foreground); --color-accent: var(--accent); --color-accent-foreground: var(--accent-foreground); --color-destructive: var(--destructive); --color-destructive-foreground: var(--destructive-foreground); --color-border: var(--border); --color-input: var(--input); --color-ring: var(--ring); --radius-sm: calc(var(--radius) - var(--ath-s2)); --radius-md: var(--radius); --radius-lg: calc(var(--radius) + var(--ath-s1));
+  --color-background: var(--background); --color-foreground: var(--foreground);
+  --color-card: var(--card); --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover); --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary); --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary); --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted); --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent); --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive); --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border); --color-input: var(--input); --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar); --color-sidebar-foreground: var(--sidebar-foreground); --color-sidebar-accent: var(--sidebar-accent); --color-sidebar-accent-foreground: var(--sidebar-accent-foreground); --color-sidebar-border: var(--sidebar-border);
+  --color-tab-active: var(--ath-tab-active); --color-tab-hover: var(--ath-tab-hover);
+  --font-sans: var(--font-ui); --font-mono: var(--font-mono);
+  --radius-sm: calc(var(--radius) - 0.25rem); --radius-md: calc(var(--radius) - 0.125rem); --radius-lg: var(--radius); --radius-xl: calc(var(--radius) + 0.25rem); --radius-2xl: calc(var(--radius) + 0.5rem);
+  --shadow-menu: var(--ath-shadow-menu);
+  --animate-in: ath-in 190ms var(--ease-spring) both; --animate-out: ath-out 90ms cubic-bezier(0.4, 0, 1, 1) both;
 }
+/* Popups grow out of the point they were opened from (Radix exposes it as --radix-popper-transform-origin). */
+@keyframes ath-in { from { opacity: 0; transform: scale(0.92) translateY(-3px); } to { opacity: 1; transform: none; } }
+@keyframes ath-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(0.96); } }
+@keyframes ath-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ath-rise { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes ath-sheet { from { transform: translateY(100%); } to { transform: none; } }
+
+/* Sidebar: labels fade and fold away while the width animates, so collapsing never reflows abruptly. */
+.sb-label { overflow: hidden; white-space: nowrap; max-width: 16rem; transition: max-width 240ms var(--ease-snap), opacity 150ms ease, padding 240ms var(--ease-snap), margin 240ms var(--ease-snap); }
+[data-collapsed='true'] .sb-label { max-width: 0; min-width: 0; padding-inline: 0; margin-inline: 0; border-width: 0; opacity: 0; pointer-events: none; }
+[data-part='sidebar'] { transition: width 260ms var(--ease-snap), min-width 260ms var(--ease-snap), max-width 260ms var(--ease-snap); }
+/* Everything pressable gives a tiny, fast squeeze (base layer so utilities can override). */
+@layer base {
+  button:not(:disabled), [role='tab'] { transition-property: color, background-color, border-color, box-shadow, opacity, transform; transition-duration: 120ms; transition-timing-function: var(--ease-snap); }
+  button:not(:disabled):active { transform: scale(0.97); }
+}
+
+/* Thinner strokes read as more refined at 16px. */
+svg.lucide { stroke-width: 1.75; }

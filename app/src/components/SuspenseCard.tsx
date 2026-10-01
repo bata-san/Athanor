@@ -1,2 +1,3 @@
-import { AppIcon } from './Icons'
-export function SuspenseCard() { return <div className="page-placeholder"><div className="placeholder-card"><span className="brand-mark"><AppIcon name="Activity" /></span><p className="muted-copy">Loading workspace…</p></div></div> }
+import { Loader2 } from 'lucide-react'
+
+export function SuspenseCard() { return <div className="grid h-full min-h-32 w-full place-items-center text-muted-foreground"><Loader2 className="size-5 animate-spin" aria-label="Loading" /></div> }

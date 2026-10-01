@@ -2,7 +2,8 @@ import { create } from 'zustand'
 import type { AdblockStatus, CommandInfo, DevServer, PanelInfo, Snapshot } from './types'
 import { api } from './api'
 import { listen } from './events'
-import { isMockMode, mockGetPlatformFromUrl } from './mock/backend'
+import { isMockMode, mockGetPlatformFromUrl, mockThemeDark } from './mock/backend'
+import { applyShellCss } from './theme'
 
 interface AppState {
   snapshot: Snapshot | null; panels: PanelInfo[]; commands: CommandInfo[]; servers: DevServer[]; adblock: AdblockStatus | null; isMock: boolean; ready: boolean
@@ -20,15 +21,11 @@ export function bootStore() {
       const [snapshot, panels, commands, servers, adblock] = await Promise.all([api.getSnapshot(), api.getPanels(), api.getCommands(), api.listDevServers(), api.getAdblockStatus()])
       const forced = mockGetPlatformFromUrl()
       useAppStore.setState({ snapshot: forced ? { ...snapshot, platform: forced } : snapshot, panels, commands, servers, adblock, ready: true })
-      document.documentElement.dataset.themeDark = String(snapshot.settings.theme !== 'paper')
-      const css = await api.getShellCss()
-      let style = document.getElementById('athanor-shell-css') as HTMLStyleElement | null
-      if (!style) { style = document.createElement('style'); style.id = 'athanor-shell-css'; document.head.append(style) }
-      style.textContent = css
+      applyShellCss(await api.getShellCss(), mockThemeDark(snapshot.settings.theme))
     } catch (error) { console.error('Athanor shell bootstrap failed', error); useAppStore.setState({ ready: true }) }
     void listen('athanor://snapshot', (snapshot) => useAppStore.getState().setSnapshot(snapshot))
     void listen('athanor://adblock', (status) => useAppStore.getState().setAdblock(status))
-    void listen('athanor://shell-css', (css) => { const style = document.getElementById('athanor-shell-css') as HTMLStyleElement | null; if (style) style.textContent = css })
+    void listen('athanor://shell-css', (css) => applyShellCss(css, mockThemeDark(useAppStore.getState().snapshot?.settings.theme)))
   })()
   return bootPromise
 }

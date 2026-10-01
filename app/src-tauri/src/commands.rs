@@ -522,6 +522,26 @@ pub async fn send_page_image_to_board(b: B<'_>, tab: Id, board_id: Id) -> R {
         .map_err(e)?
 }
 
+#[tauri::command]
+pub async fn capture_frame(b: B<'_>, tab: Id) -> R<String> {
+    let browser = b.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || browser.capture_frame(&tab))
+        .await
+        .map_err(e)?
+}
+
+#[tauri::command]
+pub async fn resolve_context_menu(b: B<'_>, tab: Id, command: Option<i32>) -> R {
+    b.resolve_context_menu(&tab, command);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn context_action(b: B<'_>, action: String, data: String) -> R {
+    b.context_action(&action, &data);
+    Ok(())
+}
+
 // ---------- adblock ----------
 
 #[tauri::command]

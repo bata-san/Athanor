@@ -449,26 +449,9 @@ impl Browser {
                 });
             }
             EngineEvent::Shortcut { combo, .. } => self.shortcut(&combo),
-            EngineEvent::ContextAction { action, data, .. } => {
-                if action == "send-image-to-board" {
-                    // Downloading can take many seconds; never do it on the serial engine-event loop.
-                    let this = self.clone();
-                    std::thread::spawn(move || {
-                        match crate::boards::inbox_id(&this.paths).and_then(|id| {
-                            crate::boards::add_from_url(&this.paths, &id, &data, 0.0, 0.0)
-                                .map(|()| id)
-                        }) {
-                            Ok(id) => {
-                                let _ = this.app.emit(
-                                    "athanor://board-changed",
-                                    serde_json::json!({ "id": id }),
-                                );
-                                this.toast("success", "Image added to the Inbox board");
-                            }
-                            Err(e) => this.toast("error", format!("Couldn't add image: {e}")),
-                        }
-                    });
-                }
+            EngineEvent::ContextAction { action, data, .. } => self.context_action(&action, &data),
+            EngineEvent::PageContextMenu { .. } => {
+                let _ = self.app.emit("athanor://context-menu", &ev);
             }
             EngineEvent::Blocked { tab, .. } => {
                 let mut g = self.inner.lock();
@@ -1023,6 +1006,46 @@ impl Browser {
             "back" => self.engine.go_back(tab),
             _ => self.engine.go_forward(tab),
         };
+    }
+
+    /// A shell-drawn context-menu entry that needs the host (everything else is handled in the shell).
+    pub fn context_action(self: &Arc<Self>, action: &str, data: &str) {
+        if action != "send-image-to-board" {
+            return;
+        }
+        // Downloading can take many seconds; never do it on the serial engine-event loop.
+        let (this, data) = (self.clone(), data.to_string());
+        std::thread::spawn(move || {
+            match crate::boards::inbox_id(&this.paths).and_then(|id| {
+                crate::boards::add_from_url(&this.paths, &id, &data, 0.0, 0.0).map(|()| id)
+            }) {
+                Ok(id) => {
+                    let _ = this
+                        .app
+                        .emit("athanor://board-changed", serde_json::json!({ "id": id }));
+                    this.toast("success", "Image added to the Inbox board");
+                }
+                Err(e) => this.toast("error", format!("Couldn't add image: {e}")),
+            }
+        });
+    }
+
+    /// Freeze-frame of a tab as a `data:` URL (the shell shows it while an overlay hides the native page).
+    pub fn capture_frame(&self, tab: &str) -> Result<String, String> {
+        use base64::Engine as _;
+        let (mime, bytes) = self.engine.capture_frame(tab).map_err(|e| e.to_string())?;
+        if bytes.len() > 24 * 1024 * 1024 {
+            return Err("the captured page is too large".into());
+        }
+        Ok(format!(
+            "data:{mime};base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(bytes)
+        ))
+    }
+
+    /// Answer a pending page context menu (`None` dismisses it).
+    pub fn resolve_context_menu(&self, tab: &str, command: Option<i32>) {
+        let _ = self.engine.resolve_context_menu(tab, command);
     }
 
     /// Screenshot a tab into a board (PureRef-style capture).

@@ -115,6 +115,7 @@ export interface Board { id: Id; name: string; items: BoardItem[]; view: { x: nu
 |---|---|---|
 | `athanor://snapshot` | `Snapshot` | Any state change. Replace the store wholesale. Emitted at most ~60 Hz. |
 | `athanor://shortcut` | `{ combo: string }` | A shortcut intercepted natively (the page had focus). Combos are normalised: `Ctrl+T`, `Ctrl+Shift+T`, `Ctrl+L`, `Ctrl+K`, `Ctrl+W`, `Ctrl+Tab`, `Ctrl+Shift+Tab`, `Alt+Left`, `Alt+Right`, `F5`, `Ctrl+R`, `F12`, `Ctrl+\\`, `Ctrl+B`, `Ctrl+1..9`. Shell handles ones that are UI-only (focus omnibox, palette, toggle sidebar); the backend already performed the rest. |
+| `athanor://context-menu` | `{ type: 'pageContextMenu', tab, x, y, target: ContextTarget, items: ContextItem[] }` | The page asked for a right-click menu. The engine holds the request open (WebView2 deferral) until the shell answers with `resolve_context_menu`. `x`/`y` are physical pixels from the top-left of the tab's view. `items` are the engine's own entries (`name` is its unlocalised command name, e.g. `copy`, `saveas`); the shell draws them with shadcn and adds Athanor's own (open link in a tab, send image to board, search selection). Windows only for now. |
 | `athanor://toast` | `{ level: 'info' \| 'success' \| 'error'; message: string }` | Show a toast. |
 | `athanor://adblock` | `AdblockStatus` | Adblock list state / counters changed. |
 | `athanor://split-rects` | `SplitRects` | Pane rectangles changed (only while split is active). |
@@ -160,6 +161,9 @@ Names are `snake_case`; args are camelCase properties of the single argument obj
 
 ### Layout & overlays
 * `set_content_bounds({ x, y, w, h })`, `set_overlay_open({ open })`
+* `capture_frame({ tab }) -> string`: JPEG/PNG `data:` URL of the visible page. The shell shows it as a still image while it hides the native view (`set_overlay_open`), so menus and dialogs never make the page vanish.
+* `resolve_context_menu({ tab, command: number | null })`: answer an `athanor://context-menu` request exactly once: the chosen `ContextItem.id`, or `null` to dismiss.
+* `context_action({ action, data })`: host-side half of Athanor's own context entries (`send-image-to-board` with the image URL).
 * `set_viewport_emulation({ tab, preset: 'mobile' | 'tablet' | 'laptop' | null })` — dev responsive mode (resizes that tab's webview inside its slot, centred).
 
 ### Omnibox / palette

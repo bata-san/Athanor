@@ -1,23 +1,34 @@
-import { AthanorMark } from './components/AthanorMark'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import type * as React from 'react'
 import { Toaster, toast } from 'sonner'
 import { DndContext, type DragEndEvent } from '@dnd-kit/core'
+import { ArrowLeft, ArrowRight, Command as CommandIcon, Plus, ShieldCheck } from 'lucide-react'
 import { api } from './lib/api'
 import { listen } from './lib/events'
 import { useAppStore, bootStore } from './lib/store'
 import { shortcutFromKeyboard, normalizeShortcut } from './lib/shortcuts'
 import { dividerRatioAt } from './lib/splitMath'
-import type { PanelInfo, Snapshot, SplitNode, SplitRects, Tab } from './lib/types'
+import { useAnyOverlay, useOverlay, useOverlayStore } from './lib/overlay'
+import { isDarkTheme } from './lib/theme'
+import { mockPageContextMenu } from './lib/mock/backend'
+import type { CommandInfo, DevServer, DevTool, PageContextMenu, PanelInfo, Rect, Snapshot, SplitNode, SplitRects, Suggestion, Tab } from './lib/types'
+import { cn } from './lib/utils'
+import { AthanorMark } from './components/AthanorMark'
 import { AppIcon } from './components/Icons'
 import { Button } from './components/ui/button'
-import { Dialog, DialogContent } from './components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle } from './components/ui/dialog'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './components/ui/command'
+import { Kbd } from './components/ui/kbd'
+import { Textarea } from './components/ui/textarea'
+import { Tip, TooltipProvider } from './components/ui/tooltip'
 import { Sidebar } from './components/Sidebar'
 import { Toolbar, MobileBar } from './components/Toolbar'
 import { TabSwitcher } from './components/TabSwitcher'
 import { NewTabPage } from './components/NewTabPage'
 import { SuspenseCard } from './components/SuspenseCard'
+import { PageContextMenuView } from './components/PageContextMenu'
+import { DialogHost } from './components/dialogs'
+import { WindowControls, dragWindow, toggleWindow } from './components/WindowControls'
 const DevPanel = lazy(() => import('./pages/DevTools'))
 
 const SettingsPage = lazy(() => import('./pages/Settings'))
@@ -25,6 +36,42 @@ const BoardsPage = lazy(() => import('./pages/Boards'))
 const ExtensionsPage = lazy(() => import('./pages/Extensions'))
 
 type Screen = 'browser' | 'settings' | 'boards' | 'extensions' | 'board-window'
+type Frame = { tab: string; src: string; rect: Rect }
+
+/**
+ * Native tab webviews sit above the shell, so while any shell popup is open they are hidden. To keep the page
+ * from vanishing, each visible page is captured first and shown as a still image underneath the popup.
+ */
+function useFreezeFrames(targets: () => { tab: string; rect: Rect }[]) {
+  const [frames, setFrames] = useState<Frame[]>([])
+  const desired = useRef(false)
+  const applied = useRef(false)
+  const targetsRef = useRef(targets)
+  targetsRef.current = targets
+  const freeze = useCallback(async (capture = true) => {
+    desired.current = true
+    if (applied.current) return
+    applied.current = true
+    const shots = capture ? await Promise.all(targetsRef.current().map(async (target) => {
+      try {
+        const src = await Promise.race([api.captureFrame(target.tab), new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 1600))])
+        return src ? { ...target, src } : null
+      } catch { return null }
+    })) : []
+    if (!desired.current) { applied.current = false; return }
+    setFrames(shots.filter((shot): shot is Frame => shot !== null))
+    await api.setOverlayOpen(true)
+  }, [])
+  const thaw = useCallback(async () => {
+    desired.current = false
+    if (!applied.current) return
+    applied.current = false
+    await api.setOverlayOpen(false)
+    window.setTimeout(() => { if (!desired.current) setFrames([]) }, 90)
+  }, [])
+  return { frames, freeze, thaw }
+}
+
 export function App() {
   const snapshot = useAppStore((s) => s.snapshot)
   const ready = useAppStore((s) => s.ready)
@@ -39,12 +86,28 @@ export function App() {
   const [paletteQuery, setPaletteQuery] = useState('')
   const [devOpen, setDevOpen] = useState(false)
   const [switcherOpen, setSwitcherOpen] = useState(false)
-  const [overlaySources, setOverlaySources] = useState({ menu: false, omnibox: false })
   const [splitRects, setSplitRects] = useState<SplitRects | null>(null)
+  const [pageMenu, setPageMenu] = useState<{ request: PageContextMenu; anchor: { x: number; y: number } } | null>(null)
   const [density, setDensity] = useState<'compact' | 'comfortable'>(() => localStorage.getItem('athanor-density') === 'compact' ? 'compact' : 'comfortable')
   const [narrow, setNarrow] = useState(() => window.matchMedia('(max-width: 43.75rem)').matches)
   const omniboxRef = useRef<HTMLInputElement>(null)
+  const contentRef = useRef<HTMLElement>(null)
   const mobile = (snapshot?.platform === 'android' || snapshot?.platform === 'ios') || narrow
+  const anyOverlay = useAnyOverlay()
+  const splitRectsRef = useRef(splitRects)
+  splitRectsRef.current = splitRects
+
+  const freezeTargets = useCallback(() => {
+    const current = useAppStore.getState().snapshot
+    const content = contentRef.current?.getBoundingClientRect()
+    if (!current || !content) return []
+    const split = current.workspace.split ? splitRectsRef.current : null
+    if (split) return split.panes.filter((pane) => !current.workspace.tabs.find((tab) => tab.id === pane.tab)?.url.startsWith('athanor://')).map((pane) => ({ tab: pane.tab, rect: pane.rect }))
+    const active = current.workspace.tabs.find((tab) => tab.id === current.workspace.activeTab)
+    if (!active || active.url.startsWith('athanor://')) return []
+    return [{ tab: active.id, rect: { x: 0, y: 0, w: content.width, h: content.height } }]
+  }, [])
+  const { frames, freeze, thaw } = useFreezeFrames(freezeTargets)
 
   useEffect(() => { void bootStore() }, [])
   useEffect(() => {
@@ -52,15 +115,41 @@ export function App() {
     if (params) { setStandaloneBoard(decodeURIComponent(params[1]!)); setScreen('board-window') }
   }, [])
   useEffect(() => { const query = window.matchMedia('(max-width: 43.75rem)'); const update = () => setNarrow(query.matches); query.addEventListener('change', update); return () => query.removeEventListener('change', update) }, [])
-  useEffect(() => { void api.setOverlayOpen(paletteOpen || switcherOpen || overlaySources.menu || overlaySources.omnibox || devOpen || panel !== null) }, [paletteOpen, switcherOpen, overlaySources, devOpen, panel])
+  useOverlay(paletteOpen, 'palette')
+  useOverlay(devOpen, 'dev-panel')
+  useOverlay(switcherOpen, 'tab-switcher')
+  useOverlay(panel !== null, 'extension-panel')
+  // Popups that cover only part of the page get a frozen frame; the full-screen ones (mobile switcher, extension panel) just hide it.
+  const overlayOpen = anyOverlay
+  const frameWanted = overlayOpen && !mobile && !(panel !== null && !paletteOpen && !devOpen)
+  useEffect(() => { if (overlayOpen) void freeze(frameWanted); else void thaw() }, [overlayOpen, frameWanted, freeze, thaw])
   useEffect(() => { const update = (event: Event) => { const next = (event as CustomEvent<'compact' | 'comfortable'>).detail; if (next === 'compact' || next === 'comfortable') setDensity(next) }; window.addEventListener('athanor-density', update); return () => window.removeEventListener('athanor-density', update) }, [])
   useEffect(() => { if (!snapshot?.workspace.split) { setSplitRects(null); return }; void api.getSplitRects().then(setSplitRects) }, [snapshot?.workspace.split])
   useEffect(() => { const unlisten = listen('athanor://split-rects', setSplitRects); return () => { void unlisten.then((off) => off()) } }, [])
-  useEffect(() => { const content = document.querySelector('[data-part="content"]') as HTMLElement | null; if (!content) return; const report = () => { const rect = content.getBoundingClientRect(); void api.setContentBounds({ x: rect.x, y: rect.y, w: rect.width, h: rect.height }).then(() => { if (useAppStore.getState().snapshot?.workspace.split) void api.getSplitRects().then(setSplitRects) }) }; const observer = new ResizeObserver(report); observer.observe(content); report(); return () => observer.disconnect() }, [mobile, snapshot?.settings.sidebarCompact, snapshot?.settings.sidebarWidth, snapshot?.settings.sidebarSide])
+  useEffect(() => { const content = contentRef.current; if (!content) return; const report = () => { const rect = content.getBoundingClientRect(); void api.setContentBounds({ x: rect.x, y: rect.y, w: rect.width, h: rect.height }).then(() => { if (useAppStore.getState().snapshot?.workspace.split) void api.getSplitRects().then(setSplitRects) }) }; const observer = new ResizeObserver(report); observer.observe(content); report(); return () => observer.disconnect() }, [mobile, ready, snapshot?.settings.sidebarCompact, snapshot?.settings.sidebarWidth, snapshot?.settings.sidebarSide])
+
+  // The page's right-click menu: freeze the page, then draw the menu over the still image.
+  useEffect(() => {
+    const unlisten = listen('athanor://context-menu', (request) => {
+      void (async () => {
+        const content = contentRef.current?.getBoundingClientRect()
+        if (!content) { void api.resolveContextMenu(request.tab, null); return }
+        const pane = useAppStore.getState().snapshot?.workspace.split ? splitRectsRef.current?.panes.find((candidate) => candidate.tab === request.tab)?.rect : undefined
+        const dpr = window.devicePixelRatio || 1
+        const anchor = { x: content.x + (pane?.x ?? 0) + request.x / dpr, y: content.y + (pane?.y ?? 0) + request.y / dpr }
+        try { await freeze(true); setPageMenu({ request, anchor }) } catch { void api.resolveContextMenu(request.tab, null) }
+      })()
+    })
+    return () => { void unlisten.then((off) => off()) }
+  }, [freeze])
+  // The shell never shows the browser's own context menu, except in text fields where cut/copy/paste are useful.
+  useEffect(() => {
+    const suppress = (event: MouseEvent) => { const target = event.target as HTMLElement | null; if (!target?.closest('input, textarea, [contenteditable="true"]')) event.preventDefault() }
+    document.addEventListener('contextmenu', suppress)
+    return () => document.removeEventListener('contextmenu', suppress)
+  }, [])
 
   const activeTab = snapshot?.workspace.tabs.find((tab) => tab.id === snapshot.workspace.activeTab) ?? null
-  const setMenuOverlay = useCallback((open: boolean) => setOverlaySources((current) => ({ ...current, menu: open })), [])
-  const setOmniboxOverlay = useCallback((open: boolean) => setOverlaySources((current) => ({ ...current, omnibox: open })), [])
   useEffect(() => { if (standaloneBoard) return; if (activeTab?.url === 'athanor://settings') setScreen('settings'); else if (activeTab?.url === 'athanor://boards') setScreen('boards'); else if (activeTab?.url === 'athanor://extensions') setScreen('extensions'); else setScreen('browser') }, [activeTab?.url, standaloneBoard])
   const handleShortcut = useCallback((comboInput: string, fromNative = false) => {
     const combo = normalizeShortcut(comboInput)
@@ -133,20 +222,26 @@ export function App() {
     if (value.startsWith('ext:')) { const [ext, id] = value.slice(4).split('/'); if (ext && id) void api.runExtensionCommand(ext, id); setPaletteOpen(false); return }
     if (value.startsWith('suggest:')) { const url = value.slice(8); openTabUrl(url); return }
   }
+  const closePageMenu = useCallback(() => { setPageMenu(null); if (useOverlayStore.getState().open.size === 0) void thaw() }, [thaw])
   const shownTab = activeTab
   const currentPage: Screen = screen === 'browser' && shownTab?.url === 'athanor://settings' ? 'settings' : screen === 'browser' && shownTab?.url === 'athanor://boards' ? 'boards' : screen === 'browser' && shownTab?.url === 'athanor://extensions' ? 'extensions' : screen
   const internalPage = shownTab?.url.startsWith('athanor://') ?? false
   const standaloneBoardWindow = screen === 'board-window'
   const splitActive = Boolean(snapshot?.workspace.split)
 
-  if (!snapshot || !ready) return <div className="page-placeholder"><div className="brand-mark"><AthanorMark /></div></div>
-  return <DndContext onDragEnd={startDrag}>
-    <div className={`${mobile ? 'mobile-shell' : ''} ${standaloneBoardWindow ? 'standalone-board-shell' : ''} app-shell`} data-part="shell" data-side={snapshot.settings.sidebarSide} data-density={density}>
-      {!mobile && !standaloneBoardWindow && <Sidebar snapshot={snapshot} panels={panels} toolbar={<Toolbar snapshot={snapshot} activeTab={activeTab} omniboxRef={omniboxRef} openPalette={() => { setPaletteOpen(true); setPaletteQuery('') }} openPage={openInternalPage} toggleDev={() => setDevOpen((value) => !value)} onOverlay={setOmniboxOverlay} />} openPage={openInternalPage} openPanel={(selected) => { setPanel(selected); setScreen('browser') }} onOverlay={setMenuOverlay} />}
-      <main className="main-column">
+  if (!snapshot || !ready) return <div className="grid h-dvh w-full place-items-center bg-background text-foreground"><span className="grid size-10 place-items-center rounded-xl bg-primary text-primary-foreground"><AthanorMark className="size-5" /></span></div>
+  const sidebarRight = snapshot.settings.sidebarSide === 'right'
+  const controls = !mobile ? <WindowControls /> : undefined
+  const controlsInSidebar = sidebarRight && !snapshot.settings.sidebarCompact
+  return <TooltipProvider><DndContext onDragEnd={startDrag}>
+    <div className={cn('app-shell flex h-dvh w-full min-h-0 bg-background text-foreground', mobile && 'mobile-shell flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]', !mobile && sidebarRight && 'flex-row-reverse', standaloneBoardWindow && 'standalone-board-shell')} data-part="shell" data-side={snapshot.settings.sidebarSide} data-density={density}>
+      {!mobile && !standaloneBoardWindow && <Sidebar snapshot={snapshot} panels={panels} openPage={openInternalPage} openPanel={(selected) => { setPanel(selected); setScreen('browser') }} windowControls={controlsInSidebar ? controls : undefined} />}
+      <main className="main-column relative flex min-h-0 min-w-0 flex-1 flex-col">
+        {!mobile && !standaloneBoardWindow && <Toolbar snapshot={snapshot} activeTab={activeTab} omniboxRef={omniboxRef} openPalette={() => { setPaletteOpen(true); setPaletteQuery('') }} openPage={openInternalPage} toggleDev={() => setDevOpen((value) => !value)} windowControls={controlsInSidebar ? undefined : controls} />}
         {standaloneBoardWindow && !mobile && <StandaloneTitlebar />}
-        {mobile && !standaloneBoardWindow && <MobileBar snapshot={snapshot} activeTab={activeTab} omniboxRef={omniboxRef} openSwitcher={() => setSwitcherOpen(true)} openPalette={() => { setPaletteOpen(true); setPaletteQuery('') }} onOverlay={setOmniboxOverlay} openPage={openInternalPage} />}
-        <section className={`content ${mobile ? 'mobile-content' : ''}`} data-part="content" data-split={String(splitActive)}>
+        {mobile && !standaloneBoardWindow && <MobileBar snapshot={snapshot} activeTab={activeTab} omniboxRef={omniboxRef} openSwitcher={() => setSwitcherOpen(true)} openPalette={() => { setPaletteOpen(true); setPaletteQuery('') }} openPage={openInternalPage} />}
+        <section ref={contentRef} className={cn('content relative min-h-0 min-w-0 flex-1 overflow-hidden bg-background', mobile ? 'mobile-content' : 'border-t border-sidebar-border', !mobile && !standaloneBoardWindow && (sidebarRight ? 'border-e' : 'border-s'))} data-part="content" data-split={String(splitActive)}>
+          <div key={`${currentPage}|${panel?.id ?? ''}|${internalPage ? shownTab?.url : 'web'}`} className="absolute inset-0 animate-[ath-rise_220ms_var(--ease-spring)_both]">
           {currentPage === 'browser' && (panel
             ? <PanelView panel={panel} />
             : !internalPage ? (isMock ? shownTab ? <MockPage tab={shownTab} snapshot={snapshot} /> : <NewTabPage servers={servers} onNavigate={openTabUrl} /> : null)
@@ -158,32 +253,56 @@ export function App() {
           {currentPage === 'boards' && <Suspense fallback={<SuspenseCard />}><BoardsPage standaloneId={standaloneBoard} /></Suspense>}
           {currentPage === 'extensions' && <Suspense fallback={<SuspenseCard />}><ExtensionsPage /></Suspense>}
           {currentPage === 'board-window' && <Suspense fallback={<SuspenseCard />}><BoardsPage standaloneId={standaloneBoard} /></Suspense>}
+          </div>
+          {frames.map((frame) => <img key={frame.tab} src={frame.src} alt="" aria-hidden="true" draggable={false} className="pointer-events-none absolute z-[1] select-none object-fill" data-part="frozen-page" style={{ left: frame.rect.x, top: frame.rect.y, width: frame.rect.w, height: frame.rect.h }} />)}
           {snapshot.workspace.split && !standaloneBoardWindow && <SplitOverlay snapshot={snapshot} rects={splitRects} />}
           {devOpen && !standaloneBoardWindow && <Suspense fallback={null}><DevPanel onClose={() => setDevOpen(false)} snapshot={snapshot} /></Suspense>}
         </section>
-        {!mobile && !standaloneBoardWindow && <StatusBar snapshot={snapshot} />}
-        {mobile && !standaloneBoardWindow && <nav className="mobile-bottom-bar" data-part="toolbar" aria-label="Navigation">
-          <IconAction title="Back" onClick={() => activeTab && api.goBack(activeTab.id)}><AppIcon name="ArrowLeft" /></IconAction>
-          <IconAction title="Forward" onClick={() => activeTab && api.goForward(activeTab.id)}><AppIcon name="ArrowRight" /></IconAction>
-          <IconAction title="New tab" onClick={() => api.openTab()}><AppIcon name="Plus" /></IconAction>
-          <button className="tab-count" data-part="tab-count" aria-label="Open tabs" onClick={() => setSwitcherOpen(true)}>{snapshot.workspace.tabs.filter((t) => !t.archived).length}</button>
-          <IconAction title="Menu" onClick={() => { setPaletteOpen(true); setPaletteQuery('') }}><AppIcon name="Menu" /></IconAction>
+        {mobile && !standaloneBoardWindow && <nav className="flex h-[var(--ath-mobile-bottom-height)] shrink-0 items-center justify-around border-t border-border bg-background" data-part="toolbar" aria-label="Navigation">
+          <IconAction title="Back" onClick={() => activeTab && api.goBack(activeTab.id)}><ArrowLeft /></IconAction>
+          <IconAction title="Forward" onClick={() => activeTab && api.goForward(activeTab.id)}><ArrowRight /></IconAction>
+          <IconAction title="New tab" onClick={() => api.openTab()}><Plus /></IconAction>
+          <button type="button" className="grid h-8 min-w-8 place-items-center rounded-lg border-2 border-foreground/70 px-1.5 text-xs font-semibold tabular-nums" data-part="tab-count" aria-label="Open tabs" onClick={() => setSwitcherOpen(true)}>{snapshot.workspace.tabs.filter((t) => !t.archived).length}</button>
+          <IconAction title="Menu" onClick={() => { setPaletteOpen(true); setPaletteQuery('') }}><CommandIcon /></IconAction>
         </nav>}
       </main>
       <CommandPalette open={paletteOpen} setOpen={setPaletteOpen} query={paletteQuery} setQuery={setPaletteQuery} snapshot={snapshot} servers={servers} extensionCommands={extensionCommands} run={runPaletteCommand} />
       {mobile && !standaloneBoardWindow && <TabSwitcher open={switcherOpen} onClose={() => setSwitcherOpen(false)} snapshot={snapshot} />}
-      <Toaster className="toast-root" position={mobile ? 'top-center' : 'bottom-right'} theme={document.documentElement.dataset.themeDark === 'false' ? 'light' : 'dark'} />
+      <PageContextMenuView request={pageMenu?.request ?? null} anchor={pageMenu?.anchor ?? null} searchEngine={snapshot.settings.searchEngine} onClose={closePageMenu} />
+      <DialogHost />
+      <Toaster className="toast-root" position={mobile ? 'top-center' : 'bottom-right'} theme={isDarkTheme() ? 'dark' : 'light'} style={{ '--normal-bg': 'var(--popover)', '--normal-text': 'var(--popover-foreground)', '--normal-border': 'var(--border)', '--border-radius': 'var(--radius)', fontFamily: 'var(--font-ui)' } as React.CSSProperties} />
     </div>
-  </DndContext>
+  </DndContext></TooltipProvider>
 }
 
-function IconAction({ title, children, onClick }: { title: string; children: React.ReactNode; onClick: () => void }) { return <button className="icon-button" data-part="nav-button" aria-label={title} title={title} onClick={onClick}>{children}</button> }
-function StandaloneTitlebar() { const [maximized, setMaximized] = useState(false); useEffect(() => { void api.windowIsMaximized().then(setMaximized) }, []); return <div className="board-window-titlebar" data-part="titlebar" onPointerDown={(event) => { if (!(event.target as HTMLElement).closest('button')) void api.windowStartDrag() }}><span>Reference board</span><span className="titlebar-spacer" /><button className="window-control" aria-label="Minimize window" onClick={() => void api.windowMinimize()}><AppIcon name="Minus" /></button><button className="window-control" aria-label={maximized ? 'Restore window' : 'Maximize window'} onClick={() => { void api.windowToggleMaximize(); setMaximized((value) => !value) }}><AppIcon name={maximized ? 'Square' : 'Maximize2'} /></button><button className="window-control" data-part="window-close" aria-label="Close window" onClick={() => void api.windowClose()}><AppIcon name="X" /></button></div> }
+function IconAction({ title, children, onClick }: { title: string; children: React.ReactNode; onClick: () => void }) { return <Button variant="ghost" size="touch" className="px-0 [&_svg]:size-5" data-part="nav-button" aria-label={title} title={title} onClick={onClick}>{children}</Button> }
+
+function StandaloneTitlebar() {
+  return <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-sidebar ps-4 text-sm font-medium" data-part="titlebar" onPointerDown={dragWindow} onDoubleClick={toggleWindow}>
+    <span className="grid size-5 place-items-center rounded bg-primary text-primary-foreground"><AthanorMark className="size-3" /></span>Reference board<span className="flex-1" /><WindowControls />
+  </div>
+}
+
 function MockPage({ tab, snapshot }: { tab: Tab; snapshot: Snapshot }) {
   const runtime = snapshot.runtime[tab.id]
-  return <div className="page-placeholder"><article className="placeholder-card" data-part="new-tab-page"><span className="placeholder-eyebrow">Mock browser preview</span><h2>{tab.title}</h2><span className="placeholder-url">{tab.url}</span><p className="muted-copy">The native page webview appears here when Athanor runs inside Tauri. This preview keeps the shell layout usable in a regular browser.</p><div className="placeholder-preview"><AppIcon name="ShieldCheck" /> {runtime?.blocked ?? 0} requests blocked {runtime?.secure ? '· secure connection' : ''}</div></article></div>
+  const menu = (kind: 'page' | 'image' | 'selection') => (event: React.MouseEvent) => {
+    event.preventDefault(); event.stopPropagation()
+    const box = (event.currentTarget.closest('[data-mock-page]') as HTMLElement).getBoundingClientRect()
+    const dpr = window.devicePixelRatio || 1
+    mockPageContextMenu(tab.id, (event.clientX - box.x) * dpr, (event.clientY - box.y) * dpr, kind)
+  }
+  return <div className="grid size-full place-items-center overflow-auto bg-secondary/40 p-8" data-mock-page onContextMenu={menu('page')}>
+    <article className="flex w-full max-w-lg flex-col gap-3 rounded-2xl border border-border bg-card p-6" data-part="new-tab-page">
+      <span className="text-xs font-medium text-muted-foreground">Mock browser preview</span>
+      <h2 className="m-0 text-xl font-semibold">{tab.title}</h2>
+      <span className="break-all text-sm text-muted-foreground">{tab.url}</span>
+      <p className="m-0 text-sm text-muted-foreground" onContextMenu={menu('selection')}>The native page webview appears here when Athanor runs inside Tauri. Right-click this text, the image, or the empty area to try the page menu.</p>
+      <img alt="" className="h-24 w-full rounded-lg bg-muted object-cover" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='100'%3E%3Crect width='400' height='100' fill='%23d4d4d8'/%3E%3C/svg%3E" onContextMenu={menu('image')} />
+      <div className="flex items-center gap-2 border-t border-border pt-3 text-sm text-muted-foreground"><ShieldCheck className="size-4" />{runtime?.blocked ?? 0} requests blocked{runtime?.secure ? ' · secure connection' : ''}</div>
+    </article>
+  </div>
 }
-function StatusBar({ snapshot }: { snapshot: Snapshot }) { return <div className="statusbar" data-part="statusbar"><span>{snapshot.workspace.split ? 'Split view active' : 'Athanor is ready'}</span><span>{snapshot.version} · {snapshot.platform}</span></div> }
+
 function SplitOverlay({ snapshot, rects }: { snapshot: Snapshot; rects: SplitRects | null }) {
   const split = snapshot.workspace.split
   if (!split || !rects) return null
@@ -191,21 +310,22 @@ function SplitOverlay({ snapshot, rects }: { snapshot: Snapshot; rects: SplitRec
   const nodeAt = (root: SplitNode, path: boolean[]) => path.reduce<SplitNode | null>((node, branch) => node?.kind === 'split' ? branch ? node.b : node.a : null, root)
   const leaves = (node: SplitNode | null): string[] => !node ? [] : node.kind === 'leaf' ? [node.tab] : [...leaves(node.a), ...leaves(node.b)]
   return <>
-    {focusedPane && <div className="split-focus-ring" aria-hidden="true" style={{ left: focusedPane.rect.x, top: focusedPane.rect.y, width: focusedPane.rect.w, height: focusedPane.rect.h }} />}
-    {rects.dividers.map((divider, index) => <button key={`${divider.path.join('.')}-${index}`} className="split-divider" data-part="split-divider" data-dir={divider.dir} aria-label="Resize split panes" style={{ left: divider.rect.x, top: divider.rect.y, width: divider.rect.w, height: divider.rect.h }} onPointerDown={(event) => {
-      const parent = event.currentTarget.parentElement; if (!parent) return
-      event.currentTarget.setPointerCapture(event.pointerId)
-      const regionNode = nodeAt(split.root, divider.path), childIds = new Set(leaves(regionNode)), boxes = rects.panes.filter((pane) => childIds.has(pane.tab)).map((pane) => pane.rect)
-      if (!boxes.length) return
-      const region = { x: Math.min(...boxes.map((box) => box.x)), y: Math.min(...boxes.map((box) => box.y)), w: Math.max(...boxes.map((box) => box.x + box.w)) - Math.min(...boxes.map((box) => box.x)), h: Math.max(...boxes.map((box) => box.y + box.h)) - Math.min(...boxes.map((box) => box.y)) }
-      const move = (e: PointerEvent) => { const area = parent.getBoundingClientRect(); const value = dividerRatioAt(divider.dir, { x: e.clientX - area.left, y: e.clientY - area.top }, region); void api.setSplitRatio(divider.path, value) }
-      const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
-      window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
-    }} />)}
-    {rects.panes.map((pane) => { const tab = snapshot.workspace.tabs.find((item) => item.id === pane.tab); if (!tab) return null; return <div className="pane-toolbar" key={pane.tab} style={{ left: pane.rect.x + 8, top: pane.rect.y + 8 }}><span className="muted-copy">{tab.title}</span><IconAction title="Focus pane" onClick={() => void api.focusPane(tab.id)}><AppIcon name="Split" /></IconAction><IconAction title="Close pane tab" onClick={() => void api.closeTab(tab.id)}><AppIcon name="X" /></IconAction></div> })}
-    <div className="split-toolbar-global"><span className="muted-copy">Split view</span><IconAction title="Remove split" onClick={() => void api.unsplit()}><AppIcon name="X" /></IconAction></div>
+    {focusedPane && <div className="pointer-events-none absolute z-[2] rounded-lg border-2 border-foreground/25" aria-hidden="true" data-part="split-focus" style={{ left: focusedPane.rect.x, top: focusedPane.rect.y, width: focusedPane.rect.w, height: focusedPane.rect.h }} />}
+    {rects.dividers.map((divider, index) => <button key={`${divider.path.join('.')}-${index}`} type="button"
+      className={cn('absolute z-[3] border-0 bg-border p-0 transition-colors hover:bg-foreground/40 active:bg-foreground', divider.dir === 'row' ? 'cursor-col-resize' : 'cursor-row-resize')}
+      data-part="split-divider" data-dir={divider.dir} aria-label="Resize split panes" style={{ left: divider.rect.x, top: divider.rect.y, width: divider.rect.w, height: divider.rect.h }} onPointerDown={(event) => {
+        const parent = event.currentTarget.parentElement; if (!parent) return
+        event.currentTarget.setPointerCapture(event.pointerId)
+        const regionNode = nodeAt(split.root, divider.path), childIds = new Set(leaves(regionNode)), boxes = rects.panes.filter((pane) => childIds.has(pane.tab)).map((pane) => pane.rect)
+        if (!boxes.length) return
+        const region = { x: Math.min(...boxes.map((box) => box.x)), y: Math.min(...boxes.map((box) => box.y)), w: Math.max(...boxes.map((box) => box.x + box.w)) - Math.min(...boxes.map((box) => box.x)), h: Math.max(...boxes.map((box) => box.y + box.h)) - Math.min(...boxes.map((box) => box.y)) }
+        const move = (e: PointerEvent) => { const area = parent.getBoundingClientRect(); const value = dividerRatioAt(divider.dir, { x: e.clientX - area.left, y: e.clientY - area.top }, region); void api.setSplitRatio(divider.path, value) }
+        const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
+        window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
+      }} />)}
   </>
 }
+
 function PanelView({ panel }: { panel: PanelInfo }) {
   const frame = useRef<HTMLIFrameElement>(null)
   const isMock = useAppStore((state) => state.isMock)
@@ -220,8 +340,9 @@ function PanelView({ panel }: { panel: PanelInfo }) {
     return () => { window.removeEventListener('message', listener); void unlisten.then((off) => off()) }
   }, [panel])
   const mockSrc = `<!doctype html><html><body><h2>${panel.title}</h2><p>Sandboxed extension preview</p><textarea id="note" placeholder="Write a quick note"></textarea><button id="read">Test storage bridge</button><pre id="result"></pre><script>document.getElementById('read').onclick=()=>parent.postMessage({athanor:1,id:'mock-read',method:'storage.get',params:{key:'note'}},'*');addEventListener('message',e=>{if(e.data&&e.data.athanor===1&&e.data.id==='mock-read')document.getElementById('result').textContent=JSON.stringify(e.data.result||e.data.error)})</script></body></html>`
-  return <iframe ref={frame} className="extension-panel" data-part="extension-panel" title={panel.title} src={isMock ? undefined : panel.url} srcDoc={isMock ? mockSrc : undefined} sandbox="allow-scripts" />
+  return <iframe ref={frame} className="relative z-[2] size-full min-h-16 flex-1 border-0 bg-background" data-part="extension-panel" title={panel.title} src={isMock ? undefined : panel.url} srcDoc={isMock ? mockSrc : undefined} sandbox="allow-scripts" />
 }
+
 function fuzzyMatch(query: string, candidate: string) {
   const text = candidate.toLocaleLowerCase()
   return query.trim().toLocaleLowerCase().split(/\s+/).every((part) => {
@@ -234,23 +355,40 @@ function fuzzyMatch(query: string, candidate: string) {
     return true
   })
 }
-function CommandPalette({ open, setOpen, query, setQuery, snapshot, servers, extensionCommands, run }: { open: boolean; setOpen: (open: boolean) => void; query: string; setQuery: (query: string) => void; snapshot: Snapshot; servers: import('./lib/types').DevServer[]; extensionCommands: import('./lib/types').CommandInfo[]; run: (value: string) => void }) {
-  const [suggestions, setSuggestions] = useState<import('./lib/types').Suggestion[]>([])
-  const [activeTool, setActiveTool] = useState<import('./lib/types').DevTool | null>(null)
+
+const PALETTE_COMMANDS = [{ id: 'newtab', label: 'New tab', shortcut: 'Ctrl+T', icon: 'Plus' }, { id: 'settings', label: 'Open settings', icon: 'Settings' }, { id: 'boards', label: 'Open reference boards', icon: 'PanelsTopLeft' }, { id: 'extensions', label: 'Manage extensions', icon: 'Zap' }, { id: 'devtools', label: 'Toggle developer panel', shortcut: 'Ctrl+Shift+D', icon: 'SquareCode' }, { id: 'split', label: 'Split with next tab', shortcut: 'Ctrl+\\', icon: 'Split' }, { id: 'autofile', label: 'File tabs into folders', icon: 'Folder' }]
+const DEV_TOOLS: DevTool[] = ['json-pretty', 'json-minify', 'base64-encode', 'base64-decode', 'url-encode', 'url-decode', 'jwt', 'timestamp', 'uuid', 'sha256', 'color']
+
+function CommandPalette({ open, setOpen, query, setQuery, snapshot, servers, extensionCommands, run }: { open: boolean; setOpen: (open: boolean) => void; query: string; setQuery: (query: string) => void; snapshot: Snapshot; servers: DevServer[]; extensionCommands: CommandInfo[]; run: (value: string) => void }) {
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([])
+  const [activeTool, setActiveTool] = useState<DevTool | null>(null)
   const [toolInput, setToolInput] = useState('')
   const [toolOutput, setToolOutput] = useState('')
   const [copied, setCopied] = useState(false)
   useEffect(() => { if (!open) return; const timeout = window.setTimeout(() => { void api.omniboxSuggest(query).then(setSuggestions) }, 60); return () => window.clearTimeout(timeout) }, [query, open])
   const current = snapshot.workspace.tabs.filter((tab) => tab.space === snapshot.workspace.activeSpace && !tab.archived)
-  const commands = [{ id: 'newtab', label: 'New tab', shortcut: 'Ctrl+T', icon: 'Plus' }, { id: 'settings', label: 'Open settings', icon: 'Settings' }, { id: 'boards', label: 'Open reference boards', icon: 'PanelsTopLeft' }, { id: 'extensions', label: 'Manage extensions', icon: 'Zap' }, { id: 'devtools', label: 'Toggle developer panel', shortcut: 'Ctrl+Shift+D', icon: 'SquareCode' }, { id: 'split', label: 'Split with next tab', shortcut: 'Ctrl+\\', icon: 'Split' }, { id: 'autofile', label: 'File tabs into folders', icon: 'Folder' }]
   const matches = (text: string) => fuzzyMatch(query, text)
-  const select = (value: string) => { if (value.startsWith('devtool:')) { setActiveTool(value.slice(8) as import('./lib/types').DevTool); setToolOutput(''); return }; if (value.startsWith('suggest-command:')) { run(value.slice(16)); return }; run(value) }
-  const devTools: import('./lib/types').DevTool[] = ['json-pretty', 'json-minify', 'base64-encode', 'base64-decode', 'url-encode', 'url-decode', 'jwt', 'timestamp', 'uuid', 'sha256', 'color']
-  return <Dialog open={open} onOpenChange={(value) => { setOpen(value); if (!value) setActiveTool(null) }}><DialogContent aria-label="Command palette" data-part="palette"><Command shouldFilter={false}><CommandInput value={query} onValueChange={setQuery} placeholder="Search tabs, commands, and addresses…" /><CommandList><CommandEmpty>No matches. Press Enter to search the web.</CommandEmpty>{suggestions.length > 0 && <CommandGroup heading="Suggestions">{suggestions.filter((item) => matches(`${item.title} ${item.subtitle}`)).map((suggestion, index) => <CommandItem data-part="palette-item" key={`${suggestion.kind}-${index}`} value={suggestion.command ? `suggest-command:${suggestion.command}` : `suggest:${suggestion.url ?? ''}`} onSelect={select}><AppIcon name={suggestion.kind === 'tab' ? 'PanelsTopLeft' : suggestion.kind === 'search' ? 'Search' : 'Globe2'} /><div>{suggestion.title}<span className="command-subtitle">{suggestion.subtitle}</span></div></CommandItem>)}</CommandGroup>}
-      <CommandGroup heading="Commands">{commands.filter((item) => matches(item.label)).map((item) => <CommandItem data-part="palette-item" key={item.id} value={`cmd:${item.id}`} onSelect={select}><AppIcon name={item.icon} /><span>{item.label}</span>{item.shortcut && <kbd>{item.shortcut}</kbd>}</CommandItem>)}{extensionCommands.filter((item) => matches(item.title)).map((item) => <CommandItem data-part="palette-item" key={`${item.ext}/${item.id}`} value={`ext:${item.ext}/${item.id}`} onSelect={select}><AppIcon name="Zap" /><span>{item.title}</span>{item.keybinding && <kbd>{item.keybinding}</kbd>}</CommandItem>)}</CommandGroup>
-      <CommandGroup heading="Developer tools">{devTools.filter((item) => matches(item.replaceAll('-', ' '))).map((item) => <CommandItem data-part="palette-item" key={item} value={`devtool:${item}`} onSelect={select}><AppIcon name="SquareCode" /><span>{item.replaceAll('-', ' ')}</span></CommandItem>)}</CommandGroup>
-      <CommandGroup heading="Open tabs">{current.filter((tab) => matches(`${tab.title} ${tab.url}`)).map((tab) => <CommandItem data-part="palette-item" key={tab.id} value={tab.id} onSelect={select}><AppIcon name={tab.pinned ? 'Layers3' : 'Globe2'} /><div>{tab.title}<span className="command-subtitle">{tab.url}</span></div></CommandItem>)}</CommandGroup>
-      {servers.length > 0 && <CommandGroup heading="Dev servers">{servers.filter((server) => matches(`${server.title ?? ''} ${server.url}`)).map((server) => <CommandItem data-part="palette-item" key={server.url} value={`server:${server.url}`} onSelect={select}><AppIcon name="Terminal" /><div>{server.title ?? `localhost:${server.port}`}<span className="command-subtitle">{server.url}</span></div></CommandItem>)}</CommandGroup>}</CommandList></Command>
-      {activeTool && <div className="palette-tool-area"><div className="palette-tool-heading"><strong>{activeTool.replaceAll('-', ' ')}</strong><button className="button button-ghost button-small" onClick={() => setActiveTool(null)}>Back to results</button></div><textarea className="textarea" aria-label="Developer tool input" value={toolInput} onChange={(event) => setToolInput(event.target.value)} placeholder="Input" /><div className="dev-actions"><Button onClick={() => void api.runDevTool(activeTool, toolInput).then(setToolOutput)}>Run</Button><Button variant="outline" size="sm" disabled={!toolOutput} onClick={() => { void navigator.clipboard.writeText(toolOutput); setCopied(true); window.setTimeout(() => setCopied(false), 1200) }}><AppIcon name={copied ? 'Check' : 'Copy'} />Copy output</Button></div><pre className="palette-tool-output">{toolOutput || 'Your result will appear here.'}</pre></div>}
-    </DialogContent></Dialog>
+  const select = (value: string) => { if (value.startsWith('devtool:')) { setActiveTool(value.slice(8) as DevTool); setToolOutput(''); return }; if (value.startsWith('suggest-command:')) { run(value.slice(16)); return }; run(value) }
+  return <Dialog open={open} onOpenChange={(value) => { setOpen(value); if (!value) setActiveTool(null) }}>
+    <DialogContent aria-label="Command palette" aria-describedby={undefined} data-part="palette">
+      <DialogTitle className="sr-only">Command palette</DialogTitle>
+      <Command shouldFilter={false}>
+        <CommandInput value={query} onValueChange={setQuery} placeholder="Search tabs, commands, and addresses…" />
+        <CommandList>
+          <CommandEmpty>No matches. Press Enter to search the web.</CommandEmpty>
+          {suggestions.length > 0 && <CommandGroup heading="Suggestions">{suggestions.filter((item) => matches(`${item.title} ${item.subtitle}`)).map((suggestion, index) => <CommandItem data-part="palette-item" key={`${suggestion.kind}-${index}`} value={suggestion.command ? `suggest-command:${suggestion.command}` : `suggest:${suggestion.url ?? ''}`} onSelect={select}><AppIcon name={suggestion.kind === 'tab' ? 'PanelsTopLeft' : suggestion.kind === 'search' ? 'Search' : 'Globe2'} /><div className="flex min-w-0 flex-col"><span className="truncate">{suggestion.title}</span><span className="truncate text-xs text-muted-foreground">{suggestion.subtitle}</span></div></CommandItem>)}</CommandGroup>}
+          <CommandGroup heading="Commands">{PALETTE_COMMANDS.filter((item) => matches(item.label)).map((item) => <CommandItem data-part="palette-item" key={item.id} value={`cmd:${item.id}`} onSelect={select}><AppIcon name={item.icon} /><span>{item.label}</span>{item.shortcut && <Kbd className="ms-auto">{item.shortcut}</Kbd>}</CommandItem>)}{extensionCommands.filter((item) => matches(item.title)).map((item) => <CommandItem data-part="palette-item" key={`${item.ext}/${item.id}`} value={`ext:${item.ext}/${item.id}`} onSelect={select}><AppIcon name="Zap" /><span>{item.title}</span>{item.keybinding && <Kbd className="ms-auto">{item.keybinding}</Kbd>}</CommandItem>)}</CommandGroup>
+          <CommandGroup heading="Developer tools">{DEV_TOOLS.filter((item) => matches(item.replaceAll('-', ' '))).map((item) => <CommandItem data-part="palette-item" key={item} value={`devtool:${item}`} onSelect={select}><AppIcon name="SquareCode" /><span className="capitalize">{item.replaceAll('-', ' ')}</span></CommandItem>)}</CommandGroup>
+          <CommandGroup heading="Open tabs">{current.filter((tab) => matches(`${tab.title} ${tab.url}`)).map((tab) => <CommandItem data-part="palette-item" key={tab.id} value={tab.id} onSelect={select}><AppIcon name={tab.pinned ? 'Layers3' : 'Globe2'} /><div className="flex min-w-0 flex-col"><span className="truncate">{tab.title}</span><span className="truncate text-xs text-muted-foreground">{tab.url}</span></div></CommandItem>)}</CommandGroup>
+          {servers.length > 0 && <CommandGroup heading="Dev servers">{servers.filter((server) => matches(`${server.title ?? ''} ${server.url}`)).map((server) => <CommandItem data-part="palette-item" key={server.url} value={`server:${server.url}`} onSelect={select}><AppIcon name="Terminal" /><div className="flex min-w-0 flex-col"><span className="truncate">{server.title ?? `localhost:${server.port}`}</span><span className="truncate text-xs text-muted-foreground">{server.url}</span></div></CommandItem>)}</CommandGroup>}
+        </CommandList>
+      </Command>
+      {activeTool && <div className="flex flex-col gap-2 border-t border-border p-3">
+        <div className="flex items-center justify-between"><strong className="text-sm capitalize">{activeTool.replaceAll('-', ' ')}</strong><Button variant="ghost" size="sm" onClick={() => setActiveTool(null)}>Back to results</Button></div>
+        <Textarea className="font-mono text-[13px]" aria-label="Developer tool input" value={toolInput} onChange={(event) => setToolInput(event.target.value)} placeholder="Input" />
+        <div className="flex items-center gap-2"><Button size="sm" onClick={() => void api.runDevTool(activeTool, toolInput).then(setToolOutput)}>Run</Button><Tip label={copied ? 'Copied' : 'Copy output'}><Button variant="outline" size="icon-sm" aria-label="Copy output" disabled={!toolOutput} onClick={() => { void navigator.clipboard.writeText(toolOutput); setCopied(true); window.setTimeout(() => setCopied(false), 1200) }}><AppIcon name={copied ? 'Check' : 'Copy'} /></Button></Tip></div>
+        <pre className="m-0 max-h-24 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-muted/40 p-3 font-mono text-[13px]">{toolOutput || 'Your result will appear here.'}</pre>
+      </div>}
+    </DialogContent>
+  </Dialog>
 }

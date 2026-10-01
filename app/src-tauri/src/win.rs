@@ -6,7 +6,7 @@
 //! nothing above `EngineBackend` knows WebView2 exists.
 
 use crate::filter::{DetailedVerdict, Filter, Kind};
-use athanor_core::engine::{EngineEvent, EventSink};
+use athanor_core::engine::{ContextItem, ContextTarget, EngineEvent, EventSink};
 use parking_lot::Mutex;
 use std::{collections::HashSet, sync::Arc, time::Instant};
 use webview2_com::{take_pwstr, Microsoft::Web::WebView2::Win32::*, *};
@@ -43,6 +43,153 @@ fn kind_of(ctx: COREWEBVIEW2_WEB_RESOURCE_CONTEXT) -> Kind {
         COREWEBVIEW2_WEB_RESOURCE_CONTEXT_PING => Kind::Ping,
         _ => Kind::Other,
     }
+}
+
+/// A context-menu request that WebView2 is holding open while the shell shows its own menu.
+struct PendingMenu {
+    tab: String,
+    args: ICoreWebView2ContextMenuRequestedEventArgs,
+    deferral: ICoreWebView2Deferral,
+}
+
+impl PendingMenu {
+    fn finish(self, command: Option<i32>) {
+        unsafe {
+            if let Some(id) = command {
+                let _ = self.args.SetSelectedCommandId(id);
+            }
+            let _ = self.deferral.Complete();
+        }
+    }
+}
+
+thread_local! {
+    /// WebView2 objects belong to the UI thread, so the pending request lives there too.
+    static PENDING_MENU: std::cell::RefCell<Option<PendingMenu>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Answer the pending context menu of `tab` (must run on the UI thread). `None` dismisses it.
+pub fn resolve_context_menu(tab: &str, command: Option<i32>) {
+    let pending = PENDING_MENU.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        if slot.as_ref().is_some_and(|p| p.tab == tab) {
+            slot.take()
+        } else {
+            None
+        }
+    });
+    if let Some(p) = pending {
+        p.finish(command);
+    }
+}
+
+unsafe fn describe_context_menu(
+    args: &ICoreWebView2ContextMenuRequestedEventArgs,
+) -> windows::core::Result<(f64, f64, ContextTarget, Vec<ContextItem>)> {
+    use windows::{core::BOOL, Win32::Foundation::POINT};
+    let target = args.ContextMenuTarget()?;
+    let mut kind = COREWEBVIEW2_CONTEXT_MENU_TARGET_KIND_PAGE;
+    target.Kind(&mut kind)?;
+    let kind = match kind {
+        COREWEBVIEW2_CONTEXT_MENU_TARGET_KIND_IMAGE => "image",
+        COREWEBVIEW2_CONTEXT_MENU_TARGET_KIND_SELECTED_TEXT => "selection",
+        COREWEBVIEW2_CONTEXT_MENU_TARGET_KIND_AUDIO => "audio",
+        COREWEBVIEW2_CONTEXT_MENU_TARGET_KIND_VIDEO => "video",
+        _ => "page",
+    };
+    let mut flag = BOOL(0);
+    target.IsEditable(&mut flag)?;
+    let editable = flag.as_bool();
+    let present = |has: windows::core::Result<()>, flag: BOOL| has.is_ok() && flag.as_bool();
+    let text = |s: windows::core::Result<String>| s.ok().filter(|s| !s.is_empty());
+    let mut has = BOOL(0);
+    let link_url = if present(target.HasLinkUri(&mut has), has) {
+        text(pw(|p| target.LinkUri(p)))
+    } else {
+        None
+    };
+    let mut has = BOOL(0);
+    let link_text = if present(target.HasLinkText(&mut has), has) {
+        text(pw(|p| target.LinkText(p)))
+    } else {
+        None
+    };
+    // `HasSourceUri` is not reliable for media; `SourceUri` itself is valid for image / audio / video targets.
+    let source_url = if matches!(kind, "image" | "audio" | "video") {
+        text(pw(|p| target.SourceUri(p)))
+    } else {
+        None
+    };
+    let mut has = BOOL(0);
+    let selection_text = if present(target.HasSelection(&mut has), has) {
+        text(pw(|p| target.SelectionText(p)))
+    } else {
+        None
+    };
+    let context = ContextTarget {
+        kind: kind.into(),
+        page_url: pw(|p| target.PageUri(p)).unwrap_or_default(),
+        link_url,
+        link_text,
+        source_url,
+        selection_text,
+        editable,
+    };
+    let mut point = POINT::default();
+    args.Location(&mut point)?;
+    Ok((
+        f64::from(point.x),
+        f64::from(point.y),
+        context,
+        collect_menu_items(&args.MenuItems()?, 0)?,
+    ))
+}
+
+unsafe fn collect_menu_items(
+    items: &ICoreWebView2ContextMenuItemCollection,
+    depth: u8,
+) -> windows::core::Result<Vec<ContextItem>> {
+    use windows::core::BOOL;
+    let mut count = 0u32;
+    items.Count(&mut count)?;
+    let mut out = Vec::with_capacity(count as usize);
+    for index in 0..count.min(64) {
+        let item = items.GetValueAtIndex(index)?;
+        let mut kind = COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND_COMMAND;
+        item.Kind(&mut kind)?;
+        let mut id = 0i32;
+        item.CommandId(&mut id)?;
+        let (mut enabled, mut checked) = (BOOL(1), BOOL(0));
+        let _ = item.IsEnabled(&mut enabled);
+        let _ = item.IsChecked(&mut checked);
+        let children = if kind == COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND_SUBMENU && depth < 2 {
+            item.Children()
+                .and_then(|c| collect_menu_items(&c, depth + 1))
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        out.push(ContextItem {
+            id,
+            name: pw(|p| item.Name(p)).unwrap_or_default().to_lowercase(),
+            label: pw(|p| item.Label(p)).unwrap_or_default(),
+            kind: match kind {
+                COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND_CHECK_BOX => "checkbox",
+                COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND_RADIO => "radio",
+                COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND_SEPARATOR => "separator",
+                COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND_SUBMENU => "submenu",
+                _ => "command",
+            }
+            .into(),
+            enabled: enabled.as_bool(),
+            checked: checked.as_bool(),
+            shortcut: pw(|p| item.ShortcutKeyDescription(p))
+                .ok()
+                .filter(|s| !s.is_empty()),
+            children,
+        });
+    }
+    Ok(out)
 }
 
 fn is_web(uri: &str) -> bool {
@@ -716,48 +863,35 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
         )?;
     }
 
-    // --- context menu: "Send image to board" ---
+    // --- context menu: the shell draws it (shadcn), WebView2 keeps the request open until we answer ---
     if let Ok(core11) = core.cast::<ICoreWebView2_11>() {
-        let env9 = core
-            .cast::<ICoreWebView2_2>()?
-            .Environment()?
-            .cast::<ICoreWebView2Environment9>()?;
         let (sink, tab) = (ctx.sink.clone(), tab.clone());
         core11.add_ContextMenuRequested(
             &ContextMenuRequestedEventHandler::create(Box::new(move |_, args| {
                 let Some(args) = args else { return Ok(()) };
-                let target = args.ContextMenuTarget()?;
-                let mut kind = COREWEBVIEW2_CONTEXT_MENU_TARGET_KIND_PAGE;
-                target.Kind(&mut kind)?;
-                if kind != COREWEBVIEW2_CONTEXT_MENU_TARGET_KIND_IMAGE {
+                // If anything below fails the native menu simply stays in charge.
+                let Ok((x, y, target, items)) = describe_context_menu(&args) else {
                     return Ok(());
+                };
+                let deferral = args.GetDeferral()?;
+                args.SetHandled(true)?;
+                let previous = PENDING_MENU.with(|slot| {
+                    slot.borrow_mut().replace(PendingMenu {
+                        tab: tab.clone(),
+                        args: args.clone(),
+                        deferral,
+                    })
+                });
+                if let Some(old) = previous {
+                    old.finish(None);
                 }
-                let src = pw(|p| target.SourceUri(p))?;
-                if !is_web(&src) {
-                    return Ok(());
-                }
-                let item = env9.CreateContextMenuItem(
-                    &HSTRING::from("Send image to Athanor board"),
-                    None,
-                    COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND_COMMAND,
-                )?;
-                let (sink, tab) = (sink.clone(), tab.clone());
-                let mut item_token = 0i64;
-                item.add_CustomItemSelected(
-                    &CustomItemSelectedEventHandler::create(Box::new(move |_, _| {
-                        sink(EngineEvent::ContextAction {
-                            tab: tab.clone(),
-                            action: "send-image-to-board".into(),
-                            data: src.clone(),
-                        });
-                        Ok(())
-                    })),
-                    &mut item_token,
-                )?;
-                let items = args.MenuItems()?;
-                let mut count = 0u32;
-                items.Count(&mut count)?;
-                items.InsertValueAtIndex(count.min(1), &item)?;
+                sink(EngineEvent::PageContextMenu {
+                    tab: tab.clone(),
+                    x,
+                    y,
+                    target,
+                    items,
+                });
                 Ok(())
             })),
             &mut token,
@@ -825,9 +959,11 @@ pub unsafe fn set_muted(
         .SetIsMuted(muted)
 }
 
-/// Screenshot the visible area of the page as PNG. The result is delivered through `tx` (from the UI thread).
-pub unsafe fn capture_png(
+/// Screenshot the visible area of the page (PNG, or JPEG for cheap freeze-frames). The result is delivered
+/// through `tx` (from the UI thread).
+pub unsafe fn capture_image(
     controller: &ICoreWebView2Controller,
+    jpeg: bool,
     tx: std::sync::mpsc::Sender<std::result::Result<Vec<u8>, String>>,
 ) -> windows::core::Result<()> {
     use windows::Win32::{
@@ -841,7 +977,11 @@ pub unsafe fn capture_png(
     let reader = stream.clone();
     let done = tx.clone();
     core.CapturePreview(
-        COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG,
+        if jpeg {
+            COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_JPEG
+        } else {
+            COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG
+        },
         &stream,
         &CapturePreviewCompletedHandler::create(Box::new(move |res| {
             let out = res.map_err(|e| e.to_string()).and_then(|()| unsafe {

@@ -47,7 +47,7 @@ impl Default for Settings {
             sidebar_side: "left".into(),
             sidebar_compact: false,
             sidebar_width: 260,
-            theme: "monolith".into(),
+            theme: "chalk".into(),
             adblock_enabled: true,
         }
     }
@@ -202,7 +202,7 @@ mod tests {
         assert_eq!(s.search_engine, Settings::default().search_engine);
         assert_eq!(s.sidebar_width, 180);
         assert_eq!(s.sidebar_side, "left");
-        assert_eq!(s.theme, "monolith");
+        assert_eq!(s.theme, "chalk");
     }
 
     #[test]

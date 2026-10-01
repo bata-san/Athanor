@@ -1,57 +1,233 @@
 import { useEffect, useRef, useState } from 'react'
-import type * as React from 'react'
 import { toast } from 'sonner'
 import type { ExtensionInfo, FilingRule, LineIssue, Settings as SettingsShape, ThemeInfo } from '@/lib/types'
 import { api } from '@/lib/api'
 import { countFilterLines, ignoredLineSummary, lineCountLabel, lineSelectionRange } from '@/lib/userFilters'
 import { useAppStore } from '@/lib/store'
 import { AppIcon } from '@/components/Icons'
+import { AthanorMark } from '@/components/AthanorMark'
+import { Page, Section, Row, IconTile, Stat, Callout } from '@/components/page'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Slider } from '@/components/ui/slider'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Card } from '@/components/ui/card'
+import { Kbd } from '@/components/ui/kbd'
+import { Tip } from '@/components/ui/tooltip'
 
-type Section = 'General' | 'Privacy' | 'Filing' | 'Appearance' | 'Extensions' | 'Shortcuts' | 'About'
-const sections: { id: Section; icon: string }[] = [{ id: 'General', icon: 'Settings' }, { id: 'Privacy', icon: 'Shield' }, { id: 'Filing', icon: 'Folder' }, { id: 'Appearance', icon: 'Sun' }, { id: 'Extensions', icon: 'Zap' }, { id: 'Shortcuts', icon: 'Command' }, { id: 'About', icon: 'CircleHelp' }]
+type SettingsSection = 'General' | 'Privacy' | 'Filing' | 'Appearance' | 'Extensions' | 'Shortcuts' | 'About'
+const sections: { id: SettingsSection; icon: string }[] = [
+  { id: 'General', icon: 'Settings' },
+  { id: 'Privacy', icon: 'Shield' },
+  { id: 'Filing', icon: 'Folder' },
+  { id: 'Appearance', icon: 'Sun' },
+  { id: 'Extensions', icon: 'Zap' },
+  { id: 'Shortcuts', icon: 'Command' },
+  { id: 'About', icon: 'CircleHelp' },
+]
 const shortcuts = [['New tab', 'Ctrl+T'], ['Close tab', 'Ctrl+W'], ['Focus address bar', 'Ctrl+L'], ['Command palette', 'Ctrl+K'], ['Next tab', 'Ctrl+Tab'], ['Toggle sidebar', 'Ctrl+B'], ['Split with next tab', 'Ctrl+\\'], ['Developer panel', 'Ctrl+Shift+D'], ['Open devtools', 'F12']]
+const searchEngines = [
+  ['https://www.google.com/search?q={q}', 'Google'],
+  ['https://duckduckgo.com/?q={q}', 'DuckDuckGo'],
+  ['https://www.bing.com/search?q={q}', 'Bing'],
+] as const
+const sectionDescriptions: Record<SettingsSection, string> = {
+  General: 'Control how Athanor starts and how your sidebar behaves.',
+  Privacy: 'Choose how Athanor handles trackers and your browsing data.',
+  Filing: 'Organize tabs into folders with rules that match their content.',
+  Appearance: 'Choose a theme and set the density of your workspace.',
+  Extensions: 'Manage the tools installed in your browser.',
+  Shortcuts: 'Keyboard shortcuts for common browser actions.',
+  About: 'A little information about Athanor and this workspace.',
+}
 
 export default function SettingsPage() {
   const snapshot = useAppStore((state) => state.snapshot)
   const adblock = useAppStore((state) => state.adblock)
-  const [section, setSection] = useState<Section>('General')
+  const [section, setSection] = useState<SettingsSection>('General')
   const [themes, setThemes] = useState<ThemeInfo[]>([])
   const [extensions, setExtensions] = useState<ExtensionInfo[]>([])
   const [rules, setRules] = useState<FilingRule[]>(snapshot?.filingRules ?? [])
   const [customSearch, setCustomSearch] = useState('')
+  const [density, setDensityState] = useState<'comfortable' | 'compact'>(() => localStorage.getItem('athanor-density') === 'compact' ? 'compact' : 'comfortable')
   const settings = snapshot?.settings
-  useEffect(() => { void api.listThemes().then(setThemes); void api.listExtensions().then(setExtensions); void api.getAdblockStatus().then(useAppStore.getState().setAdblock) }, [])
+
+  useEffect(() => {
+    void api.listThemes().then(setThemes)
+    void api.listExtensions().then(setExtensions)
+    void api.getAdblockStatus().then(useAppStore.getState().setAdblock)
+  }, [])
   useEffect(() => { if (snapshot) setRules(snapshot.filingRules) }, [snapshot?.filingRules])
-  if (!settings) return <div className="page-scroll"><p>Settings are not available yet.</p></div>
+
   const patch = (values: Partial<SettingsShape>) => void api.setSettings(values)
   const persistRules = (next: FilingRule[]) => { setRules(next); void api.setFilingRules(next) }
-  const install = async () => { const path = await api.pickDirectory(); if (path) { await api.installExtension(path); setExtensions(await api.listExtensions()) } }
-  return <div className="settings-layout" data-part="settings">
-    <nav className="settings-nav" aria-label="Settings sections">{sections.map((item) => <button key={item.id} className="settings-nav-item" data-active={String(section === item.id)} onClick={() => setSection(item.id)}><AppIcon name={item.icon} />{item.id}</button>)}</nav>
-    <div className="settings-scroll page-scroll"><header className="page-header"><div><span className="placeholder-eyebrow">Athanor preferences</span><h1>{section}</h1><p className="muted-copy">Tune how your workspace feels and behaves.</p></div></header>
-      {section === 'General' && <>
-        <section className="page-section"><h2>Search and startup</h2><div className="settings-grid"><label htmlFor="search-engine">Search engine</label><select id="search-engine" className="select" value={['https://www.google.com/search?q={q}', 'https://duckduckgo.com/?q={q}', 'https://www.bing.com/search?q={q}'].includes(settings.searchEngine) ? settings.searchEngine : 'custom'} onChange={(event) => { if (event.target.value !== 'custom') patch({ searchEngine: event.target.value }); else if (customSearch) patch({ searchEngine: customSearch }) }}><option value="https://www.google.com/search?q={q}">Google</option><option value="https://duckduckgo.com/?q={q}">DuckDuckGo</option><option value="https://www.bing.com/search?q={q}">Bing</option><option value="custom">Custom template</option></select></div><div className="settings-grid"><label htmlFor="custom-search">Custom URL template <span className="muted-copy">Use {'{q}'} for your query</span></label><Input id="custom-search" value={customSearch || (!['https://www.google.com/search?q={q}', 'https://duckduckgo.com/?q={q}', 'https://www.bing.com/search?q={q}'].includes(settings.searchEngine) ? settings.searchEngine : '')} placeholder="https://example.com/search?q={q}" onChange={(event) => setCustomSearch(event.target.value)} onBlur={() => { if (customSearch.includes('{q}')) patch({ searchEngine: customSearch }) }} /></div><SwitchRow label="Restore previous session" description="Bring back your open tabs when Athanor starts." checked={settings.restoreSession} onChange={(restoreSession) => patch({ restoreSession })} /><div className="settings-grid"><label htmlFor="archive-hours">Archive inactive tabs after</label><div className="range-field"><input id="archive-hours" type="range" min="0" max="168" step="1" value={settings.archiveAfterHours} onChange={(event) => patch({ archiveAfterHours: Number(event.target.value) })} /><span>{settings.archiveAfterHours === 0 ? 'Never' : `${settings.archiveAfterHours} hours`}</span></div></div></section>
-        <section className="page-section"><h2>Sidebar</h2><div className="settings-grid"><label htmlFor="sidebar-side">Position</label><select id="sidebar-side" className="select" value={settings.sidebarSide} onChange={(event) => patch({ sidebarSide: event.target.value as 'left' | 'right' })}><option value="left">Left</option><option value="right">Right</option></select></div><SwitchRow label="Compact sidebar" description="Show a smaller icon rail." checked={settings.sidebarCompact} onChange={(sidebarCompact) => patch({ sidebarCompact })} /><div className="settings-grid"><label htmlFor="sidebar-width">Sidebar width</label><div className="range-field"><input id="sidebar-width" type="range" min="208" max="400" value={settings.sidebarWidth} onChange={(event) => patch({ sidebarWidth: Number(event.target.value) })} /><span>{settings.sidebarWidth}px</span></div></div></section>
+  const install = async () => {
+    const path = await api.pickDirectory()
+    if (path) { await api.installExtension(path); setExtensions(await api.listExtensions()) }
+  }
+  const updateDensity = (value: string) => {
+    if (value !== 'compact' && value !== 'comfortable') return
+    setDensityState(value)
+    setDensity(value)
+  }
+
+  return <div className="flex h-full min-h-0 w-full" data-part="settings">
+    <nav aria-label="Settings sections" className="flex w-56 shrink-0 flex-col gap-1 overflow-y-auto border-e border-border bg-sidebar p-3 max-[700px]:w-14 max-[700px]:px-1.5">
+      {sections.map((item) => <button
+        type="button"
+        key={item.id}
+        aria-label={item.id}
+        title={item.id}
+        className="flex h-9 min-w-0 items-center gap-2.5 rounded-lg px-2.5 text-start text-sm text-foreground transition-colors hover:bg-tab-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium max-md:min-h-11 max-[700px]:justify-center max-[700px]:px-0"
+        data-active={String(section === item.id)}
+        onClick={() => setSection(item.id)}
+      ><AppIcon name={item.icon} className="size-4 shrink-0" /><span className="max-[700px]:sr-only">{item.id}</span></button>)}
+    </nav>
+
+    <Page title={section} description={sectionDescriptions[section]}>
+      {!settings ? <Callout><AppIcon name="CircleHelp" className="size-4 shrink-0" />Settings are not available yet.</Callout> : <>
+        {section === 'General' && <>
+          <Section title="Search and startup">
+            <Row title="Search engine" description="Choose where searches from the address bar go." htmlFor="search-engine">
+              <Select value={searchEngines.some(([value]) => value === settings.searchEngine) ? settings.searchEngine : 'custom'} onValueChange={(value) => {
+                if (value !== 'custom') patch({ searchEngine: value })
+                else if (customSearch) patch({ searchEngine: customSearch })
+              }}>
+                <SelectTrigger id="search-engine" aria-label="Search engine" className="w-56 max-sm:w-full max-md:h-11"><SelectValue /></SelectTrigger>
+                <SelectContent>{searchEngines.map(([value, name]) => <SelectItem key={value} value={value}>{name}</SelectItem>)}<SelectItem value="custom">Custom template</SelectItem></SelectContent>
+              </Select>
+            </Row>
+            <Row title="Custom URL template" description={<>Use <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{'{q}'}</code> for your query.</>} htmlFor="custom-search">
+              <Input id="custom-search" className="w-72 max-sm:w-full max-md:h-11" value={customSearch || (!searchEngines.some(([value]) => value === settings.searchEngine) ? settings.searchEngine : '')} placeholder="https://example.com/search?q={q}" onChange={(event) => setCustomSearch(event.target.value)} onBlur={() => { if (customSearch.includes('{q}')) patch({ searchEngine: customSearch }) }} />
+            </Row>
+            <Row title="Restore previous session" description="Bring back your open tabs when Athanor starts.">
+              <TouchSwitch label="Restore previous session" checked={settings.restoreSession} onCheckedChange={(restoreSession) => patch({ restoreSession })} />
+            </Row>
+            <Row title="Archive inactive tabs after" description="Set to Never to keep all inactive tabs in view.">
+              <div className="flex w-64 items-center gap-4 max-sm:w-full"><Slider className="max-md:h-11" aria-label="Archive inactive tabs after" min={0} max={168} step={1} value={[settings.archiveAfterHours]} onValueChange={([archiveAfterHours]) => patch({ archiveAfterHours })} /><span className="w-20 shrink-0 text-right text-[13px] tabular-nums text-muted-foreground">{settings.archiveAfterHours === 0 ? 'Never' : `${settings.archiveAfterHours} hours`}</span></div>
+            </Row>
+          </Section>
+          <Section title="Sidebar">
+            <Row title="Position" description="Choose which side of the window holds the sidebar.">
+              <Tabs value={settings.sidebarSide} onValueChange={(value) => { if (value === 'left' || value === 'right') patch({ sidebarSide: value }) }}>
+                <TabsList aria-label="Sidebar position"><TabsTrigger className="max-md:min-h-11" value="left"><AppIcon name="PanelLeft" />Left</TabsTrigger><TabsTrigger className="max-md:min-h-11" value="right"><AppIcon name="PanelLeft" className="scale-x-[-1]" />Right</TabsTrigger></TabsList>
+              </Tabs>
+            </Row>
+            <Row title="Compact sidebar" description="Show a smaller icon rail.">
+              <TouchSwitch label="Compact sidebar" checked={settings.sidebarCompact} onCheckedChange={(sidebarCompact) => patch({ sidebarCompact })} />
+            </Row>
+            <Row title="Sidebar width" description="Adjust the width of the expanded sidebar.">
+              <div className="flex w-64 items-center gap-4 max-sm:w-full"><Slider className="max-md:h-11" aria-label="Sidebar width" min={208} max={400} step={1} value={[settings.sidebarWidth]} onValueChange={([sidebarWidth]) => patch({ sidebarWidth })} /><span className="w-14 shrink-0 text-right text-[13px] tabular-nums text-muted-foreground">{settings.sidebarWidth}px</span></div>
+            </Row>
+          </Section>
+        </>}
+
+        {section === 'Privacy' && <>
+          <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+            <Stat label="Blocked this session" value={(snapshot?.blockedTotal ?? adblock?.blockedTotal ?? 0).toLocaleString()} />
+            <Stat label="Enabled filter lists" value={(adblock?.lists.filter((list) => list.enabled).length ?? 0).toLocaleString()} />
+          </div>
+          <Section title="Ad and tracker blocking" actions={<Button className="max-md:min-h-11" size="sm" variant="outline" disabled={adblock?.updating} onClick={() => void api.updateAdblockLists()}><AppIcon name="RotateCw" />{adblock?.updating ? 'Updating…' : 'Update now'}</Button>}>
+            <Row title="Built-in adblock" description="Block requests with local filter lists.">
+              <TouchSwitch label="Built-in adblock" checked={adblock?.enabled ?? settings.adblockEnabled} onCheckedChange={(enabled) => void api.setAdblockEnabled(enabled)} />
+            </Row>
+            <div className="py-3">
+              <h3 className="mb-2 text-[13px] font-medium text-muted-foreground">Filter lists</h3>
+              <div className="divide-y divide-border">
+                {(adblock?.lists ?? []).map((list) => <div className="flex min-h-14 items-center justify-between gap-4 py-3 max-sm:items-start" key={list.id}>
+                  <div className="min-w-0"><p className="m-0 text-sm font-medium">{list.name}</p><p className="m-0 mt-0.5 text-[13px] text-muted-foreground">{list.ruleCount.toLocaleString()} rules · {list.updatedAt ? `Updated ${new Date(list.updatedAt).toLocaleDateString()}` : 'Not updated'}{list.error ? ` · ${list.error}` : ''}</p></div>
+                  <TouchSwitch label={`${list.name} list`} checked={list.enabled} onCheckedChange={(enabled) => void api.setAdblockListEnabled(list.id, enabled)} />
+                </div>)}
+                {adblock?.lists.length === 0 && <p className="m-0 py-3 text-[13px] text-muted-foreground">No filter lists are available.</p>}
+              </div>
+            </div>
+          </Section>
+          <Section title="My filters" description="Add custom network and cosmetic filtering rules.">
+            <MyFiltersEditor />
+          </Section>
+          <Section title="Protection preferences">
+            <Row title="Upgrade to HTTPS" description="Prefer encrypted connections when available.">
+              <TouchSwitch label="Upgrade to HTTPS" checked={settings.httpsUpgrade} onCheckedChange={(httpsUpgrade) => patch({ httpsUpgrade })} />
+            </Row>
+            <Row title="Strip tracking parameters" description="Remove common tracking keys from addresses.">
+              <TouchSwitch label="Strip tracking parameters" checked={settings.stripTracking} onCheckedChange={(stripTracking) => patch({ stripTracking })} />
+            </Row>
+          </Section>
+        </>}
+
+        {section === 'Filing' && <>
+          <Section title="Automatic filing" description="Group tabs into folders using a matching site, URL path, or title." actions={<Button className="max-md:min-h-11" variant="outline" onClick={() => void api.autoFileAll()}><AppIcon name="WandSparkles" />Run now</Button>}>
+            <Row title="File new tabs automatically" description="Use these rules when a tab opens.">
+              <TouchSwitch label="File new tabs automatically" checked={settings.autoFile} onCheckedChange={(autoFile) => patch({ autoFile })} />
+            </Row>
+          </Section>
+          <Section title="Filing rules" description="Built-in destinations include Development, Reading list, Shopping, Social, and Design. Rules create a folder the first time a match appears." actions={<Button className="max-md:min-h-11" size="sm" onClick={() => persistRules([...rules, { id: crypto.randomUUID(), folder: '', host: '', pathPrefix: null, titleContains: null, enabled: true }])}><AppIcon name="Plus" />Add rule</Button>}>
+            <div className="py-3">
+              <div className="mb-2 hidden grid-cols-[2.5rem_repeat(4,minmax(0,1fr))_2.5rem] gap-2 px-1 text-xs text-muted-foreground md:grid" aria-hidden="true"><span /><span>Folder</span><span>Host contains</span><span>Path prefix</span><span>Title contains</span><span /></div>
+              <div className="divide-y divide-border">
+                {rules.map((rule) => <div key={rule.id} className="grid grid-cols-1 items-center gap-2 py-3 md:grid-cols-[2.5rem_repeat(4,minmax(0,1fr))_2.5rem]">
+                  <TouchSwitch label="Enable rule" checked={rule.enabled} onCheckedChange={(enabled) => persistRules(rules.map((item) => item.id === rule.id ? { ...item, enabled } : item))} />
+                  <Input className="max-md:h-11" aria-label="Folder name" placeholder="Folder name" value={rule.folder} onChange={(event) => persistRules(rules.map((item) => item.id === rule.id ? { ...item, folder: event.target.value } : item))} />
+                  <Input className="max-md:h-11" aria-label="Host contains" placeholder="Host, e.g. github.com" value={rule.host ?? ''} onChange={(event) => persistRules(rules.map((item) => item.id === rule.id ? { ...item, host: event.target.value || null } : item))} />
+                  <Input className="max-md:h-11" aria-label="Path prefix" placeholder="Path prefix (optional)" value={rule.pathPrefix ?? ''} onChange={(event) => persistRules(rules.map((item) => item.id === rule.id ? { ...item, pathPrefix: event.target.value || null } : item))} />
+                  <Input className="max-md:h-11" aria-label="Title contains" placeholder="Title contains (optional)" value={rule.titleContains ?? ''} onChange={(event) => persistRules(rules.map((item) => item.id === rule.id ? { ...item, titleContains: event.target.value || null } : item))} />
+                  <Tip label="Delete rule"><Button className="max-md:size-11" type="button" size="icon" variant="ghost" aria-label="Delete rule" onClick={() => persistRules(rules.filter((item) => item.id !== rule.id))}><AppIcon name="Trash2" /></Button></Tip>
+                </div>)}
+                {rules.length === 0 && <p className="m-0 py-4 text-[13px] text-muted-foreground">No filing rules yet. Add a rule to start organizing tabs automatically.</p>}
+              </div>
+            </div>
+          </Section>
+        </>}
+
+        {section === 'Appearance' && <>
+          <Section title="Theme" description="Choose the colors used across Athanor.">
+            <div className="grid grid-cols-2 gap-3 py-3 max-sm:grid-cols-1">
+              {themes.map((theme) => <button type="button" key={theme.id} data-selected={String(settings.theme === theme.id)} aria-pressed={settings.theme === theme.id} aria-label={`Use ${theme.name} theme`} className="rounded-xl border border-border bg-card p-3 text-left outline-none transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring/40 data-[selected=true]:border-primary data-[selected=true]:ring-1 data-[selected=true]:ring-primary max-md:min-h-11" onClick={() => { document.documentElement.dataset.themeDark = String(theme.dark); patch({ theme: theme.id }); void api.setTheme(theme.id) }}>
+                <div data-part="theme-preview" className="mb-3 flex h-20 overflow-hidden rounded-lg border border-border bg-background p-2">
+                  <div className="w-1/4 rounded-md bg-sidebar p-1"><div className="mb-1 h-1.5 rounded bg-muted" /><div className="h-1.5 w-2/3 rounded bg-muted" /></div>
+                  <div className="flex flex-1 flex-col gap-2 p-2"><div className="h-2 w-1/2 rounded bg-card" /><div className="h-5 rounded bg-muted" /><div className="h-2 w-2/3 rounded bg-card" /></div>
+                </div>
+                <span className="block text-sm font-medium">{theme.name}</span><span className="mt-0.5 block text-[13px] text-muted-foreground">{theme.dark ? 'Dark' : 'Light'} · {theme.source}</span>
+              </button>)}
+              {themes.length === 0 && <p className="m-0 text-[13px] text-muted-foreground">No themes are available.</p>}
+            </div>
+          </Section>
+          <Section title="Density" description="Choose the amount of space between tab rows and controls.">
+            <Row title="Workspace density"><Tabs value={density} onValueChange={updateDensity}><TabsList aria-label="Workspace density"><TabsTrigger className="max-md:min-h-11" value="comfortable">Comfortable</TabsTrigger><TabsTrigger className="max-md:min-h-11" value="compact">Compact</TabsTrigger></TabsList></Tabs></Row>
+          </Section>
+        </>}
+
+        {section === 'Extensions' && <Section title="Installed extensions" description="Panels and commands run in a restricted extension frame." actions={<Button className="max-md:min-h-11" onClick={() => void install()}><AppIcon name="Plus" />Install from directory</Button>}>
+          <div className="divide-y divide-border">
+            {extensions.map((extension) => <SettingsExtensionRow key={extension.id} extension={extension} onRefresh={() => void api.listExtensions().then(setExtensions)} />)}
+            {extensions.length === 0 && <Callout className="my-3"><AppIcon name="Zap" className="size-4 shrink-0" />No extensions installed.</Callout>}
+          </div>
+        </Section>}
+
+        {section === 'Shortcuts' && <Section title="Keyboard shortcuts" description="Use these keys to move around Athanor more quickly.">
+          <div className="grid grid-cols-2 gap-x-8 max-sm:grid-cols-1">
+            {shortcuts.map(([label, keys]) => <div key={label} className="flex min-h-12 items-center justify-between gap-4 border-b border-border py-2">
+              <span className="text-sm">{label}</span><span className="flex shrink-0 items-center gap-1">{keys.split('+').map((key, index) => <Kbd key={`${key}-${index}`}>{key}</Kbd>)}</span>
+            </div>)}
+          </div>
+        </Section>}
+
+        {section === 'About' && <Card className="mx-auto w-full max-w-lg p-8 text-center">
+          <div className="mx-auto mb-4 grid size-16 place-items-center rounded-2xl bg-primary text-primary-foreground"><AthanorMark className="size-8" /></div>
+          <h2 className="m-0 text-lg font-semibold">Athanor</h2>
+          <p className="mb-1 mt-1 text-[13px] text-muted-foreground">Version {snapshot?.version ?? '—'}</p>
+          <p className="mx-auto mb-6 mt-2 max-w-sm text-[13px] text-muted-foreground">A lightweight browser shell made for focus, research, and developer work.</p>
+          <div className="grid grid-cols-3 gap-3 text-left max-sm:grid-cols-1">
+            <Stat label="Platform" value={snapshot?.platform ?? '—'} className="p-3" />
+            <Stat label="Spaces" value={snapshot?.workspace.spaces.length ?? '—'} className="p-3" />
+            <Stat label="Open tabs" value={snapshot?.workspace.tabs.length ?? '—'} className="p-3" />
+          </div>
+        </Card>}
       </>}
-      {section === 'Privacy' && <>
-        <section className="page-section"><h2>Ad and tracker blocking</h2><SwitchRow label="Built-in adblock" description="Block requests with local filter lists." checked={adblock?.enabled ?? settings.adblockEnabled} onChange={(enabled) => void api.setAdblockEnabled(enabled)} /><div className="list-heading"><span>Filter lists</span><Button size="sm" variant="outline" disabled={adblock?.updating} onClick={() => void api.updateAdblockLists()}><AppIcon name="RotateCw" />{adblock?.updating ? 'Updating…' : 'Update now'}</Button></div>{adblock?.lists.map((list) => <div className="filter-row" key={list.id}><div><strong>{list.name}</strong><span className="muted-copy">{list.ruleCount.toLocaleString()} rules · {list.updatedAt ? `Updated ${new Date(list.updatedAt).toLocaleDateString()}` : 'Not updated'}{list.error ? ` · ${list.error}` : ''}</span></div><Switch checked={list.enabled} label={`${list.name} list`} onChange={(enabled) => void api.setAdblockListEnabled(list.id, enabled)} /></div>)}</section>
-        <section className="page-section"><h2>My filters</h2><MyFiltersEditor /></section>
-        <section className="page-section"><h2>Protection preferences</h2><SwitchRow label="Upgrade to HTTPS" description="Prefer encrypted connections when available." checked={settings.httpsUpgrade} onChange={(httpsUpgrade) => patch({ httpsUpgrade })} /><SwitchRow label="Strip tracking parameters" description="Remove common tracking keys from addresses." checked={settings.stripTracking} onChange={(stripTracking) => patch({ stripTracking })} /><p className="muted-copy">{snapshot?.blockedTotal.toLocaleString()} requests blocked across this session.</p></section>
-      </>}
-      {section === 'Filing' && <>
-        <section className="page-section"><div className="section-title-row"><div><h2>Automatic filing</h2><p>Group tabs into named folders using a matching site, URL path, or title.</p></div><Button variant="outline" onClick={() => void api.autoFileAll()}><AppIcon name="WandSparkles" />Run now</Button></div><SwitchRow label="File new tabs automatically" description="Use these rules when a tab opens." checked={settings.autoFile} onChange={(autoFile) => patch({ autoFile })} /></section>
-        <section className="page-section"><div className="list-heading"><h2>Filing rules</h2><Button size="sm" onClick={() => persistRules([...rules, { id: crypto.randomUUID(), folder: '', host: '', pathPrefix: null, titleContains: null, enabled: true }])}><AppIcon name="Plus" />Add rule</Button></div><p>Built-in destinations include Development, Reading list, Shopping, Social, and Design. Rules create a folder the first time a match appears.</p>{rules.map((rule) => <div className="rule-editor" key={rule.id}><Switch checked={rule.enabled} label="Enable rule" onChange={(enabled) => persistRules(rules.map((item) => item.id === rule.id ? { ...item, enabled } : item))} /><Input aria-label="Folder name" placeholder="Folder name" value={rule.folder} onChange={(event) => persistRules(rules.map((item) => item.id === rule.id ? { ...item, folder: event.target.value } : item))} /><Input aria-label="Host contains" placeholder="Host, e.g. github.com" value={rule.host ?? ''} onChange={(event) => persistRules(rules.map((item) => item.id === rule.id ? { ...item, host: event.target.value || null } : item))} /><Input aria-label="Path prefix" placeholder="Path prefix (optional)" value={rule.pathPrefix ?? ''} onChange={(event) => persistRules(rules.map((item) => item.id === rule.id ? { ...item, pathPrefix: event.target.value || null } : item))} /><Input aria-label="Title contains" placeholder="Title contains (optional)" value={rule.titleContains ?? ''} onChange={(event) => persistRules(rules.map((item) => item.id === rule.id ? { ...item, titleContains: event.target.value || null } : item))} /><Button size="icon" variant="ghost" aria-label="Delete rule" onClick={() => persistRules(rules.filter((item) => item.id !== rule.id))}><AppIcon name="Trash2" /></Button></div>)}</section>
-      </>}
-      {section === 'Appearance' && <>
-        <section className="page-section"><h2>Theme</h2><div className="theme-grid">{themes.map((theme) => <button className="theme-card" key={theme.id} data-selected={String(settings.theme === theme.id)} onClick={() => { document.documentElement.dataset.themeDark = String(theme.dark); patch({ theme: theme.id }); void api.setTheme(theme.id) }}><span className="theme-preview" data-part="theme-preview" style={{ '--preview-bg': theme.dark ? 'var(--sidebar)' : 'var(--card)' } as React.CSSProperties} /><strong>{theme.name}</strong><span className="muted-copy">{theme.dark ? 'Dark' : 'Light'} · {theme.source}</span></button>)}</div></section>
-        <section className="page-section"><h2>Density</h2><div className="segmented"><button data-active={String(localStorage.getItem('athanor-density') !== 'compact')} onClick={() => setDensity('comfortable')}>Comfortable</button><button data-active={String(localStorage.getItem('athanor-density') === 'compact')} onClick={() => setDensity('compact')}>Compact</button></div><p>Choose the amount of space between tab rows and controls.</p></section>
-      </>}
-      {section === 'Extensions' && <section className="page-section"><div className="list-heading"><div><h2>Installed extensions</h2><p>Panels and commands run in a restricted extension frame.</p></div><Button onClick={() => void install()}><AppIcon name="Plus" />Install from directory</Button></div>{extensions.length === 0 && <p className="muted-copy">No extensions installed.</p>}{extensions.map((extension) => <ExtensionRow key={extension.id} extension={extension} onRefresh={() => void api.listExtensions().then(setExtensions)} />)}</section>}
-      {section === 'Shortcuts' && <section className="page-section"><h2>Keyboard shortcuts</h2><div className="shortcuts-list">{shortcuts.map(([label, key]) => <div key={key} className="shortcut-row"><span>{label}</span><kbd>{key}</kbd></div>)}</div></section>}
-      {section === 'About' && <section className="page-section about-card"><span className="brand-mark"><AppIcon name="WandSparkles" /></span><h2>Athanor</h2><p>Version {snapshot?.version ?? '—'}</p><p>A lightweight browser shell made for focus, research, and developer work.</p><div className="about-facts"><span>Platform <strong>{snapshot?.platform}</strong></span><span>Spaces <strong>{snapshot?.workspace.spaces.length}</strong></span><span>Open tabs <strong>{snapshot?.workspace.tabs.length}</strong></span></div></section>}
-    </div>
+    </Page>
   </div>
 }
 
@@ -61,25 +237,66 @@ function MyFiltersEditor() {
   const [issues, setIssues] = useState<LineIssue[]>([])
   const [saving, setSaving] = useState(false)
   const area = useRef<HTMLTextAreaElement>(null)
-  useEffect(() => { let alive = true; void api.getUserFilters().then((value) => { if (alive) { setText(value); setSaved(value) } }).catch(() => toast.error('Filters could not be loaded.')); return () => { alive = false } }, [])
+  useEffect(() => {
+    let alive = true
+    void api.getUserFilters().then((value) => { if (alive) { setText(value); setSaved(value) } }).catch(() => toast.error('Filters could not be loaded.'))
+    return () => { alive = false }
+  }, [])
   const dirty = text !== saved
   const save = async () => {
     if (!dirty || saving) return
     setSaving(true)
-    try { const found = await api.setUserFilters(text); setSaved(text); setIssues(found); toast.success(found.length ? `Filters saved · ${ignoredLineSummary(found.length)}` : 'Filters saved') }
-    catch (error) { toast.error(error instanceof Error ? error.message : String(error)) }
+    try {
+      const found = await api.setUserFilters(text)
+      setSaved(text)
+      setIssues(found)
+      toast.success(found.length ? `Filters saved · ${ignoredLineSummary(found.length)}` : 'Filters saved')
+    } catch (error) { toast.error(error instanceof Error ? error.message : String(error)) }
     finally { setSaving(false) }
   }
-  const jump = (line: number) => { const node = area.current; if (!node) return; const range = lineSelectionRange(text, line); node.focus(); node.setSelectionRange(range.start, range.end) }
+  const jump = (line: number) => {
+    const node = area.current
+    if (!node) return
+    const range = lineSelectionRange(text, line)
+    node.focus()
+    node.setSelectionRange(range.start, range.end)
+  }
   const lines = countFilterLines(text)
-  return <>
-    <p className="filter-help" id="my-filters-help">One rule per line, for example <code>||ads.example.com^</code>, <code>example.com##.banner</code>, <code>@@||example.com^$document</code>.</p>
-    <textarea ref={area} id="my-filters" data-part="my-filters" className="textarea" aria-label="My filters" aria-describedby="my-filters-help" rows={12} wrap="off" spellCheck={false} value={text} placeholder="||ads.example.com^" onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void save() } }} />
-    <div className="filter-actions"><Button onClick={() => void save()} disabled={!dirty || saving}><AppIcon name="Check" />{saving ? 'Saving…' : 'Save'}</Button><Button variant="outline" onClick={() => setText(saved)} disabled={!dirty || saving}><AppIcon name="RotateCcw" />Revert</Button><span className="filter-count"><span className="muted-copy" data-part="filter-count">{lineCountLabel(lines)}</span><span className="filter-hint"><span className="muted-copy">·</span><kbd>Ctrl</kbd><kbd>S</kbd></span></span></div>
-    {issues.length > 0 && <><p className="filter-report muted-copy">The engine ignored {lineCountLabel(issues.length)}:</p><ul className="filter-issues" data-part="filter-issues" aria-label="Ignored lines">{issues.map((issue) => <li key={`${issue.line}-${issue.message}`}><button type="button" className="filter-issue" data-part="filter-issue" aria-label={issue.line ? `Select line ${issue.line}` : 'Select all filters'} onClick={() => jump(issue.line)}><AppIcon name="XCircle" /><span><strong>{issue.line ? `Line ${issue.line}:` : 'All lines:'}</strong> <span className="muted-copy">{issue.message}</span></span></button></li>)}</ul></>}
-  </>
+
+  return <div className="space-y-3 py-3">
+    <p id="my-filters-help" className="m-0 text-[13px] text-muted-foreground">One rule per line, for example <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">||ads.example.com^</code>, <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">example.com##.banner</code>, <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">@@||example.com^$document</code>.</p>
+    <Textarea ref={area} id="my-filters" data-part="my-filters" className="min-h-60 resize-y font-mono text-[13px] leading-5" aria-label="My filters" aria-describedby="my-filters-help" rows={12} wrap="off" spellCheck={false} value={text} placeholder="||ads.example.com^" onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void save() } }} />
+    <div className="flex flex-wrap items-center gap-2">
+      <Button className="max-md:min-h-11" onClick={() => void save()} disabled={!dirty || saving}><AppIcon name="Check" />{saving ? 'Saving…' : 'Save'}</Button>
+      <Button className="max-md:min-h-11" variant="outline" onClick={() => setText(saved)} disabled={!dirty || saving}><AppIcon name="RotateCcw" />Revert</Button>
+      <span className="ms-auto flex items-center gap-3 text-[13px] text-muted-foreground"><span data-part="filter-count">{lineCountLabel(lines)}</span><span className="flex items-center gap-1" aria-label="Save shortcut"><Kbd>Ctrl</Kbd><Kbd>S</Kbd></span></span>
+    </div>
+    {issues.length > 0 && <div>
+      <p className="mb-2 mt-1 text-[13px] text-muted-foreground">The engine ignored {lineCountLabel(issues.length)}:</p>
+      <ul className="m-0 list-none space-y-2 p-0" data-part="filter-issues" aria-label="Ignored lines">
+        {issues.map((issue) => <li key={`${issue.line}-${issue.message}`}>
+          <button type="button" className="flex w-full items-start gap-2 rounded-lg border border-border bg-background px-3 py-2 text-left text-[13px] hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40" data-part="filter-issue" aria-label={issue.line ? `Select line ${issue.line}` : 'Select all filters'} onClick={() => jump(issue.line)}>
+            <AppIcon name="XCircle" className="mt-0.5 size-4 shrink-0 text-destructive" /><span><strong>{issue.line ? `Line ${issue.line}:` : 'All lines:'}</strong> <span className="text-muted-foreground">{issue.message}</span></span>
+          </button>
+        </li>)}
+      </ul>
+    </div>}
+  </div>
 }
-function SwitchRow({ label, description, checked, onChange }: { label: string; description: string; checked: boolean; onChange: (value: boolean) => void }) { return <div className="setting-row"><div><strong>{label}</strong><span className="muted-copy">{description}</span></div><Switch checked={checked} label={label} onChange={onChange} /></div> }
-function Switch({ checked, label, onChange }: { checked: boolean; label: string; onChange: (value: boolean) => void }) { return <button className="switch" data-checked={String(checked)} role="switch" aria-label={label} aria-checked={checked} onClick={() => onChange(!checked)} /> }
-function ExtensionRow({ extension, onRefresh }: { extension: ExtensionInfo; onRefresh: () => void }) { return <div className="extension-row"><div className="extension-info"><span className="speed-icon"><AppIcon name="Zap" /></span><div><strong>{extension.name}</strong><span className="muted-copy">{extension.description}</span><span className="muted-copy">Permissions: {extension.permissions.join(', ') || 'None'} · {extension.version}</span></div></div><div className="extension-actions"><Switch checked={extension.enabled} label={`${extension.name} enabled`} onChange={(enabled) => void api.setExtensionEnabled(extension.id, enabled).then(onRefresh)} />{extension.source === 'user' && <Button variant="ghost" size="icon" aria-label={`Remove ${extension.name}`} onClick={() => void api.removeExtension(extension.id).then(onRefresh)}><AppIcon name="Trash2" /></Button>}</div></div> }
-function setDensity(value: 'compact' | 'comfortable') { localStorage.setItem('athanor-density', value); window.dispatchEvent(new CustomEvent('athanor-density', { detail: value })) }
+
+function TouchSwitch({ label, checked, onCheckedChange }: { label: string; checked: boolean; onCheckedChange: (checked: boolean) => void }) {
+  return <label className="grid place-items-center max-md:size-11"><Switch aria-label={label} checked={checked} onCheckedChange={onCheckedChange} /></label>
+}
+
+function SettingsExtensionRow({ extension, onRefresh }: { extension: ExtensionInfo; onRefresh: () => void }) {
+  return <div className="flex min-h-20 items-center gap-3 py-3 max-sm:flex-wrap">
+    <IconTile icon="Zap" />
+    <div className="min-w-0 flex-1"><p className="m-0 text-sm font-medium">{extension.name}</p><p className="m-0 mt-0.5 text-[13px] text-muted-foreground">{extension.description}</p><p className="m-0 mt-1 text-xs text-muted-foreground">Permissions: {extension.permissions.join(', ') || 'None'} · {extension.version}</p></div>
+    <div className="flex shrink-0 items-center gap-1"><TouchSwitch label={`${extension.enabled ? 'Disable' : 'Enable'} ${extension.name}`} checked={extension.enabled} onCheckedChange={(enabled) => void api.setExtensionEnabled(extension.id, enabled).then(onRefresh)} />{extension.source === 'user' && <Tip label={`Remove ${extension.name}`}><Button className="max-md:size-11" variant="ghost" size="icon" aria-label={`Remove ${extension.name}`} onClick={() => void api.removeExtension(extension.id).then(onRefresh)}><AppIcon name="Trash2" /></Button></Tip>}</div>
+  </div>
+}
+
+function setDensity(value: 'compact' | 'comfortable') {
+  localStorage.setItem('athanor-density', value)
+  window.dispatchEvent(new CustomEvent('athanor-density', { detail: value }))
+}

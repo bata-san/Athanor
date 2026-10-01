@@ -27,6 +27,38 @@ pub struct TabOptions {
     pub incognito: bool,
 }
 
+/// What was under the pointer when the page's context menu was requested.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextTarget {
+    /// `page`, `image`, `selection`, `audio` or `video`.
+    pub kind: String,
+    pub page_url: String,
+    pub link_url: Option<String>,
+    pub link_text: Option<String>,
+    /// Image / media source address.
+    pub source_url: Option<String>,
+    pub selection_text: Option<String>,
+    pub editable: bool,
+}
+
+/// One entry of the engine's own context menu. The shell draws the menu; the engine runs the chosen `id`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextItem {
+    pub id: i32,
+    /// The engine's unlocalised name (lowercase English, e.g. `copy`, `select all`); stable enough to pick icons.
+    pub name: String,
+    /// Localised text to show.
+    pub label: String,
+    /// `command`, `checkbox`, `radio`, `separator` or `submenu`.
+    pub kind: String,
+    pub enabled: bool,
+    pub checked: bool,
+    pub shortcut: Option<String>,
+    pub children: Vec<ContextItem>,
+}
+
 /// What the engine reports back. `tab` is always the Athanor tab id.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
@@ -57,6 +89,16 @@ pub enum EngineEvent {
     Shortcut { tab: Id, combo: String },
     #[serde(rename_all = "camelCase")]
     Blocked { tab: Id, url: String },
+    /// The page asked for a context menu. The engine keeps the request open until the shell answers through
+    /// [`EngineBackend::resolve_context_menu`]. `x`/`y` are logical pixels from the top-left of the tab's view.
+    #[serde(rename_all = "camelCase")]
+    PageContextMenu {
+        tab: Id,
+        x: f64,
+        y: f64,
+        target: ContextTarget,
+        items: Vec<ContextItem>,
+    },
     /// A custom context-menu entry was chosen (e.g. `send-image-to-board` with the image URL as `data`).
     #[serde(rename_all = "camelCase")]
     ContextAction {
@@ -95,6 +137,15 @@ pub trait EngineBackend: Send + Sync {
         Err(EngineError::Engine(
             "page capture is not supported by this engine".into(),
         ))
+    }
+    /// Smaller/faster screenshot used to freeze the page behind shell overlays (JPEG). Defaults to PNG.
+    fn capture_frame(&self, id: &str) -> EngineResult<(&'static str, Vec<u8>)> {
+        self.capture_png(id).map(|png| ("image/png", png))
+    }
+    /// Answer a pending [`EngineEvent::PageContextMenu`]: run the engine command `command`, or just dismiss
+    /// the menu when it is `None`. Always call it exactly once per event.
+    fn resolve_context_menu(&self, _id: &str, _command: Option<i32>) -> EngineResult {
+        Ok(())
     }
     /// Free the renderer of a tab but keep the Athanor tab entry (archive / memory saver).
     fn discard(&self, id: &str) -> EngineResult {

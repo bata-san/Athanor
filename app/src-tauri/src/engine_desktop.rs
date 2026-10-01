@@ -45,6 +45,28 @@ impl DesktopEngine {
             .cloned()
             .ok_or_else(|| EngineError::UnknownTab(id.to_string()))
     }
+
+    fn capture(&self, id: &str, jpeg: bool) -> EngineResult<Vec<u8>> {
+        #[cfg(windows)]
+        {
+            let wv = self.get(id)?;
+            let (tx, rx) = std::sync::mpsc::channel();
+            wv.with_webview(move |pw| unsafe {
+                let _ = crate::win::capture_image(&pw.controller(), jpeg, tx);
+            })
+            .map_err(err)?;
+            rx.recv_timeout(std::time::Duration::from_secs(10))
+                .map_err(err)?
+                .map_err(EngineError::Engine)
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (id, jpeg);
+            Err(EngineError::Engine(
+                "page capture is not supported on this platform yet".into(),
+            ))
+        }
+    }
 }
 
 fn err(e: impl std::fmt::Display) -> EngineError {
@@ -270,24 +292,25 @@ impl EngineBackend for DesktopEngine {
     }
 
     fn capture_png(&self, id: &str) -> EngineResult<Vec<u8>> {
+        self.capture(id, false)
+    }
+
+    fn capture_frame(&self, id: &str) -> EngineResult<(&'static str, Vec<u8>)> {
+        self.capture(id, true).map(|jpeg| ("image/jpeg", jpeg))
+    }
+
+    fn resolve_context_menu(&self, id: &str, command: Option<i32>) -> EngineResult {
         #[cfg(windows)]
         {
-            let wv = self.get(id)?;
-            let (tx, rx) = std::sync::mpsc::channel();
-            wv.with_webview(move |pw| unsafe {
-                let _ = crate::win::capture_png(&pw.controller(), tx);
-            })
-            .map_err(err)?;
-            rx.recv_timeout(std::time::Duration::from_secs(10))
-                .map_err(err)?
-                .map_err(EngineError::Engine)
+            let tab = id.to_string();
+            self.get(id)?
+                .with_webview(move |_| crate::win::resolve_context_menu(&tab, command))
+                .map_err(err)
         }
         #[cfg(not(windows))]
         {
-            let _ = id;
-            Err(EngineError::Engine(
-                "page capture is not supported on this platform yet".into(),
-            ))
+            let _ = (id, command);
+            Ok(())
         }
     }
 

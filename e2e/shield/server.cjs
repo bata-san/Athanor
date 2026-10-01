@@ -7,6 +7,7 @@ const page = `<!doctype html><html><head><meta charset="utf-8"><title>Athanor sh
 <div id="t-adsbygoogle" class="box ArticleAd">.ArticleAd</div>
 <div id="AdSkyscraper" class="box">#AdSkyscraper</div>
 <div id="t-plain" class="box content-card">.content-card (must stay visible)</div>
+<p><a id="t-link" href="http://shield-test.example.com:8099/link-target">a plain link</a> <img id="t-img" width="80" height="50" alt="" src="/pic.svg"></p>
 <script>
   window.__results = { scripts: {}, early: null };
   // runs before any external script: was a hide-rule already applied to a late-created element?
@@ -32,6 +33,10 @@ http
     if (req.url === '/local.js') {
       res.writeHead(200, { 'content-type': 'text/javascript' });
       return res.end('window.__localLoaded = true;');
+    }
+    if (req.url === '/pic.svg') {
+      res.writeHead(200, { 'content-type': 'image/svg+xml' });
+      return res.end('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="50"><rect width="80" height="50" fill="#888"/></svg>');
     }
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
     res.end(page);

@@ -1,13 +1,13 @@
-import type { AdblockStatus, Board, BoardItem, BoardSummary, CommandArgs, CommandResult, DevServer, EventPayloads, ExtensionInfo, FilingRule, Folder, Id, PanelInfo, Platform, Settings, Snapshot, Space, SplitNode, SplitRects, Suggestion, Tab, ThemeInfo } from '../types'
+import type { ContextItem, ContextTarget, AdblockStatus, Board, BoardItem, BoardSummary, CommandArgs, CommandResult, DevServer, EventPayloads, ExtensionInfo, FilingRule, Folder, Id, PanelInfo, Platform, Settings, Snapshot, Space, SplitNode, SplitRects, Suggestion, Tab, ThemeInfo } from '../types'
 import { validateFilterText } from '../userFilters'
 
 const now = Date.now()
 const uid = (prefix = 'id') => `${prefix}-${Math.random().toString(36).slice(2, 9)}`
 const svgData = (label: string, hue: number) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="hsl(${hue} 48% 35%)"/><stop offset="1" stop-color="hsl(${hue + 30} 38% 13%)"/></linearGradient></defs><rect width="640" height="420" fill="url(#g)"/><circle cx="520" cy="70" r="125" fill="hsl(${hue + 70} 80% 70% / .3)"/><text x="44" y="350" fill="white" font-family="sans-serif" font-size="34">${label}</text></svg>`)}`
 const spaces: Space[] = [
-  { id: 'space-work', name: 'Work', icon: 'Briefcase', color: '#db9450', theme: null },
-  { id: 'space-personal', name: 'Personal', icon: 'Sparkles', color: '#92a88a', theme: null },
-  { id: 'space-research', name: 'Research', icon: 'BookOpen', color: '#a394c2', theme: null },
+  { id: 'space-work', name: 'Work', icon: 'Briefcase', color: '#3f3f46', theme: null },
+  { id: 'space-personal', name: 'Personal', icon: 'Sparkles', color: '#71717a', theme: null },
+  { id: 'space-research', name: 'Research', icon: 'BookOpen', color: '#a1a1aa', theme: null },
 ]
 const folders: Folder[] = [
   { id: 'folder-dev', name: 'Development', space: 'space-work', collapsed: false, color: null, auto: true },
@@ -21,7 +21,7 @@ const initialTabs: Tab[] = [
   makeTab('tab-docs', 'MDN Web Docs', 'https://developer.mozilla.org', 'space-research', 'folder-reading'),
   makeTab('tab-design', 'Athanor visual references', 'https://www.are.na', 'space-research', null),
 ]
-const defaultSettings: Settings = { searchEngine: 'https://www.google.com/search?q={q}', archiveAfterHours: 24, httpsUpgrade: true, stripTracking: true, autoFile: true, restoreSession: true, sidebarSide: 'left', sidebarCompact: false, sidebarWidth: 280, theme: 'ember', adblockEnabled: true }
+const defaultSettings: Settings = { searchEngine: 'https://www.google.com/search?q={q}', archiveAfterHours: 24, httpsUpgrade: true, stripTracking: true, autoFile: true, restoreSession: true, sidebarSide: 'left', sidebarCompact: false, sidebarWidth: 280, theme: 'chalk', adblockEnabled: true }
 const initialSnapshot = (): Snapshot => ({ workspace: { spaces, folders, tabs: initialTabs, activeSpace: 'space-work', activeTab: 'tab-welcome', split: null }, runtime: Object.fromEntries(initialTabs.map((tab) => [tab.id, { loading: false, canGoBack: tab.url !== 'athanor://newtab', canGoForward: false, blocked: tab.id === 'tab-github' ? 12 : 0, audible: false, secure: tab.url.startsWith('https:') }])), settings: defaultSettings, filingRules: [{ id: 'rule-github', folder: 'Development', host: 'github.com', pathPrefix: null, titleContains: null, enabled: true }, { id: 'rule-docs', folder: 'Reading list', host: 'developer.mozilla.org', pathPrefix: null, titleContains: null, enabled: true }, { id: 'rule-design', folder: 'Design', host: 'figma.com', pathPrefix: null, titleContains: null, enabled: true }, { id: 'rule-shopping', folder: 'Shopping', host: 'amazon.com', pathPrefix: null, titleContains: null, enabled: true }, { id: 'rule-social', folder: 'Social', host: 'reddit.com', pathPrefix: null, titleContains: null, enabled: true }], platform: 'windows', version: '0.1.0 mock', blockedTotal: 128 })
 let state = initialSnapshot()
 if (mockGetPlatformFromUrl()) state.platform = mockGetPlatformFromUrl()!
@@ -40,7 +40,7 @@ const rulesDefaults: AdblockStatus = { enabled: true, updating: false, blockedTo
 let adblock = structuredClone(rulesDefaults)
 let panels: PanelInfo[] = [{ ext: 'notes', id: 'quick-notes', title: 'Quick notes', icon: 'NotebookPen', url: 'athanor-ext://notes/panel.html' }]
 let extensions: ExtensionInfo[] = [{ id: 'notes', name: 'Quick Notes', version: '1.0.0', description: 'A small scratchpad panel for this space.', enabled: true, source: 'builtin', permissions: ['storage', 'activeTab'] }]
-const themes: ThemeInfo[] = [{ id: 'ember', name: 'Ember', dark: true, source: 'builtin' }, { id: 'paper', name: 'Paper', dark: false, source: 'builtin' }, { id: 'midnight', name: 'Midnight', dark: true, source: 'builtin' }, { id: 'moss', name: 'Moss', dark: true, source: 'builtin' }]
+const themes: ThemeInfo[] = [{ id: 'monolith', name: 'Monolith', dark: true, source: 'builtin' }, { id: 'chalk', name: 'Chalk', dark: false, source: 'builtin' }, { id: 'ember', name: 'Ember', dark: true, source: 'builtin' }, { id: 'paper', name: 'Paper', dark: false, source: 'builtin' }, { id: 'midnight', name: 'Midnight', dark: true, source: 'builtin' }, { id: 'terminal', name: 'Terminal', dark: true, source: 'builtin' }, { id: 'mist', name: 'Mist', dark: false, source: 'builtin' }]
 const servers: DevServer[] = [{ port: 5173, url: 'http://localhost:5173', title: 'Vite app' }, { port: 3000, url: 'http://localhost:3000', title: 'Next.js' }]
 const shields = new Map<string, boolean>()
 let userFilters = ['! My filters — one rule per line', '||ads.example.com^', 'example.com##.banner', '@@||example.com^$document', ''].join('\n')
@@ -126,7 +126,7 @@ export async function mockInvoke<K extends keyof CommandArgs>(name: K, rawArgs: 
     case 'get_snapshot': result = structuredClone(state); break
     case 'get_shell_css': result = ''; break
     case 'list_themes': result = themes; break
-    case 'set_theme': state.settings.theme = args.id; document.documentElement.dataset.themeDark = String(themes.find((t) => t.id === args.id)?.dark ?? true); emit('athanor://shell-css', ''); emitSnapshot(); break
+    case 'set_theme': state.settings.theme = args.id; document.documentElement.dataset.themeDark = String(mockThemeDark(args.id)); emit('athanor://shell-css', ''); emitSnapshot(); break
     case 'set_space_theme': { const space = state.workspace.spaces.find((s) => s.id === args.space); if (space) space.theme = args.theme; emitSnapshot(); break }
     case 'get_panels': result = panels; break
     case 'get_commands': result = [{ ext: 'notes', id: 'new-note', title: 'Open quick notes', keybinding: null }]; break
@@ -166,6 +166,9 @@ export async function mockInvoke<K extends keyof CommandArgs>(name: K, rawArgs: 
     case 'get_split_rects': result = splitRects(); break
     case 'set_content_bounds': bounds = { x: args.x, y: args.y, w: args.w, h: args.h }; break
     case 'set_overlay_open': overlay = args.open; void overlay; break
+    case 'capture_frame': result = svgData('Frozen page', 210); break
+    case 'resolve_context_menu': mockResolvedMenus.push({ tab: args.tab, command: args.command }); break
+    case 'context_action': emit('athanor://toast', { level: 'info', message: `Context action: ${args.action}` }); break
     case 'set_viewport_emulation': emit('athanor://toast', { level: 'info', message: args.preset ? `Viewport preset: ${args.preset}` : 'Viewport emulation cleared.' }); break
     case 'omnibox_suggest': { const query = args.query.trim().toLowerCase(); const matches: Suggestion[] = state.workspace.tabs.filter((t) => !query || t.title.toLowerCase().includes(query) || t.url.toLowerCase().includes(query)).slice(0, 4).map((t) => ({ kind: 'tab', title: t.title, subtitle: t.url, url: t.url, tab: t.id })); if (query) { matches.push({ kind: 'search', title: `Search for “${args.query}”`, subtitle: 'Search the web', url: state.settings.searchEngine.replace('{q}', encodeURIComponent(args.query)) }); if (query.includes('.') && !query.includes(' ')) matches.unshift({ kind: 'url', title: `Open ${args.query}`, subtitle: 'Go to address', url: cleanUrl(args.query) }) } result = matches.slice(0, 7); break }
     case 'open_devtools': emit('athanor://toast', { level: 'info', message: 'Developer tools opened for this page.' }); break
@@ -190,7 +193,7 @@ export async function mockInvoke<K extends keyof CommandArgs>(name: K, rawArgs: 
     case 'get_user_filters': result = userFilters; break
     case 'set_user_filters': { const issues = validateFilterText(args.text); const rejected = issues.find((issue) => issue.line === 0); if (rejected) throw new Error(rejected.message); userFilters = args.text; result = issues; break }
     case 'get_settings': result = structuredClone(state.settings); break
-    case 'set_settings': Object.assign(state.settings, args.patch); document.documentElement.dataset.themeDark = String(state.settings.theme !== 'paper'); emitSnapshot(); break
+    case 'set_settings': Object.assign(state.settings, args.patch); document.documentElement.dataset.themeDark = String(mockThemeDark(state.settings.theme)); emitSnapshot(); break
     case 'list_extensions': result = structuredClone(extensions); break
     case 'set_extension_enabled': { const ext = extensions.find((e) => e.id === args.id); if (ext) ext.enabled = args.enabled; panels = panels.filter((p) => p.ext !== args.id || args.enabled); emitSnapshot(); break }
     case 'install_extension': { const name = String(args.path).split(/[\\/]/).filter(Boolean).at(-1) || 'Sample Extension'; const id = uid('extension'); extensions.push({ id, name, version: '1.0.0', description: 'Installed from a local directory.', enabled: true, source: 'user', permissions: ['activeTab'] }); emit('athanor://toast', { level: 'success', message: `${name} installed.` }); break }
@@ -205,6 +208,24 @@ export async function mockInvoke<K extends keyof CommandArgs>(name: K, rawArgs: 
   return result as K extends keyof CommandResult ? CommandResult[K] : void
 }
 
+/** Commands the shell answered for mock context menus (lets browser-only runs and tests inspect them). */
+export const mockResolvedMenus: { tab: string; command: number | null }[] = []
+const mockItem = (id: number, name: string, label: string, extra: Partial<ContextItem> = {}): ContextItem => ({ id, name, label, kind: 'command', enabled: true, checked: false, shortcut: null, children: [], ...extra })
+const mockSeparator = (id: number): ContextItem => mockItem(id, '', '', { kind: 'separator' })
+/** Browser-only stand-in for the engine's right-click request (WebView2 sends the real thing). */
+export function mockPageContextMenu(tab: string, x: number, y: number, kind: ContextTarget['kind'] = 'page') {
+  const pageUrl = state.workspace.tabs.find((t) => t.id === tab)?.url ?? ''
+  const target: ContextTarget = { kind, pageUrl, linkUrl: kind === 'page' ? null : kind === 'image' ? 'https://example.com/article' : null, linkText: null, sourceUrl: kind === 'image' ? 'https://example.com/photo.jpg' : null, selectionText: kind === 'selection' ? 'Quiet surfaces, a little room to think' : null, editable: false }
+  const nav = [mockItem(1, 'back', 'Back', { shortcut: 'Alt+Left Arrow' }), mockItem(2, 'forward', 'Forward', { enabled: false, shortcut: 'Alt+Right Arrow' }), mockItem(3, 'reload', 'Reload', { shortcut: 'Ctrl+R' })]
+  const tail = [mockSeparator(90), mockItem(11, 'saveas', 'Save as...', { shortcut: 'Ctrl+S' }), mockItem(12, 'print', 'Print...', { shortcut: 'Ctrl+P' }), mockItem(13, 'share', 'Share'), mockSeparator(91), mockItem(14, 'viewpagesource', 'View page source', { shortcut: 'Ctrl+U' }), mockItem(15, 'inspectelement', 'Inspect', { shortcut: 'Ctrl+Shift+I' })]
+  const items = kind === 'image'
+    ? [mockItem(20, 'openimageinnewtab', 'Open image in new tab'), mockItem(21, 'saveimageas', 'Save image as...'), mockItem(22, 'copyimage', 'Copy image'), mockItem(23, 'copyimagelocation', 'Copy image link'), mockSeparator(92), mockItem(24, 'openlinkinnewwindow', 'Open link in new window'), mockItem(25, 'copylinklocation', 'Copy link address'), ...tail]
+    : kind === 'selection'
+      ? [mockItem(30, 'copy', 'Copy', { shortcut: 'Ctrl+C' }), mockItem(31, 'searchthewebfor', 'Search the web for \u201cQuiet surfaces\u2026\u201d'), mockSeparator(93), mockItem(32, 'selectall', 'Select all', { shortcut: 'Ctrl+A' }), ...tail]
+      : [...nav, ...tail]
+  emit('athanor://context-menu', { type: 'pageContextMenu', tab, x, y, target, items })
+}
+export function mockThemeDark(id: string | undefined): boolean { return themes.find((t) => t.id === id)?.dark ?? false }
 export function mockAssetUrl(hash: string): string { return assets.get(hash) ?? svgData('Reference image', 28) }
 export function mockGetPlatformFromUrl(): Platform | null {
   if (!isMockMode() || typeof window === 'undefined') return null

@@ -13,3 +13,5 @@ app/src-tauri/gen/android/app/src/main/assets/tauri.conf.json
 .env
 app/.testshell
 release/
+
+.briefs/
