@@ -271,9 +271,23 @@ impl Filter {
 
     /// JS to run in the page as early as possible (cosmetic filters + scriptlets).
     pub fn cosmetic_js(&self, page_url: &str) -> Option<String> {
-        let mut js = self.blocker.cosmetic(page_url).js;
+        // Each part gets its own try/catch: at document start `document.documentElement` may not exist yet, and one
+        // part throwing must never keep the next one from running.
+        let guard = |part: &str| {
+            if part.trim().is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "try{{
+{part}
+}}catch(_e){{}}
+"
+                )
+            }
+        };
+        let mut js = guard(&self.blocker.cosmetic(page_url).js);
         // Athanor's own page features (YouTube handling, DRM switch) ride along with the cosmetic payload.
-        js.push_str(&self.blocker.builtin_scripts(page_url));
+        js.push_str(&guard(&self.blocker.builtin_scripts(page_url)));
         (!js.is_empty()).then_some(js)
     }
 
@@ -525,6 +539,27 @@ mod tests {
 
     fn filter() -> Filter {
         Filter::new(std::env::temp_dir().join(format!("athanor-filter-{}", athanor_core::new_id())))
+    }
+
+    #[test]
+    fn builtin_page_scripts_ride_along_with_the_cosmetic_payload() {
+        let f = filter();
+        assert!(
+            f.cosmetic_js("https://example.com/").is_none(),
+            "nothing to inject by default"
+        );
+        f.set_block_drm(true);
+        let js = f.cosmetic_js("https://example.com/").expect("drm script");
+        assert!(js.contains("__athanorDrmOff"));
+        f.set_block_drm(false);
+        let yt = f
+            .cosmetic_js("https://www.youtube.com/watch?v=x")
+            .expect("youtube script");
+        assert!(yt.contains("__athanorYtAds"));
+        f.set_youtube_ad_skip(false);
+        assert!(f
+            .cosmetic_js("https://www.youtube.com/watch?v=x")
+            .is_none_or(|js| !js.contains("__athanorYtAds")));
     }
 
     fn filter_with_rules(rules: &str) -> Filter {

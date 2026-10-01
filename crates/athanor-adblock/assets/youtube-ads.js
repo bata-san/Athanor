@@ -71,11 +71,13 @@
     'ytm-companion-slot', 'ad-slot-renderer',
   ];
   const addStyle = () => {
+    const root = document.head || document.documentElement;
+    if (!root) return; // too early: retried on DOMContentLoaded
     if (document.getElementById('athanor-yt-style')) return;
     const style = document.createElement('style');
     style.id = 'athanor-yt-style';
     style.textContent = `${AD_SELECTORS.join(',')}{display:none!important}`;
-    (document.head || document.documentElement).appendChild(style);
+    root.appendChild(style);
   };
   addStyle();
   document.addEventListener('DOMContentLoaded', addStyle, { once: true });
