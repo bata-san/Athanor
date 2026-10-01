@@ -47,7 +47,9 @@ const out = process.argv[2] || process.env.TEMP || '.';
   const items = await waitMenu();
   console.log('page entries:', JSON.stringify(items));
   check('page menu opens in the shell', names(items).includes('back') && names(items).includes('reload'));
-  check('page is frozen behind the menu', (await frames()) === 1);
+  let frozenCount = await frames();
+  for (let i = 0; i < 20 && frozenCount !== 1; i++) { await sleep(100); frozenCount = await frames(); }
+  check('page is frozen behind the menu', frozenCount === 1);
   const geometry = await shell.evaluate(() => { const m = document.querySelector('[data-part="page-context-menu"]'); const r = m && m.getBoundingClientRect(); const c = document.querySelector('[data-part="content"]').getBoundingClientRect(); return r && { menuX: r.x, menuY: r.y, contentX: c.x, contentY: c.y, dpr: devicePixelRatio }; });
   console.log('geometry', JSON.stringify(geometry));
   check('menu opens at the click position', geometry && Math.abs(geometry.menuX - (geometry.contentX + 700 / geometry.dpr)) < 3 && Math.abs(geometry.menuY - (geometry.contentY + 400 / geometry.dpr)) < 3);

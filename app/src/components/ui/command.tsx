@@ -12,7 +12,7 @@ export const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrim
 ))
 CommandInput.displayName = 'CommandInput'
 export const CommandList = React.forwardRef<React.ElementRef<typeof CommandPrimitive.List>, React.ComponentPropsWithoutRef<typeof CommandPrimitive.List>>(({ className, ...props }, ref) => (
-  <CommandPrimitive.List ref={ref} className={cn('max-h-[56dvh] overflow-y-auto overflow-x-hidden p-1.5', className)} {...props} />
+  <CommandPrimitive.List ref={ref} className={cn('max-h-[56dvh] overflow-y-auto overflow-x-hidden p-1', className)} {...props} />
 ))
 CommandList.displayName = 'CommandList'
 export const CommandEmpty = React.forwardRef<React.ElementRef<typeof CommandPrimitive.Empty>, React.ComponentPropsWithoutRef<typeof CommandPrimitive.Empty>>(({ className, ...props }, ref) => (
@@ -20,10 +20,10 @@ export const CommandEmpty = React.forwardRef<React.ElementRef<typeof CommandPrim
 ))
 CommandEmpty.displayName = 'CommandEmpty'
 export const CommandGroup = React.forwardRef<React.ElementRef<typeof CommandPrimitive.Group>, React.ComponentPropsWithoutRef<typeof CommandPrimitive.Group>>(({ className, ...props }, ref) => (
-  <CommandPrimitive.Group ref={ref} className={cn('overflow-hidden py-1 [&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground', className)} {...props} />
+  <CommandPrimitive.Group ref={ref} className={cn('overflow-hidden py-1 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1 [&_[cmdk-group-heading]]:text-[10.5px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-muted-foreground', className)} {...props} />
 ))
 CommandGroup.displayName = 'CommandGroup'
 export const CommandItem = React.forwardRef<React.ElementRef<typeof CommandPrimitive.Item>, React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item>>(({ className, ...props }, ref) => (
-  <CommandPrimitive.Item ref={ref} className={cn("flex min-h-9 cursor-default items-center gap-3 rounded-lg px-2.5 py-1.5 text-sm outline-none select-none data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground", className)} {...props} />
+  <CommandPrimitive.Item ref={ref} className={cn("flex min-h-8 cursor-default items-center gap-2.5 rounded-md px-2 py-1 text-[13px] outline-none select-none data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground", className)} {...props} />
 ))
 CommandItem.displayName = 'CommandItem'

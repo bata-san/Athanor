@@ -11,6 +11,7 @@ const spaces: Space[] = [
 ]
 const folders: Folder[] = [
   { id: 'folder-dev', name: 'Development', space: 'space-work', collapsed: false, color: null, auto: true },
+  { id: 'folder-docs', name: 'Docs', space: 'space-work', collapsed: false, color: null, auto: false },
   { id: 'folder-reading', name: 'Reading list', space: 'space-research', collapsed: false, color: '#a394c2', auto: false },
 ]
 const makeTab = (id: string, title: string, url: string, space: string, folder: string | null, extra: Partial<Tab> = {}): Tab => ({ id, title, url, favicon: null, space, folder, pinned: false, parent: null, created: now - 3600_000, lastActive: now - 2 * 3_600_000, archived: false, muted: false, autoFiled: Boolean(folder), ...extra })
@@ -20,8 +21,19 @@ const initialTabs: Tab[] = [
   makeTab('tab-vite', 'Vite | Next Generation Frontend Tooling', 'https://vite.dev', 'space-work', 'folder-dev'),
   makeTab('tab-docs', 'MDN Web Docs', 'https://developer.mozilla.org', 'space-research', 'folder-reading'),
   makeTab('tab-design', 'Athanor visual references', 'https://www.are.na', 'space-research', null),
+  makeTab('pin-mail', 'Inbox (12) · Mail', 'https://mail.example.com', 'space-work', null, { pinned: true, lastActive: now - 5 * 60_000 }),
+  makeTab('pin-cal', 'Calendar', 'https://calendar.example.com', 'space-work', null, { pinned: true }),
+  makeTab('pin-notes', 'Notes', 'https://notes.example.com', 'space-work', null, { pinned: true }),
+  makeTab('pin-chat', 'Team chat', 'https://chat.example.com', 'space-work', null, { pinned: true }),
+  makeTab('tab-pr', 'Add rounded page clip by bata-san · Pull Request #42', 'https://github.com/bata-san/Athanor/pull/42', 'space-work', 'folder-dev', { lastActive: now - 12 * 60_000 }),
+  makeTab('tab-ci', 'Actions · CI · bata-san/Athanor', 'https://github.com/bata-san/Athanor/actions', 'space-work', 'folder-dev', { lastActive: now - 3 * 3_600_000 }),
+  makeTab('tab-tauri', 'Tauri 2.0 · Webview API reference', 'https://v2.tauri.app/reference/', 'space-work', 'folder-docs', { lastActive: now - 26 * 60_000 }),
+  makeTab('tab-wv2', 'ICoreWebView2ContextMenuRequestedEventArgs interface', 'https://learn.microsoft.com/microsoft-edge/webview2', 'space-work', 'folder-docs', { lastActive: now - 50 * 3_600_000 }),
+  makeTab('tab-rust', 'The Rust Programming Language', 'https://doc.rust-lang.org/book/', 'space-work', 'folder-docs'),
+  makeTab('tab-news', 'Hacker News', 'https://news.ycombinator.com', 'space-work', null, { lastActive: now - 40 * 60_000 }),
+  makeTab('tab-yt', 'Lo-fi beats to code to - YouTube', 'https://youtube.com/watch?v=x', 'space-work', null, { lastActive: now - 8 * 3_600_000 }),
 ]
-const defaultSettings: Settings = { searchEngine: 'https://www.google.com/search?q={q}', archiveAfterHours: 24, httpsUpgrade: true, stripTracking: true, autoFile: true, restoreSession: true, sidebarSide: 'left', sidebarCompact: false, sidebarWidth: 280, theme: 'chalk', adblockEnabled: true }
+const defaultSettings: Settings = { searchEngine: 'https://www.google.com/search?q={q}', archiveAfterHours: 24, httpsUpgrade: true, stripTracking: true, autoFile: true, restoreSession: true, sidebarSide: 'left', sidebarCompact: false, sidebarWidth: 236, theme: 'chalk', adblockEnabled: true }
 const initialSnapshot = (): Snapshot => ({ workspace: { spaces, folders, tabs: initialTabs, activeSpace: 'space-work', activeTab: 'tab-welcome', split: null }, runtime: Object.fromEntries(initialTabs.map((tab) => [tab.id, { loading: false, canGoBack: tab.url !== 'athanor://newtab', canGoForward: false, blocked: tab.id === 'tab-github' ? 12 : 0, audible: false, secure: tab.url.startsWith('https:') }])), settings: defaultSettings, filingRules: [{ id: 'rule-github', folder: 'Development', host: 'github.com', pathPrefix: null, titleContains: null, enabled: true }, { id: 'rule-docs', folder: 'Reading list', host: 'developer.mozilla.org', pathPrefix: null, titleContains: null, enabled: true }, { id: 'rule-design', folder: 'Design', host: 'figma.com', pathPrefix: null, titleContains: null, enabled: true }, { id: 'rule-shopping', folder: 'Shopping', host: 'amazon.com', pathPrefix: null, titleContains: null, enabled: true }, { id: 'rule-social', folder: 'Social', host: 'reddit.com', pathPrefix: null, titleContains: null, enabled: true }], platform: 'windows', version: '0.1.0 mock', blockedTotal: 128 })
 let state = initialSnapshot()
 if (mockGetPlatformFromUrl()) state.platform = mockGetPlatformFromUrl()!

@@ -46,7 +46,7 @@ impl Default for Settings {
             restore_session: true,
             sidebar_side: "left".into(),
             sidebar_compact: false,
-            sidebar_width: 260,
+            sidebar_width: 236,
             theme: "chalk".into(),
             adblock_enabled: true,
         }

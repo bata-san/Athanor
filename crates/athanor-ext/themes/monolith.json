@@ -14,7 +14,7 @@
     "sidebarAccent": "#1c1c1f", "sidebarAccentForeground": "#fafafa", "sidebarBorder": "#232326",
     "tabActive": "#1f1f23", "tabHover": "#19191c", "spaceAccent": "#fafafa"
   },
-  "radius": "0.75rem",
+  "radius": "0.5rem",
   "fonts": { "ui": "'IBM Plex Sans JP', 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', 'Yu Gothic UI', 'Hiragino Sans', sans-serif", "mono": "ui-monospace, 'Cascadia Code', Consolas, monospace" },
-  "ui": { "sidebarSide": "left", "density": "comfortable", "tabHeight": 34, "sidebarWidth": 272, "blur": 0, "showFavicons": true }
+  "ui": { "sidebarSide": "left", "density": "comfortable", "tabHeight": 27, "sidebarWidth": 236, "blur": 0, "showFavicons": true }
 }

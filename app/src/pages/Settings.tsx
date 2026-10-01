@@ -81,7 +81,7 @@ export default function SettingsPage() {
         key={item.id}
         aria-label={item.id}
         title={item.id}
-        className="flex h-9 min-w-0 items-center gap-2.5 rounded-lg px-2.5 text-start text-sm text-foreground transition-colors hover:bg-tab-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium max-md:min-h-11 max-[700px]:justify-center max-[700px]:px-0"
+        className="flex h-8 min-w-0 items-center gap-2.5 rounded-lg px-2.5 text-start text-sm text-foreground transition-colors hover:bg-tab-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium max-md:min-h-11 max-[700px]:justify-center max-[700px]:px-0"
         data-active={String(section === item.id)}
         onClick={() => setSection(item.id)}
       ><AppIcon name={item.icon} className="size-4 shrink-0" /><span className="max-[700px]:sr-only">{item.id}</span></button>)}
@@ -134,14 +134,14 @@ export default function SettingsPage() {
             <Row title="Built-in adblock" description="Block requests with local filter lists.">
               <TouchSwitch label="Built-in adblock" checked={adblock?.enabled ?? settings.adblockEnabled} onCheckedChange={(enabled) => void api.setAdblockEnabled(enabled)} />
             </Row>
-            <div className="py-3">
+            <div className="py-2">
               <h3 className="mb-2 text-[13px] font-medium text-muted-foreground">Filter lists</h3>
               <div className="divide-y divide-border">
-                {(adblock?.lists ?? []).map((list) => <div className="flex min-h-14 items-center justify-between gap-4 py-3 max-sm:items-start" key={list.id}>
+                {(adblock?.lists ?? []).map((list) => <div className="flex min-h-11 items-center justify-between gap-4 py-2 max-sm:items-start" key={list.id}>
                   <div className="min-w-0"><p className="m-0 text-sm font-medium">{list.name}</p><p className="m-0 mt-0.5 text-[13px] text-muted-foreground">{list.ruleCount.toLocaleString()} rules · {list.updatedAt ? `Updated ${new Date(list.updatedAt).toLocaleDateString()}` : 'Not updated'}{list.error ? ` · ${list.error}` : ''}</p></div>
                   <TouchSwitch label={`${list.name} list`} checked={list.enabled} onCheckedChange={(enabled) => void api.setAdblockListEnabled(list.id, enabled)} />
                 </div>)}
-                {adblock?.lists.length === 0 && <p className="m-0 py-3 text-[13px] text-muted-foreground">No filter lists are available.</p>}
+                {adblock?.lists.length === 0 && <p className="m-0 py-2 text-[13px] text-muted-foreground">No filter lists are available.</p>}
               </div>
             </div>
           </Section>
@@ -165,10 +165,10 @@ export default function SettingsPage() {
             </Row>
           </Section>
           <Section title="Filing rules" description="Built-in destinations include Development, Reading list, Shopping, Social, and Design. Rules create a folder the first time a match appears." actions={<Button className="max-md:min-h-11" size="sm" onClick={() => persistRules([...rules, { id: crypto.randomUUID(), folder: '', host: '', pathPrefix: null, titleContains: null, enabled: true }])}><AppIcon name="Plus" />Add rule</Button>}>
-            <div className="py-3">
+            <div className="py-2">
               <div className="mb-2 hidden grid-cols-[2.5rem_repeat(4,minmax(0,1fr))_2.5rem] gap-2 px-1 text-xs text-muted-foreground md:grid" aria-hidden="true"><span /><span>Folder</span><span>Host contains</span><span>Path prefix</span><span>Title contains</span><span /></div>
               <div className="divide-y divide-border">
-                {rules.map((rule) => <div key={rule.id} className="grid grid-cols-1 items-center gap-2 py-3 md:grid-cols-[2.5rem_repeat(4,minmax(0,1fr))_2.5rem]">
+                {rules.map((rule) => <div key={rule.id} className="grid grid-cols-1 items-center gap-2 py-2 md:grid-cols-[2.5rem_repeat(4,minmax(0,1fr))_2.5rem]">
                   <TouchSwitch label="Enable rule" checked={rule.enabled} onCheckedChange={(enabled) => persistRules(rules.map((item) => item.id === rule.id ? { ...item, enabled } : item))} />
                   <Input className="max-md:h-11" aria-label="Folder name" placeholder="Folder name" value={rule.folder} onChange={(event) => persistRules(rules.map((item) => item.id === rule.id ? { ...item, folder: event.target.value } : item))} />
                   <Input className="max-md:h-11" aria-label="Host contains" placeholder="Host, e.g. github.com" value={rule.host ?? ''} onChange={(event) => persistRules(rules.map((item) => item.id === rule.id ? { ...item, host: event.target.value || null } : item))} />
@@ -184,7 +184,7 @@ export default function SettingsPage() {
 
         {section === 'Appearance' && <>
           <Section title="Theme" description="Choose the colors used across Athanor.">
-            <div className="grid grid-cols-2 gap-3 py-3 max-sm:grid-cols-1">
+            <div className="grid grid-cols-2 gap-3 py-2 max-sm:grid-cols-1">
               {themes.map((theme) => <button type="button" key={theme.id} data-selected={String(settings.theme === theme.id)} aria-pressed={settings.theme === theme.id} aria-label={`Use ${theme.name} theme`} className="rounded-xl border border-border bg-card p-3 text-left outline-none transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring/40 data-[selected=true]:border-primary data-[selected=true]:ring-1 data-[selected=true]:ring-primary max-md:min-h-11" onClick={() => { document.documentElement.dataset.themeDark = String(theme.dark); patch({ theme: theme.id }); void api.setTheme(theme.id) }}>
                 <div data-part="theme-preview" className="mb-3 flex h-20 overflow-hidden rounded-lg border border-border bg-background p-2">
                   <div className="w-1/4 rounded-md bg-sidebar p-1"><div className="mb-1 h-1.5 rounded bg-muted" /><div className="h-1.5 w-2/3 rounded bg-muted" /></div>
@@ -263,7 +263,7 @@ function MyFiltersEditor() {
   }
   const lines = countFilterLines(text)
 
-  return <div className="space-y-3 py-3">
+  return <div className="space-y-3 py-2">
     <p id="my-filters-help" className="m-0 text-[13px] text-muted-foreground">One rule per line, for example <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">||ads.example.com^</code>, <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">example.com##.banner</code>, <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">@@||example.com^$document</code>.</p>
     <Textarea ref={area} id="my-filters" data-part="my-filters" className="min-h-60 resize-y font-mono text-[13px] leading-5" aria-label="My filters" aria-describedby="my-filters-help" rows={12} wrap="off" spellCheck={false} value={text} placeholder="||ads.example.com^" onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void save() } }} />
     <div className="flex flex-wrap items-center gap-2">
@@ -289,7 +289,7 @@ function TouchSwitch({ label, checked, onCheckedChange }: { label: string; check
 }
 
 function SettingsExtensionRow({ extension, onRefresh }: { extension: ExtensionInfo; onRefresh: () => void }) {
-  return <div className="flex min-h-20 items-center gap-3 py-3 max-sm:flex-wrap">
+  return <div className="flex min-h-20 items-center gap-3 py-2 max-sm:flex-wrap">
     <IconTile icon="Zap" />
     <div className="min-w-0 flex-1"><p className="m-0 text-sm font-medium">{extension.name}</p><p className="m-0 mt-0.5 text-[13px] text-muted-foreground">{extension.description}</p><p className="m-0 mt-1 text-xs text-muted-foreground">Permissions: {extension.permissions.join(', ') || 'None'} · {extension.version}</p></div>
     <div className="flex shrink-0 items-center gap-1"><TouchSwitch label={`${extension.enabled ? 'Disable' : 'Enable'} ${extension.name}`} checked={extension.enabled} onCheckedChange={(enabled) => void api.setExtensionEnabled(extension.id, enabled).then(onRefresh)} />{extension.source === 'user' && <Tip label={`Remove ${extension.name}`}><Button className="max-md:size-11" variant="ghost" size="icon" aria-label={`Remove ${extension.name}`} onClick={() => void api.removeExtension(extension.id).then(onRefresh)}><AppIcon name="Trash2" /></Button></Tip>}</div>

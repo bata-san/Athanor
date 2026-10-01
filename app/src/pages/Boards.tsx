@@ -100,7 +100,7 @@ export default function BoardsPage({ standaloneId = null }: { standaloneId?: str
       </div>
       <div className="flex flex-col gap-0.5">
         {summaries.map((entry) => <div key={entry.id} className="group flex items-center gap-0.5">
-          <button data-active={String(board?.id === entry.id)} onClick={() => void loadBoard(entry.id)} className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg px-2 text-start text-sm text-muted-foreground transition-colors outline-none hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 data-[active=true]:bg-sidebar-accent data-[active=true]:text-foreground max-md:min-h-11">
+          <button data-active={String(board?.id === entry.id)} onClick={() => void loadBoard(entry.id)} className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg px-2 text-start text-sm text-muted-foreground transition-colors outline-none hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 data-[active=true]:bg-sidebar-accent data-[active=true]:text-foreground max-md:min-h-11">
             <AppIcon name="PanelsTopLeft" className="size-4 shrink-0" />
             <span className="truncate">{entry.name}</span>
             <Badge variant="outline" className="ms-auto shrink-0 tabular-nums">{entry.itemCount}</Badge>

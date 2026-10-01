@@ -188,6 +188,10 @@ impl EngineBackend for DesktopEngine {
                 if let Err(e) = unsafe { crate::win::attach(&controller, ctx) } {
                     eprintln!("webview2 attach failed: {e}");
                 }
+                // New views start with the stage's rounded clip (it is re-applied on every resize).
+                if crate::win::corner_radius() > 0 {
+                    let _ = unsafe { crate::win::apply_corner_radius(&controller) };
+                }
                 // Hooks are in place: start the real navigation now.
                 if let Err(e) = unsafe { crate::win::navigate(&controller, &target) } {
                     eprintln!("initial navigation failed: {e}");
