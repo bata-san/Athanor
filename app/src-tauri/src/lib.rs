@@ -262,6 +262,8 @@ pub fn run() {
             commands::window_toggle_maximize,
             commands::window_close,
             commands::window_start_drag,
+            commands::window_get_position,
+            commands::window_move_to,
             commands::window_is_maximized,
             #[cfg(desktop)]
             updater::check_update,

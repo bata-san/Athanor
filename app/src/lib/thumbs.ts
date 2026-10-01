@@ -11,6 +11,9 @@ export const useThumbs = create<{ images: Record<string, string>; put: (tab: str
   drop: (tab) => set((state) => { if (!(tab in state.images)) return state; const images = { ...state.images }; delete images[tab]; return { images } }),
 }))
 
+/** A picture shown over the (still frozen) page while an overlay lets go, so the new tab is already what is behind it. */
+export const useCover = create<{ src: string | null; set: (src: string | null) => void }>((set) => ({ src: null, set: (src) => set({ src }) }))
+
 /** Scale a captured page picture down to a card-sized JPEG. */
 export function shrink(source: string, width = 480): Promise<string> {
   return new Promise((resolve, reject) => {

@@ -932,6 +932,37 @@ pub async fn window_close(app: AppHandle) -> R {
     }
 }
 
+/// Where the window is, in logical pixels.
+#[tauri::command]
+pub fn window_get_position(app: AppHandle) -> R<(f64, f64)> {
+    #[cfg(desktop)]
+    {
+        let window = main_window(&app)?;
+        let scale = window.scale_factor().map_err(e)?;
+        let at = window.outer_position().map_err(e)?;
+        Ok((at.x as f64 / scale, at.y as f64 / scale))
+    }
+    #[cfg(mobile)]
+    {
+        let _ = app;
+        Ok((0.0, 0.0))
+    }
+}
+
+/// Move the window (logical pixels). Synchronous, so it runs on the main thread the moment it arrives.
+#[tauri::command]
+pub fn window_move_to(app: AppHandle, x: f64, y: f64) -> R {
+    #[cfg(desktop)]
+    return main_window(&app)?
+        .set_position(tauri::LogicalPosition::new(x, y))
+        .map_err(e);
+    #[cfg(mobile)]
+    {
+        let _ = (app, x, y);
+        Ok(())
+    }
+}
+
 #[tauri::command]
 pub async fn window_start_drag(app: AppHandle) -> R {
     #[cfg(desktop)]

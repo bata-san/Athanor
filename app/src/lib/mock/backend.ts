@@ -152,6 +152,8 @@ export async function mockInvoke<K extends keyof CommandArgs>(name: K, rawArgs: 
     case 'reload': case 'stop': { if (state.runtime[args.tab]) state.runtime[args.tab]!.loading = name === 'reload'; emitSnapshot(); break }
     case 'go_back': case 'go_forward': { if (state.runtime[args.tab]) { state.runtime[args.tab]!.canGoBack = name === 'go_forward'; state.runtime[args.tab]!.canGoForward = name === 'go_back'; emitSnapshot() } break }
     case 'set_pinned': { const tab = state.workspace.tabs.find((t) => t.id === args.tab); if (tab) tab.pinned = args.pinned; emitSnapshot(); break }
+    case 'window_get_position': result = [0, 0]; break
+    case 'window_move_to': break
     case 'reopen_closed': break
     case 'set_software_rendering': { const tab = state.workspace.tabs.find((t) => t.id === args.tab); if (tab) tab.softwareRendering = args.software; emitSnapshot(); break }
     case 'set_muted': { const tab = state.workspace.tabs.find((t) => t.id === args.tab); if (tab) tab.muted = args.muted; emitSnapshot(); break }

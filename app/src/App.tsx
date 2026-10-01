@@ -24,7 +24,7 @@ import { CommandBar, type BarMode } from './components/CommandBar'
 import { hostOf } from './components/UrlPill'
 import { startupUpdateCheck } from './lib/updates'
 import { useCtrlHeld } from './lib/modifiers'
-import { useThumbnailCapture } from './lib/thumbs'
+import { useCover, useThumbnailCapture } from './lib/thumbs'
 import { TabOverview } from './components/TabOverview'
 import { FindBar } from './components/FindBar'
 import { NativeUi } from './components/NativeUi'
@@ -223,6 +223,7 @@ export function App() {
     return () => { document.removeEventListener('keydown', keydown); void unlisten.then((off) => off()) }
   }, [handleShortcut])
   useThumbnailCapture(!isMock && !mobile)
+  const cover = useCover((state) => state.src)
   // While Ctrl is held the sidebar shows which number opens which tab.
   useEffect(() => {
     const set = useCtrlHeld.getState().set
@@ -307,6 +308,7 @@ export function App() {
           {currentPage === 'board-window' && <Suspense fallback={<SuspenseCard />}><BoardsPage standaloneId={standaloneBoard} /></Suspense>}
           </div>
           {frames.map((frame) => <img key={frame.tab} src={frame.src} alt="" aria-hidden="true" draggable={false} className="pointer-events-none absolute z-[1] select-none object-fill" data-part="frozen-page" style={{ left: frame.rect.x, top: frame.rect.y, width: frame.rect.w, height: frame.rect.h }} />)}
+          {cover && <img src={cover} alt="" aria-hidden="true" draggable={false} className="pointer-events-none absolute inset-0 z-[1] size-full select-none object-cover object-top" data-part="tab-cover" />}
           {snapshot.workspace.split && !standaloneBoardWindow && <SplitOverlay snapshot={snapshot} rects={splitRects} />}
           {devOpen && !standaloneBoardWindow && <Suspense fallback={null}><DevPanel onClose={() => setDevOpen(false)} snapshot={snapshot} /></Suspense>}
         </section>

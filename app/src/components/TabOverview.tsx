@@ -6,7 +6,7 @@ import type { Snapshot, Tab, TabRuntime } from '@/lib/types'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useOverlay } from '@/lib/overlay'
-import { useThumbs } from '@/lib/thumbs'
+import { useCover, useThumbs } from '@/lib/thumbs'
 import { groupSidebarTabs } from '@/lib/sidebarModel'
 import { nextIndex } from '@/lib/gridNav'
 import { Dialog, DialogDescription, DialogTitle } from './ui/dialog'
@@ -90,7 +90,13 @@ export function TabOverview({ open, onClose, snapshot }: { open: boolean; onClos
     return () => { window.cancelAnimationFrame(frame); window.removeEventListener('resize', measureColumns) }
   }, [open, measureColumns, tabs.length])
 
-  const go = useCallback((tab: Tab) => { void api.activateTab(tab.id); leave() }, [leave])
+  const go = useCallback((tab: Tab) => {
+    // The tab changes first; the blur lets go after. The new tab's picture replaces the old page behind the blur.
+    const picture = useThumbs.getState().images[tab.id]
+    if (picture) { useCover.getState().set(picture); window.setTimeout(() => useCover.getState().set(null), 520) }
+    void api.activateTab(tab.id)
+    leave()
+  }, [leave])
   const close = useCallback((tab: Tab) => {
     // The card that takes the closed one's place gets the focus, so the walk carries on where it was.
     const at = tabs.findIndex((entry) => entry.id === tab.id)

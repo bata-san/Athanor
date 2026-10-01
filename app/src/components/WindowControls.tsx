@@ -19,7 +19,36 @@ export function WindowControls({ className }: { className?: string }) {
 /** Pointer handler for empty window chrome: drags the window, double-click toggles maximise. */
 export function dragWindow(event: React.PointerEvent) {
   if (event.button !== 0 || (event.target as HTMLElement).closest('button, input, textarea, a, [role="menuitem"], [data-no-drag]')) return
-  void api.windowStartDrag()
+  const surface = event.currentTarget as HTMLElement
+  const pointer = event.pointerId
+  const start = { x: event.screenX, y: event.screenY }
+  let origin: [number, number] | null = null
+  let latest = start
+  let moving = false
+  let frame = 0
+  let maximized: boolean | null = null
+  const apply = () => { frame = 0; if (origin) void api.windowMoveTo(origin[0] + latest.x - start.x, origin[1] + latest.y - start.y) }
+  const move = (next: PointerEvent) => {
+    latest = { x: next.screenX, y: next.screenY }
+    if (!moving) {
+      // A press that barely moves is a click (or the first half of a double-click), not a drag.
+      if (Math.hypot(latest.x - start.x, latest.y - start.y) < 4) return
+      moving = true
+      void api.windowIsMaximized().then((is) => {
+        maximized = is
+        // A maximised window is restored by the system's own drag; otherwise follow the pointer here.
+        if (is) { finish(); void api.windowStartDrag() } else void api.windowGetPosition().then((at) => { origin = at; apply() })
+      })
+    }
+    if (maximized === false && origin && !frame) frame = requestAnimationFrame(apply)
+  }
+  const finish = () => {
+    surface.removeEventListener('pointermove', move); surface.removeEventListener('pointerup', finish); surface.removeEventListener('pointercancel', finish)
+    if (frame) cancelAnimationFrame(frame)
+    try { surface.releasePointerCapture(pointer) } catch { /* already released */ }
+  }
+  try { surface.setPointerCapture(pointer) } catch { /* not capturable: moves on the surface still work */ }
+  surface.addEventListener('pointermove', move); surface.addEventListener('pointerup', finish); surface.addEventListener('pointercancel', finish)
 }
 export function toggleWindow(event: React.MouseEvent) {
   if ((event.target as HTMLElement).closest('button, input, textarea, a, [data-no-drag]')) return
