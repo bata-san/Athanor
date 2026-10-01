@@ -378,6 +378,7 @@ fn combo(vk: u32, ctrl: bool, shift: bool, alt: bool) -> Option<&'static str> {
         (0x47, true, false, false) | (0x72, false, false, false) => "Ctrl+G",
         (0x47, true, true, false) | (0x72, false, true, false) => "Ctrl+Shift+G",
         (0x44, true, false, false) => "Ctrl+D",
+        (0x20, true, false, false) | (0xDC, true, true, false) => "Ctrl+Space",
         (0x50, true, false, false) => "Ctrl+P",
         (0xBB, true, _, false) | (0x6B, true, _, false) => "Ctrl+=",
         (0xBD, true, _, false) | (0x6D, true, _, false) => "Ctrl+-",

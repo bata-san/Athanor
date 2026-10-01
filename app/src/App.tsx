@@ -24,6 +24,8 @@ import { CommandBar, type BarMode } from './components/CommandBar'
 import { hostOf } from './components/UrlPill'
 import { startupUpdateCheck } from './lib/updates'
 import { useCtrlHeld } from './lib/modifiers'
+import { useThumbnailCapture } from './lib/thumbs'
+import { TabOverview } from './components/TabOverview'
 import { FindBar } from './components/FindBar'
 import { NativeUi } from './components/NativeUi'
 import { ShortcutSheet } from './components/ShortcutSheet'
@@ -178,6 +180,7 @@ export function App() {
   const [findOpen, setFindOpen] = useState(false)
   const [findSeed, setFindSeed] = useState(0)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [overviewOpen, setOverviewOpen] = useState(false)
   const findCommand = useRef<((action: 'next' | 'prev') => void) | null>(null)
   const closeFind = useCallback(() => {
     setFindOpen(false)
@@ -199,6 +202,7 @@ export function App() {
     else if (combo === 'Ctrl+D' && tab) { void api.setPinned(tab.id, !tab.pinned); toast(tab.pinned ? 'Unpinned' : 'Pinned to the top of the sidebar', { duration: 1800 }) }
     else if (combo === 'Ctrl+,') openInternalPage('settings')
     else if (combo === 'Ctrl+/') setSheetOpen((value) => !value)
+    else if (combo === 'Ctrl+Space') setOverviewOpen((value) => !value)
     else if (combo === 'Ctrl+K') openBar('navigate', '')
     else if (combo === 'Ctrl+T') { setScreen('browser'); openBar('new-tab', '') }
     else if (combo === 'Ctrl+W' && tab) void api.closeTab(tab.id)
@@ -218,6 +222,7 @@ export function App() {
     const unlisten = listen('athanor://shortcut', ({ combo }) => { if (combo === 'CtrlDown' || combo === 'CtrlUp') useCtrlHeld.getState().set(combo === 'CtrlDown'); else handleShortcut(combo, true) })
     return () => { document.removeEventListener('keydown', keydown); void unlisten.then((off) => off()) }
   }, [handleShortcut])
+  useThumbnailCapture(!isMock && !mobile)
   // While Ctrl is held the sidebar shows which number opens which tab.
   useEffect(() => {
     const set = useCtrlHeld.getState().set
@@ -283,7 +288,7 @@ export function App() {
     <div className={cn('app-shell ath-chrome flex h-dvh w-full min-h-0 text-foreground', mobile && 'mobile-shell flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]', !mobile && sidebarRight && 'flex-row-reverse', standaloneBoardWindow && 'standalone-board-shell')} data-part="shell" data-side={snapshot.settings.sidebarSide} data-density={density}>
       {framed && <Sidebar snapshot={snapshot} panels={panels} openPage={openInternalPage} openPanel={(selected) => { setPanel(selected); setScreen('browser') }} windowControls={controlsInSidebar ? controls : undefined} />}
       <main className={cn('main-column relative flex min-h-0 min-w-0 flex-1 flex-col', framed && (sidebarRight ? 'ps-2 pb-2' : 'pe-2 pb-2'))}>
-        {framed && <StageBar snapshot={snapshot} activeTab={activeTab} openBar={showBar} openPage={openInternalPage} toggleDev={() => setDevOpen((value) => !value)} windowControls={controlsInSidebar ? undefined : controls} />}
+        {framed && <StageBar snapshot={snapshot} activeTab={activeTab} openBar={showBar} openPage={openInternalPage} toggleDev={() => setDevOpen((value) => !value)} openOverview={() => setOverviewOpen(true)} windowControls={controlsInSidebar ? undefined : controls} />}
         {standaloneBoardWindow && !mobile && <StandaloneTitlebar />}
         {mobile && !standaloneBoardWindow && <MobileBar snapshot={snapshot} activeTab={activeTab} openBar={showBar} openSwitcher={() => setSwitcherOpen(true)} openMenu={() => openBar('navigate', '')} openPage={openInternalPage} />}
         <AnimatePresence initial={false}>{findOpen && framed && shownTab && !internalPage && <FindBar key="find" tab={shownTab.id} url={shownTab.url} seed={findSeed} onClose={closeFind} commandRef={findCommand} />}</AnimatePresence>
@@ -317,6 +322,7 @@ export function App() {
       {mobile && !standaloneBoardWindow && <TabSwitcher open={switcherOpen} onClose={() => setSwitcherOpen(false)} snapshot={snapshot} />}
       <PageContextMenuView request={pageMenu?.request ?? null} anchor={pageMenu?.anchor ?? null} searchEngine={snapshot.settings.searchEngine} onClose={closePageMenu} />
       <ShortcutSheet open={sheetOpen} onOpenChange={setSheetOpen} />
+      {!standaloneBoardWindow && <TabOverview open={overviewOpen} onClose={() => setOverviewOpen(false)} snapshot={snapshot} />}
       <NativeUi />
       <DialogHost />
       <AnimatePresence>{(!snapshot.settings.onboarded || tour) && <Welcome key="welcome" snapshot={snapshot} onDone={() => { setTour(false); void api.setSettings({ onboarded: true }) }} />}</AnimatePresence>

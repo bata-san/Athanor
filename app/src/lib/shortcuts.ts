@@ -30,7 +30,7 @@ const ALIASES: Record<string, string> = {
   'Ctrl+R': 'F5', 'Ctrl+F5': 'Ctrl+Shift+R', 'F3': 'Ctrl+G', 'Shift+F3': 'Ctrl+Shift+G',
   'Ctrl+PageDown': 'Ctrl+Tab', 'Ctrl+PageUp': 'Ctrl+Shift+Tab',
   'Ctrl+Shift+}': 'Ctrl+Tab', 'Ctrl+Shift+{': 'Ctrl+Shift+Tab', 'Ctrl+Shift+]': 'Ctrl+Tab', 'Ctrl+Shift+[': 'Ctrl+Shift+Tab',
-  'Ctrl+Shift+F5': 'Ctrl+Shift+R',
+  'Ctrl+Shift+F5': 'Ctrl+Shift+R', 'Ctrl+Shift+\\': 'Ctrl+Space', 'Ctrl+Shift+|': 'Ctrl+Space',
 }
 export const canonicalShortcut = (combo: string): string => ALIASES[combo] ?? combo
 
@@ -46,6 +46,7 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   { combo: 'Ctrl+Tab', label: 'Next tab', group: 'Tabs', owner: 'backend' },
   { combo: 'Ctrl+Shift+Tab', label: 'Previous tab', group: 'Tabs', owner: 'backend' },
   { combo: 'Ctrl+1', label: 'Go to tab 1–8, pinned first (Ctrl+9: last)', group: 'Tabs', owner: 'backend' },
+  { combo: 'Ctrl+Space', label: 'Show all tabs (overview)', group: 'Tabs', owner: 'shell' },
   { combo: 'Ctrl+D', label: 'Pin or unpin tab', group: 'Tabs', owner: 'shell' },
   { combo: 'Ctrl+\\', label: 'Split with next tab', group: 'Tabs', owner: 'backend' },
   { combo: 'Ctrl+L', label: 'Open location', group: 'Navigation', owner: 'shell' },

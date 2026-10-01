@@ -1,5 +1,5 @@
 import type * as React from 'react'
-import { ArrowLeft, ArrowRight, Columns2, Command, LayoutPanelTop, MoreHorizontal, PanelLeft, PanelsTopLeft, Puzzle, RotateCw, Settings, SquareTerminal, X } from 'lucide-react'
+import { LayoutGrid, ArrowLeft, ArrowRight, Columns2, Command, LayoutPanelTop, MoreHorizontal, PanelLeft, PanelsTopLeft, Puzzle, RotateCw, Settings, SquareTerminal, X } from 'lucide-react'
 import type { Snapshot, Tab } from '@/lib/types'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
@@ -32,7 +32,7 @@ export function NavCluster({ snapshot, activeTab, className }: { snapshot: Snaps
  * The slim strip above the page: the page's title on the left (also the drag handle), tools and the window
  * buttons on the right. Everything you type goes through the address pill / command bar instead.
  */
-export function StageBar({ snapshot, activeTab, openBar, openPage, toggleDev, windowControls }: { snapshot: Snapshot; activeTab: Tab | null; openBar: () => void; openPage: (page: Page) => void; toggleDev: () => void; windowControls?: React.ReactNode }) {
+export function StageBar({ snapshot, activeTab, openBar, openPage, toggleDev, openOverview, windowControls }: { snapshot: Snapshot; activeTab: Tab | null; openBar: () => void; openOverview: () => void; openPage: (page: Page) => void; toggleDev: () => void; windowControls?: React.ReactNode }) {
   const split = () => { const next = snapshot.workspace.tabs.find((tab) => tab.id !== activeTab?.id && tab.space === snapshot.workspace.activeSpace && !tab.archived); if (snapshot.workspace.split) void api.unsplit(); else if (next) void api.splitWith({ tab: next.id, dir: 'row' }); else toast('Open another tab to use Split View', { duration: 2400 }) }
   return <div className="flex h-9 shrink-0 items-center gap-1 ps-1.5" data-part="toolbar" onPointerDown={dragWindow} onDoubleClick={toggleWindow}>
     <NavCluster snapshot={snapshot} activeTab={activeTab} className="shrink-0" />
@@ -41,6 +41,7 @@ export function StageBar({ snapshot, activeTab, openBar, openPage, toggleDev, wi
     </div>
     <div className="flex items-center" data-no-drag>
       <NavButton label={snapshot.workspace.split ? 'Close split view' : 'Split view'} shortcut={'Ctrl+\\'} active={Boolean(snapshot.workspace.split)} onClick={split}><Columns2 /></NavButton>
+      <NavButton label="Show All Tabs" shortcut="Ctrl+Space" onClick={openOverview}><LayoutGrid /></NavButton>
       <NavButton label="Developer panel" shortcut="Ctrl+Shift+D" onClick={toggleDev}><SquareTerminal /></NavButton>
       <NavButton label="Command bar" shortcut="Ctrl+K" onClick={openBar}><Command /></NavButton>
       <OverlayDropdownMenu>
