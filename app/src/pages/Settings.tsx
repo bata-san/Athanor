@@ -65,6 +65,10 @@ export default function SettingsPage() {
   const [density, setDensityState] = useState<'comfortable' | 'compact'>(() => localStorage.getItem('athanor-density') === 'compact' ? 'compact' : 'comfortable')
   const settings = snapshot?.settings
   const remembered = Object.keys(settings?.sitePermissions ?? {}).length
+  // One wording for each slider, read by the thumb (aria-valuetext) and shown beside it, so the two never drift apart.
+  const archiveLabel = (settings?.archiveAfterHours ?? 0) === 0 ? 'Never' : `${settings?.archiveAfterHours} hours`
+  const sidebarLabel = `${settings?.sidebarWidth}px`
+  const scaleLabel = `${settings?.uiScale}%`
 
   useEffect(() => {
     void api.listThemes().then(setThemes)
@@ -160,7 +164,7 @@ export default function SettingsPage() {
               <TouchSwitch label="Restore previous session" checked={settings.restoreSession} onCheckedChange={(restoreSession) => patch({ restoreSession })} />
             </Row>
             <Row title="Archive inactive tabs after" description="Set to Never to keep all inactive tabs in view.">
-              <div className="flex w-64 items-center gap-4 max-sm:w-full"><Slider className="max-md:h-11" aria-label="Archive inactive tabs after" min={0} max={168} step={1} value={[settings.archiveAfterHours]} onValueChange={([archiveAfterHours]) => patch({ archiveAfterHours })} /><span className="w-20 shrink-0 text-right text-[0.8667rem] tabular-nums text-muted-foreground">{settings.archiveAfterHours === 0 ? 'Never' : `${settings.archiveAfterHours} hours`}</span></div>
+              <div className="flex w-64 items-center gap-4 max-sm:w-full"><Slider className="max-md:h-11" aria-label="Archive inactive tabs after" aria-valuetext={archiveLabel} min={0} max={168} step={1} value={[settings.archiveAfterHours]} onValueChange={([archiveAfterHours]) => patch({ archiveAfterHours })} /><span className="w-20 shrink-0 text-right text-[0.8667rem] tabular-nums text-muted-foreground">{archiveLabel}</span></div>
             </Row>
           </Section>
           <Section title="Sidebar">
@@ -173,7 +177,7 @@ export default function SettingsPage() {
               <TouchSwitch label="Compact sidebar" checked={settings.sidebarCompact} onCheckedChange={(sidebarCompact) => patch({ sidebarCompact })} />
             </Row>
             <Row title="Sidebar width" description="Adjust the width of the expanded sidebar.">
-              <div className="flex w-64 items-center gap-4 max-sm:w-full"><Slider className="max-md:h-11" aria-label="Sidebar width" min={208} max={400} step={1} value={[settings.sidebarWidth]} onValueChange={([sidebarWidth]) => patch({ sidebarWidth })} /><span className="w-14 shrink-0 text-right text-[0.8667rem] tabular-nums text-muted-foreground">{settings.sidebarWidth}px</span></div>
+              <div className="flex w-64 items-center gap-4 max-sm:w-full"><Slider className="max-md:h-11" aria-label="Sidebar width" aria-valuetext={`${settings.sidebarWidth} px`} min={208} max={400} step={1} value={[settings.sidebarWidth]} onValueChange={([sidebarWidth]) => patch({ sidebarWidth })} /><span className="w-14 shrink-0 text-right text-[0.8667rem] tabular-nums text-muted-foreground">{sidebarLabel}</span></div>
             </Row>
           </Section>
         </>}
@@ -248,7 +252,7 @@ export default function SettingsPage() {
         {section === 'Appearance' && <>
           <Section title="Accessibility" description="Make Athanor easier to see and to use. The system settings for Reduce Motion and Increase Contrast are always followed.">
             <Row title="Interface size" description="Scales text, controls and menus together. Web pages keep their own zoom (Ctrl + / Ctrl -).">
-              <div className="flex w-64 items-center gap-4 max-sm:w-full"><Slider className="max-md:h-11" aria-label="Interface size" min={100} max={200} step={5} value={[settings.uiScale]} onValueChange={([uiScale]) => patch({ uiScale })} /><span className="w-12 text-end text-[0.8667rem] tabular-nums text-muted-foreground">{settings.uiScale}%</span></div>
+              <div className="flex w-64 items-center gap-4 max-sm:w-full"><Slider className="max-md:h-11" aria-label="Interface size" aria-valuetext={scaleLabel} min={100} max={200} step={5} value={[settings.uiScale]} onValueChange={([uiScale]) => patch({ uiScale })} /><span className="w-12 text-end text-[0.8667rem] tabular-nums text-muted-foreground">{scaleLabel}</span></div>
             </Row>
             <Row title="Reduce motion" description="Replaces sliding and scaling with simple fades.">
               <TouchSwitch label="Reduce motion" checked={settings.reduceMotion} onCheckedChange={(reduceMotion) => patch({ reduceMotion })} />
