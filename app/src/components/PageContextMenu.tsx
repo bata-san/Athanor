@@ -6,8 +6,7 @@ import {
 import type { ContextItem, PageContextMenu } from '@/lib/types'
 import { api } from '@/lib/api'
 import { useOverlay } from '@/lib/overlay'
-import { cn } from '@/lib/utils'
-import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger } from './ui/context-menu'
+import { ContextMenu, ContextMenuCheckboxItem, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger } from './ui/context-menu'
 
 /** The engine's own entries we never show: they lead to services Athanor does not ship. */
 const HIDDEN = /moretools|share|webcapture|screenshot|collections|copilot|readaloud|emoji|cast|immersive|translate|reading|bing|sidebar|feedback|lookup|webselect/i
@@ -35,7 +34,7 @@ const clip = (text: string, max = 28) => { const flat = text.replace(/\s+/g, ' '
 export function buildPageMenu(request: PageContextMenu, searchEngine: string, answer: (command: number | null) => void): Entry[] {
   const { target, tab } = request
   const mine: Entry[] = []
-  const custom = (key: string, label: string, icon: LucideIcon, run: () => void): Entry => ({ type: 'item', key, label, icon, enabled: true, run: () => { answer(null); run() } })
+  const custom = (key: string, label: string, icon: LucideIcon, run: () => void): Entry => ({ type: 'item', key, name: key, label, icon, enabled: true, run: () => { answer(null); run() } })
   if (target.linkUrl) {
     const url = target.linkUrl
     mine.push(custom('athanor-open-link', 'Open Link in New Tab', ExternalLink, () => void api.openTab({ url, parent: tab })))
@@ -93,10 +92,12 @@ export function buildPageMenu(request: PageContextMenu, searchEngine: string, an
 function Entries({ entries }: { entries: Entry[] }) {
   return <>{entries.map((entry) => {
     if (entry.type === 'separator') return <ContextMenuSeparator key={entry.key} />
-    if (entry.type === 'nav') return <div key={entry.key} className="mb-1 grid grid-cols-3 gap-1">{entry.items.map((item) => { const Icon = item.icon; return <ContextMenuItem key={item.key} data-command={item.name} disabled={!item.enabled} title={`${item.label}${item.shortcut ? ` (${item.shortcut})` : ''}`} aria-label={item.label} className="h-9 justify-center px-0" onSelect={item.run}>{Icon && <Icon />}</ContextMenuItem> })}</div>
-    if (entry.type === 'sub') { const Icon = entry.icon; return <ContextMenuSub key={entry.key}><ContextMenuSubTrigger data-command={entry.name || entry.key}>{Icon ? <Icon /> : <span className="size-4" />}{entry.label}</ContextMenuSubTrigger><ContextMenuSubContent><Entries entries={entry.children} /></ContextMenuSubContent></ContextMenuSub> }
+    if (entry.type === 'nav') return <div key={entry.key} className="mb-1 grid grid-cols-3 gap-1">{entry.items.map((item) => { const Icon = item.icon; return <ContextMenuItem key={item.key} data-command={item.name} disabled={!item.enabled} title={item.label} aria-label={item.label} className="h-9 justify-center px-0" onSelect={item.run}>{Icon && <Icon aria-hidden="true" />}</ContextMenuItem> })}</div>
+    if (entry.type === 'sub') { const Icon = entry.icon; return <ContextMenuSub key={entry.key}><ContextMenuSubTrigger data-command={entry.name || entry.key} aria-label={entry.label}>{Icon ? <Icon aria-hidden="true" /> : <span className="size-4" />}{entry.label}</ContextMenuSubTrigger><ContextMenuSubContent aria-label={entry.label}><Entries entries={entry.children} /></ContextMenuSubContent></ContextMenuSub> }
     const Icon = entry.icon
-    return <ContextMenuItem key={entry.key} data-command={entry.name ?? entry.key} disabled={!entry.enabled} destructive={entry.destructive} onSelect={entry.run}>{Icon ? <Icon /> : <span className="size-4" />}<span className={cn('truncate', entry.checked && 'font-medium')}>{entry.label}</span></ContextMenuItem>
+    // A checked entry says so with a tick and with its role, not with bold type.
+    if (entry.checked !== undefined) return <ContextMenuCheckboxItem key={entry.key} data-command={entry.name ?? entry.key} checked={entry.checked} onCheckedChange={() => {}} disabled={!entry.enabled} onSelect={entry.run}>{Icon ? <Icon aria-hidden="true" /> : <span className="size-4" />}<span className="truncate">{entry.label}</span></ContextMenuCheckboxItem>
+    return <ContextMenuItem key={entry.key} data-command={entry.name ?? entry.key} disabled={!entry.enabled} destructive={entry.destructive} onSelect={entry.run}>{Icon ? <Icon aria-hidden="true" /> : <span className="size-4" />}<span className="truncate">{entry.label}</span></ContextMenuItem>
   })}</>
 }
 
@@ -141,7 +142,7 @@ export function PageContextMenuView({ request, anchor, searchEngine, onClose }: 
 
   return <ContextMenu onOpenChange={onOpenChange}>
     <ContextMenuTrigger asChild><div ref={catcher} aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10" data-part="page-context-anchor" /></ContextMenuTrigger>
-    <ContextMenuContent className="min-w-56" data-part="page-context-menu" onCloseAutoFocus={(event) => event.preventDefault()}>
+    <ContextMenuContent className="min-w-56" data-part="page-context-menu" aria-label="Page menu" onCloseAutoFocus={(event) => event.preventDefault()}>
       <Entries entries={entries} />
     </ContextMenuContent>
   </ContextMenu>
