@@ -11,18 +11,15 @@ import { dividerRatioAt } from './lib/splitMath'
 import { useAnyOverlay, useOverlay, useOverlayStore } from './lib/overlay'
 import { isDarkTheme } from './lib/theme'
 import { mockPageContextMenu } from './lib/mock/backend'
-import type { CommandInfo, DevServer, DevTool, PageContextMenu, PanelInfo, Rect, Snapshot, SplitNode, SplitRects, Suggestion, Tab } from './lib/types'
+import type { PageContextMenu, PanelInfo, Rect, Snapshot, SplitNode, SplitRects, Tab } from './lib/types'
 import { cn } from './lib/utils'
 import { AthanorMark } from './components/AthanorMark'
-import { AppIcon } from './components/Icons'
 import { Button } from './components/ui/button'
-import { Dialog, DialogContent, DialogTitle } from './components/ui/dialog'
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './components/ui/command'
-import { Kbd } from './components/ui/kbd'
-import { Textarea } from './components/ui/textarea'
-import { Tip, TooltipProvider } from './components/ui/tooltip'
+import { TooltipProvider } from './components/ui/tooltip'
 import { Sidebar } from './components/Sidebar'
-import { Toolbar, MobileBar } from './components/Toolbar'
+import { StageBar, MobileBar } from './components/Toolbar'
+import { CommandBar, type BarMode } from './components/CommandBar'
+import { hostOf } from './components/UrlPill'
 import { TabSwitcher } from './components/TabSwitcher'
 import { NewTabPage } from './components/NewTabPage'
 import { SuspenseCard } from './components/SuspenseCard'
@@ -82,15 +79,16 @@ export function App() {
   const [screen, setScreen] = useState<Screen>('browser')
   const [standaloneBoard, setStandaloneBoard] = useState<string | null>(null)
   const [panel, setPanel] = useState<PanelInfo | null>(null)
-  const [paletteOpen, setPaletteOpen] = useState(false)
-  const [paletteQuery, setPaletteQuery] = useState('')
+  const [bar, setBar] = useState<{ open: boolean; mode: BarMode; seed: string }>({ open: false, mode: 'navigate', seed: '' })
+  const paletteOpen = bar.open
+  const setPaletteOpen = useCallback((open: boolean) => setBar((current) => ({ ...current, open })), [])
+  const openBar = useCallback((mode: BarMode = 'navigate', seed = '') => setBar({ open: true, mode, seed }), [])
   const [devOpen, setDevOpen] = useState(false)
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const [splitRects, setSplitRects] = useState<SplitRects | null>(null)
   const [pageMenu, setPageMenu] = useState<{ request: PageContextMenu; anchor: { x: number; y: number } } | null>(null)
   const [density, setDensity] = useState<'compact' | 'comfortable'>(() => localStorage.getItem('athanor-density') === 'compact' ? 'compact' : 'comfortable')
   const [narrow, setNarrow] = useState(() => window.matchMedia('(max-width: 43.75rem)').matches)
-  const omniboxRef = useRef<HTMLInputElement>(null)
   const contentRef = useRef<HTMLElement>(null)
   const mobile = (snapshot?.platform === 'android' || snapshot?.platform === 'ios') || narrow
   const anyOverlay = useAnyOverlay()
@@ -126,6 +124,13 @@ export function App() {
   useEffect(() => { const update = (event: Event) => { const next = (event as CustomEvent<'compact' | 'comfortable'>).detail; if (next === 'compact' || next === 'comfortable') setDensity(next) }; window.addEventListener('athanor-density', update); return () => window.removeEventListener('athanor-density', update) }, [])
   useEffect(() => { if (!snapshot?.workspace.split) { setSplitRects(null); return }; void api.getSplitRects().then(setSplitRects) }, [snapshot?.workspace.split])
   useEffect(() => { const unlisten = listen('athanor://split-rects', setSplitRects); return () => { void unlisten.then((off) => off()) } }, [])
+  // The page views are clipped to the stage's corner radius so the native page sits inside the rounded card.
+  useEffect(() => {
+    const content = contentRef.current; if (!content) return
+    const apply = () => { const radius = parseFloat(getComputedStyle(content).borderTopLeftRadius) || 0; void api.setPageRadius(Math.round(radius * (window.devicePixelRatio || 1))) }
+    apply(); window.addEventListener('resize', apply)
+    return () => window.removeEventListener('resize', apply)
+  }, [mobile, ready])
   useEffect(() => { const content = contentRef.current; if (!content) return; const report = () => { const rect = content.getBoundingClientRect(); void api.setContentBounds({ x: rect.x, y: rect.y, w: rect.width, h: rect.height }).then(() => { if (useAppStore.getState().snapshot?.workspace.split) void api.getSplitRects().then(setSplitRects) }) }; const observer = new ResizeObserver(report); observer.observe(content); report(); return () => observer.disconnect() }, [mobile, ready, snapshot?.settings.sidebarCompact, snapshot?.settings.sidebarWidth, snapshot?.settings.sidebarSide])
 
   // The page's right-click menu: freeze the page, then draw the menu over the still image.
@@ -153,13 +158,13 @@ export function App() {
   useEffect(() => { if (standaloneBoard) return; if (activeTab?.url === 'athanor://settings') setScreen('settings'); else if (activeTab?.url === 'athanor://boards') setScreen('boards'); else if (activeTab?.url === 'athanor://extensions') setScreen('extensions'); else setScreen('browser') }, [activeTab?.url, standaloneBoard])
   const handleShortcut = useCallback((comboInput: string, fromNative = false) => {
     const combo = normalizeShortcut(comboInput)
-    if (fromNative && !['Ctrl+L', 'Ctrl+K', 'Ctrl+B', 'Ctrl+Shift+D'].includes(combo)) return
+    if (fromNative && !['Ctrl+L', 'Ctrl+K', 'Ctrl+T', 'Ctrl+B', 'Ctrl+Shift+D'].includes(combo)) return
     const current = useAppStore.getState().snapshot
     const tab = current?.workspace.tabs.find((item) => item.id === current.workspace.activeTab)
-    if (combo === 'Ctrl+K') { setPaletteOpen(true); setPaletteQuery('') }
-    else if (combo === 'Ctrl+T') { void api.openTab(); setScreen('browser') }
+    if (combo === 'Ctrl+K') openBar('navigate', '')
+    else if (combo === 'Ctrl+T') { setScreen('browser'); openBar('new-tab', '') }
     else if (combo === 'Ctrl+W' && tab) void api.closeTab(tab.id)
-    else if (combo === 'Ctrl+L') { setScreen('browser'); requestAnimationFrame(() => { omniboxRef.current?.focus(); omniboxRef.current?.select() }) }
+    else if (combo === 'Ctrl+L') { const url = tab?.url ?? ''; openBar('navigate', url.startsWith('athanor://') ? '' : url) }
     else if (combo === 'Ctrl+B' && current) void api.setSettings({ sidebarCompact: !current.settings.sidebarCompact })
     else if (combo === 'Ctrl+Shift+D' || combo === 'F12') setDevOpen((value) => !value)
     else if (combo === 'Ctrl+\\' && tab) { const next = current?.workspace.tabs.find((item) => item.space === current.workspace.activeSpace && !item.archived && item.id !== tab.id); if (next) void api.splitWith({ tab: next.id, dir: 'row' }) }
@@ -171,7 +176,7 @@ export function App() {
       const direction = combo === 'Ctrl+Tab' ? 1 : -1
       if (visible.length) void api.activateTab(visible[(index + direction + visible.length) % visible.length]!.id)
     }
-  }, [])
+  }, [openBar])
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       const combo = shortcutFromKeyboard(event)
@@ -207,7 +212,7 @@ export function App() {
   const runPaletteCommand = (value: string) => {
     if (value.startsWith('cmd:')) {
       const cmd = value.slice(4)
-      if (cmd === 'newtab') openTabUrl('athanor://newtab')
+      if (cmd === 'newtab') { void api.openTab(); setPaletteOpen(false) }
       if (cmd === 'settings') { openInternalPage('settings'); setPaletteOpen(false) }
       if (cmd === 'boards') { openInternalPage('boards'); setPaletteOpen(false) }
       if (cmd === 'extensions') { openInternalPage('extensions'); setPaletteOpen(false) }
@@ -233,14 +238,17 @@ export function App() {
   const sidebarRight = snapshot.settings.sidebarSide === 'right'
   const controls = !mobile ? <WindowControls /> : undefined
   const controlsInSidebar = sidebarRight && !snapshot.settings.sidebarCompact
+  const framed = !mobile && !standaloneBoardWindow
+  const urlSeed = (() => { const url = activeTab?.url ?? ''; return url.startsWith('athanor://') || !hostOf(url) ? '' : url })()
+  const showBar = () => openBar('navigate', urlSeed)
   return <TooltipProvider><DndContext onDragEnd={startDrag}>
-    <div className={cn('app-shell flex h-dvh w-full min-h-0 bg-background text-foreground', mobile && 'mobile-shell flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]', !mobile && sidebarRight && 'flex-row-reverse', standaloneBoardWindow && 'standalone-board-shell')} data-part="shell" data-side={snapshot.settings.sidebarSide} data-density={density}>
-      {!mobile && !standaloneBoardWindow && <Sidebar snapshot={snapshot} panels={panels} openPage={openInternalPage} openPanel={(selected) => { setPanel(selected); setScreen('browser') }} windowControls={controlsInSidebar ? controls : undefined} />}
-      <main className="main-column relative flex min-h-0 min-w-0 flex-1 flex-col">
-        {!mobile && !standaloneBoardWindow && <Toolbar snapshot={snapshot} activeTab={activeTab} omniboxRef={omniboxRef} openPalette={() => { setPaletteOpen(true); setPaletteQuery('') }} openPage={openInternalPage} toggleDev={() => setDevOpen((value) => !value)} windowControls={controlsInSidebar ? undefined : controls} />}
+    <div className={cn('app-shell ath-chrome flex h-dvh w-full min-h-0 text-foreground', mobile && 'mobile-shell flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]', !mobile && sidebarRight && 'flex-row-reverse', standaloneBoardWindow && 'standalone-board-shell')} data-part="shell" data-side={snapshot.settings.sidebarSide} data-density={density}>
+      {framed && <Sidebar snapshot={snapshot} panels={panels} openPage={openInternalPage} openPanel={(selected) => { setPanel(selected); setScreen('browser') }} openBar={showBar} windowControls={controlsInSidebar ? controls : undefined} />}
+      <main className={cn('main-column relative flex min-h-0 min-w-0 flex-1 flex-col', framed && (sidebarRight ? 'ps-2 pb-2' : 'pe-2 pb-2'))}>
+        {framed && <StageBar snapshot={snapshot} activeTab={activeTab} openBar={() => openBar('navigate', '')} openPage={openInternalPage} toggleDev={() => setDevOpen((value) => !value)} windowControls={controlsInSidebar ? undefined : controls} />}
         {standaloneBoardWindow && !mobile && <StandaloneTitlebar />}
-        {mobile && !standaloneBoardWindow && <MobileBar snapshot={snapshot} activeTab={activeTab} omniboxRef={omniboxRef} openSwitcher={() => setSwitcherOpen(true)} openPalette={() => { setPaletteOpen(true); setPaletteQuery('') }} openPage={openInternalPage} />}
-        <section ref={contentRef} className={cn('content relative min-h-0 min-w-0 flex-1 overflow-hidden bg-background', mobile ? 'mobile-content' : 'border-t border-sidebar-border', !mobile && !standaloneBoardWindow && (sidebarRight ? 'border-e' : 'border-s'))} data-part="content" data-split={String(splitActive)}>
+        {mobile && !standaloneBoardWindow && <MobileBar snapshot={snapshot} activeTab={activeTab} openBar={showBar} openSwitcher={() => setSwitcherOpen(true)} openMenu={() => openBar('navigate', '')} openPage={openInternalPage} />}
+        <section ref={contentRef} className={cn('content relative min-h-0 min-w-0 flex-1 overflow-hidden bg-background', mobile ? 'mobile-content' : standaloneBoardWindow ? '' : 'rounded-[var(--ath-stage-radius)] shadow-[var(--ath-stage-shadow)]')} data-part="content" data-split={String(splitActive)}>
           <div key={`${currentPage}|${panel?.id ?? ''}|${internalPage ? shownTab?.url : 'web'}`} className="absolute inset-0 animate-[ath-rise_220ms_var(--ease-spring)_both]">
           {currentPage === 'browser' && (panel
             ? <PanelView panel={panel} />
@@ -258,15 +266,15 @@ export function App() {
           {snapshot.workspace.split && !standaloneBoardWindow && <SplitOverlay snapshot={snapshot} rects={splitRects} />}
           {devOpen && !standaloneBoardWindow && <Suspense fallback={null}><DevPanel onClose={() => setDevOpen(false)} snapshot={snapshot} /></Suspense>}
         </section>
-        {mobile && !standaloneBoardWindow && <nav className="flex h-[var(--ath-mobile-bottom-height)] shrink-0 items-center justify-around border-t border-border bg-background" data-part="toolbar" aria-label="Navigation">
+        {mobile && !standaloneBoardWindow && <nav className="flex h-[var(--ath-mobile-bottom-height)] shrink-0 items-center justify-around bg-background/60" data-part="toolbar" aria-label="Navigation">
           <IconAction title="Back" onClick={() => activeTab && api.goBack(activeTab.id)}><ArrowLeft /></IconAction>
           <IconAction title="Forward" onClick={() => activeTab && api.goForward(activeTab.id)}><ArrowRight /></IconAction>
-          <IconAction title="New tab" onClick={() => api.openTab()}><Plus /></IconAction>
+          <IconAction title="New tab" onClick={() => openBar('new-tab', '')}><Plus /></IconAction>
           <button type="button" className="grid h-8 min-w-8 place-items-center rounded-lg border-2 border-foreground/70 px-1.5 text-xs font-semibold tabular-nums" data-part="tab-count" aria-label="Open tabs" onClick={() => setSwitcherOpen(true)}>{snapshot.workspace.tabs.filter((t) => !t.archived).length}</button>
-          <IconAction title="Menu" onClick={() => { setPaletteOpen(true); setPaletteQuery('') }}><CommandIcon /></IconAction>
+          <IconAction title="Menu" onClick={() => openBar('navigate', '')}><CommandIcon /></IconAction>
         </nav>}
       </main>
-      <CommandPalette open={paletteOpen} setOpen={setPaletteOpen} query={paletteQuery} setQuery={setPaletteQuery} snapshot={snapshot} servers={servers} extensionCommands={extensionCommands} run={runPaletteCommand} />
+      <CommandBar open={bar.open} onOpenChange={setPaletteOpen} mode={bar.mode} seed={bar.seed} snapshot={snapshot} servers={servers} extensionCommands={extensionCommands} run={runPaletteCommand} />
       {mobile && !standaloneBoardWindow && <TabSwitcher open={switcherOpen} onClose={() => setSwitcherOpen(false)} snapshot={snapshot} />}
       <PageContextMenuView request={pageMenu?.request ?? null} anchor={pageMenu?.anchor ?? null} searchEngine={snapshot.settings.searchEngine} onClose={closePageMenu} />
       <DialogHost />
@@ -341,54 +349,4 @@ function PanelView({ panel }: { panel: PanelInfo }) {
   }, [panel])
   const mockSrc = `<!doctype html><html><body><h2>${panel.title}</h2><p>Sandboxed extension preview</p><textarea id="note" placeholder="Write a quick note"></textarea><button id="read">Test storage bridge</button><pre id="result"></pre><script>document.getElementById('read').onclick=()=>parent.postMessage({athanor:1,id:'mock-read',method:'storage.get',params:{key:'note'}},'*');addEventListener('message',e=>{if(e.data&&e.data.athanor===1&&e.data.id==='mock-read')document.getElementById('result').textContent=JSON.stringify(e.data.result||e.data.error)})</script></body></html>`
   return <iframe ref={frame} className="relative z-[2] size-full min-h-16 flex-1 border-0 bg-background" data-part="extension-panel" title={panel.title} src={isMock ? undefined : panel.url} srcDoc={isMock ? mockSrc : undefined} sandbox="allow-scripts" />
-}
-
-function fuzzyMatch(query: string, candidate: string) {
-  const text = candidate.toLocaleLowerCase()
-  return query.trim().toLocaleLowerCase().split(/\s+/).every((part) => {
-    let cursor = 0
-    for (const character of part) {
-      cursor = text.indexOf(character, cursor)
-      if (cursor < 0) return false
-      cursor += 1
-    }
-    return true
-  })
-}
-
-const PALETTE_COMMANDS = [{ id: 'newtab', label: 'New tab', shortcut: 'Ctrl+T', icon: 'Plus' }, { id: 'settings', label: 'Open settings', icon: 'Settings' }, { id: 'boards', label: 'Open reference boards', icon: 'PanelsTopLeft' }, { id: 'extensions', label: 'Manage extensions', icon: 'Zap' }, { id: 'devtools', label: 'Toggle developer panel', shortcut: 'Ctrl+Shift+D', icon: 'SquareCode' }, { id: 'split', label: 'Split with next tab', shortcut: 'Ctrl+\\', icon: 'Split' }, { id: 'autofile', label: 'File tabs into folders', icon: 'Folder' }]
-const DEV_TOOLS: DevTool[] = ['json-pretty', 'json-minify', 'base64-encode', 'base64-decode', 'url-encode', 'url-decode', 'jwt', 'timestamp', 'uuid', 'sha256', 'color']
-
-function CommandPalette({ open, setOpen, query, setQuery, snapshot, servers, extensionCommands, run }: { open: boolean; setOpen: (open: boolean) => void; query: string; setQuery: (query: string) => void; snapshot: Snapshot; servers: DevServer[]; extensionCommands: CommandInfo[]; run: (value: string) => void }) {
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([])
-  const [activeTool, setActiveTool] = useState<DevTool | null>(null)
-  const [toolInput, setToolInput] = useState('')
-  const [toolOutput, setToolOutput] = useState('')
-  const [copied, setCopied] = useState(false)
-  useEffect(() => { if (!open) return; const timeout = window.setTimeout(() => { void api.omniboxSuggest(query).then(setSuggestions) }, 60); return () => window.clearTimeout(timeout) }, [query, open])
-  const current = snapshot.workspace.tabs.filter((tab) => tab.space === snapshot.workspace.activeSpace && !tab.archived)
-  const matches = (text: string) => fuzzyMatch(query, text)
-  const select = (value: string) => { if (value.startsWith('devtool:')) { setActiveTool(value.slice(8) as DevTool); setToolOutput(''); return }; if (value.startsWith('suggest-command:')) { run(value.slice(16)); return }; run(value) }
-  return <Dialog open={open} onOpenChange={(value) => { setOpen(value); if (!value) setActiveTool(null) }}>
-    <DialogContent aria-label="Command palette" aria-describedby={undefined} data-part="palette">
-      <DialogTitle className="sr-only">Command palette</DialogTitle>
-      <Command shouldFilter={false}>
-        <CommandInput value={query} onValueChange={setQuery} placeholder="Search tabs, commands, and addresses…" />
-        <CommandList>
-          <CommandEmpty>No matches. Press Enter to search the web.</CommandEmpty>
-          {suggestions.length > 0 && <CommandGroup heading="Suggestions">{suggestions.filter((item) => matches(`${item.title} ${item.subtitle}`)).map((suggestion, index) => <CommandItem data-part="palette-item" key={`${suggestion.kind}-${index}`} value={suggestion.command ? `suggest-command:${suggestion.command}` : `suggest:${suggestion.url ?? ''}`} onSelect={select}><AppIcon name={suggestion.kind === 'tab' ? 'PanelsTopLeft' : suggestion.kind === 'search' ? 'Search' : 'Globe2'} /><div className="flex min-w-0 flex-col"><span className="truncate">{suggestion.title}</span><span className="truncate text-xs text-muted-foreground">{suggestion.subtitle}</span></div></CommandItem>)}</CommandGroup>}
-          <CommandGroup heading="Commands">{PALETTE_COMMANDS.filter((item) => matches(item.label)).map((item) => <CommandItem data-part="palette-item" key={item.id} value={`cmd:${item.id}`} onSelect={select}><AppIcon name={item.icon} /><span>{item.label}</span>{item.shortcut && <Kbd className="ms-auto">{item.shortcut}</Kbd>}</CommandItem>)}{extensionCommands.filter((item) => matches(item.title)).map((item) => <CommandItem data-part="palette-item" key={`${item.ext}/${item.id}`} value={`ext:${item.ext}/${item.id}`} onSelect={select}><AppIcon name="Zap" /><span>{item.title}</span>{item.keybinding && <Kbd className="ms-auto">{item.keybinding}</Kbd>}</CommandItem>)}</CommandGroup>
-          <CommandGroup heading="Developer tools">{DEV_TOOLS.filter((item) => matches(item.replaceAll('-', ' '))).map((item) => <CommandItem data-part="palette-item" key={item} value={`devtool:${item}`} onSelect={select}><AppIcon name="SquareCode" /><span className="capitalize">{item.replaceAll('-', ' ')}</span></CommandItem>)}</CommandGroup>
-          <CommandGroup heading="Open tabs">{current.filter((tab) => matches(`${tab.title} ${tab.url}`)).map((tab) => <CommandItem data-part="palette-item" key={tab.id} value={tab.id} onSelect={select}><AppIcon name={tab.pinned ? 'Layers3' : 'Globe2'} /><div className="flex min-w-0 flex-col"><span className="truncate">{tab.title}</span><span className="truncate text-xs text-muted-foreground">{tab.url}</span></div></CommandItem>)}</CommandGroup>
-          {servers.length > 0 && <CommandGroup heading="Dev servers">{servers.filter((server) => matches(`${server.title ?? ''} ${server.url}`)).map((server) => <CommandItem data-part="palette-item" key={server.url} value={`server:${server.url}`} onSelect={select}><AppIcon name="Terminal" /><div className="flex min-w-0 flex-col"><span className="truncate">{server.title ?? `localhost:${server.port}`}</span><span className="truncate text-xs text-muted-foreground">{server.url}</span></div></CommandItem>)}</CommandGroup>}
-        </CommandList>
-      </Command>
-      {activeTool && <div className="flex flex-col gap-2 border-t border-border p-3">
-        <div className="flex items-center justify-between"><strong className="text-sm capitalize">{activeTool.replaceAll('-', ' ')}</strong><Button variant="ghost" size="sm" onClick={() => setActiveTool(null)}>Back to results</Button></div>
-        <Textarea className="font-mono text-[13px]" aria-label="Developer tool input" value={toolInput} onChange={(event) => setToolInput(event.target.value)} placeholder="Input" />
-        <div className="flex items-center gap-2"><Button size="sm" onClick={() => void api.runDevTool(activeTool, toolInput).then(setToolOutput)}>Run</Button><Tip label={copied ? 'Copied' : 'Copy output'}><Button variant="outline" size="icon-sm" aria-label="Copy output" disabled={!toolOutput} onClick={() => { void navigator.clipboard.writeText(toolOutput); setCopied(true); window.setTimeout(() => setCopied(false), 1200) }}><AppIcon name={copied ? 'Check' : 'Copy'} /></Button></Tip></div>
-        <pre className="m-0 max-h-24 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-muted/40 p-3 font-mono text-[13px]">{toolOutput || 'Your result will appear here.'}</pre>
-      </div>}
-    </DialogContent>
-  </Dialog>
 }

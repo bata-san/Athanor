@@ -182,6 +182,7 @@ pub fn run() {
             commands::set_content_bounds,
             commands::set_overlay_open,
             commands::capture_frame,
+            commands::set_page_radius,
             commands::resolve_context_menu,
             commands::context_action,
             commands::set_viewport_emulation,

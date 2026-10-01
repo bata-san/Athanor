@@ -876,6 +876,11 @@ impl Browser {
         self.sync();
     }
 
+    /// Round the corners of the page views (physical px) so they can sit inside the shell's rounded stage.
+    pub fn set_page_radius(&self, radius: i32) {
+        let _ = self.engine.set_corner_radius(radius);
+    }
+
     pub fn set_viewport_emulation(self: &Arc<Self>, tab: &str, preset: Option<&str>) {
         {
             let mut g = self.inner.lock();

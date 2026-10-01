@@ -1012,3 +1012,44 @@ pub unsafe fn capture_image(
         let _ = tx.send(Err(e.to_string()));
     })
 }
+
+/// Corner radius (physical px) applied to every tab view; 0 keeps them square.
+static CORNER_RADIUS: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+
+pub fn corner_radius() -> i32 {
+    CORNER_RADIUS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+pub fn store_corner_radius(radius: i32) {
+    CORNER_RADIUS.store(radius.max(0), std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Clip the view's container window (wry hosts every child webview in its own HWND) to a rounded rectangle.
+/// The clip also removes the corners from hit-testing, so the page can sit in a rounded card. Call again after
+/// every resize: the region is a fixed shape.
+pub unsafe fn apply_corner_radius(
+    controller: &ICoreWebView2Controller,
+) -> windows::core::Result<()> {
+    use windows::Win32::{
+        Foundation::{HWND, RECT},
+        Graphics::Gdi::{CreateRoundRectRgn, SetWindowRgn},
+        UI::WindowsAndMessaging::GetClientRect,
+    };
+    let mut host = HWND::default();
+    controller.ParentWindow(&mut host)?;
+    let radius = corner_radius();
+    if radius <= 0 {
+        SetWindowRgn(host, None, true);
+        return Ok(());
+    }
+    let mut rect = RECT::default();
+    GetClientRect(host, &mut rect)?;
+    let (w, h) = (rect.right - rect.left, rect.bottom - rect.top);
+    if w <= 0 || h <= 0 {
+        return Ok(());
+    }
+    // The region takes ownership of the GDI object; +1 because the far edge of a region is exclusive.
+    let region = CreateRoundRectRgn(0, 0, w + 1, h + 1, radius * 2, radius * 2);
+    SetWindowRgn(host, Some(region), true);
+    Ok(())
+}

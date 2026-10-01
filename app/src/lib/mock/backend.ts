@@ -166,6 +166,7 @@ export async function mockInvoke<K extends keyof CommandArgs>(name: K, rawArgs: 
     case 'get_split_rects': result = splitRects(); break
     case 'set_content_bounds': bounds = { x: args.x, y: args.y, w: args.w, h: args.h }; break
     case 'set_overlay_open': overlay = args.open; void overlay; break
+    case 'set_page_radius': break
     case 'capture_frame': result = svgData('Frozen page', 210); break
     case 'resolve_context_menu': mockResolvedMenus.push({ tab: args.tab, command: args.command }); break
     case 'context_action': emit('athanor://toast', { level: 'info', message: `Context action: ${args.action}` }); break

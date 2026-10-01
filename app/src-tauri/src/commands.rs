@@ -523,6 +523,12 @@ pub async fn send_page_image_to_board(b: B<'_>, tab: Id, board_id: Id) -> R {
 }
 
 #[tauri::command]
+pub async fn set_page_radius(b: B<'_>, radius: i32) -> R {
+    b.set_page_radius(radius);
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn capture_frame(b: B<'_>, tab: Id) -> R<String> {
     let browser = b.inner().clone();
     tauri::async_runtime::spawn_blocking(move || browser.capture_frame(&tab))

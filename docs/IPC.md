@@ -161,6 +161,7 @@ Names are `snake_case`; args are camelCase properties of the single argument obj
 
 ### Layout & overlays
 * `set_content_bounds({ x, y, w, h })`, `set_overlay_open({ open })`
+* `set_page_radius({ radius })`: corner radius (physical px) for the native page views; Windows clips each view's container window to a rounded rect (0 = square).
 * `capture_frame({ tab }) -> string`: JPEG/PNG `data:` URL of the visible page. The shell shows it as a still image while it hides the native view (`set_overlay_open`), so menus and dialogs never make the page vanish.
 * `resolve_context_menu({ tab, command: number | null })`: answer an `athanor://context-menu` request exactly once: the chosen `ContextItem.id`, or `null` to dismiss.
 * `context_action({ action, data })`: host-side half of Athanor's own context entries (`send-image-to-board` with the image URL).

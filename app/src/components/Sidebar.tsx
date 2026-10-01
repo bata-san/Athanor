@@ -4,7 +4,7 @@ import { useDndContext, useDraggable, useDroppable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import { AnimatePresence, m } from 'motion/react'
 import {
-  Archive, ArrowDownToLine, AudioLines, ChevronDown, ChevronRight, Columns2, Copy, Folder as FolderIcon, FolderInput, FolderPlus, Globe, History, LayoutPanelTop, Link2, Loader2, Lock, PanelLeft, PanelLeftClose, Palette, Pencil, Pin, PinOff, Plus, RotateCcw, Settings, Smile, Trash2, Volume2, VolumeX, WandSparkles, X, XCircle,
+  Archive, ArrowDownToLine, AudioLines, ChevronRight, Columns2, Copy, Folder as FolderIcon, FolderInput, FolderPlus, Globe, LayoutPanelTop, Link2, Loader2, Lock, PanelLeft, PanelLeftClose, Palette, Pencil, Pin, PinOff, Plus, Puzzle, RotateCcw, Settings, Smile, Trash2, Volume2, VolumeX, WandSparkles, X, XCircle,
 } from 'lucide-react'
 import type { PanelInfo, Snapshot, Tab } from '@/lib/types'
 import { groupSidebarTabs } from '@/lib/sidebarModel'
@@ -14,15 +14,17 @@ import { enter, fold, snap } from '@/lib/motion'
 import { AthanorMark } from './AthanorMark'
 import { AppIcon } from './Icons'
 import { Button } from './ui/button'
-import { Kbd } from './ui/kbd'
 import { Tip } from './ui/tooltip'
 import { ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuShortcut, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger } from './ui/context-menu'
-import { OverlayContextMenu, ownContextMenu } from './overlay-menus'
+import { OverlayContextMenu, OverlayDropdownMenu, ownContextMenu } from './overlay-menus'
+import { DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu'
 import { askConfirm, askText } from './dialogs'
 import { dragWindow, toggleWindow } from './WindowControls'
+import { NavCluster } from './Toolbar'
+import { UrlPill } from './UrlPill'
 
 type Page = 'settings' | 'boards' | 'extensions'
-type Props = { snapshot: Snapshot; panels: PanelInfo[]; openPage: (page: Page) => void; openPanel: (panel: PanelInfo) => void; windowControls?: React.ReactNode }
+type Props = { snapshot: Snapshot; panels: PanelInfo[]; openPage: (page: Page) => void; openPanel: (panel: PanelInfo) => void; openBar: () => void; windowControls?: React.ReactNode }
 
 const SWATCHES: { name: string; value: string | null }[] = [
   { name: 'Default', value: null }, { name: 'Gray', value: '#71717a' }, { name: 'Red', value: '#ef4444' }, { name: 'Orange', value: '#f97316' }, { name: 'Amber', value: '#eab308' },
@@ -33,11 +35,8 @@ const SPACE_ICONS = ['Briefcase', 'Sparkles', 'BookOpen', 'Home', 'Terminal', 'Z
 /* `rail:` styles apply while the sidebar is collapsed to its icon rail (custom variant in tokens.css; CSS-driven so the collapse can animate). */
 const rowBase = `flex h-[var(--ath-tab-height)] w-full items-center gap-2.5 rounded-lg px-2 text-start text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rail:h-10 rail:justify-center rail:gap-0 rail:px-0 [&_svg]:size-4 [&_svg]:shrink-0`
 
-export function Sidebar({ snapshot, panels, openPage, openPanel, windowControls }: Props) {
+export function Sidebar({ snapshot, panels, openPage, openPanel, openBar, windowControls }: Props) {
   const [archiveOpen, setArchiveOpen] = useState(false)
-  const [panelOpen, setPanelOpen] = useState(true)
-  const [pinOpen, setPinOpen] = useState(true)
-  const [folderOpen, setFolderOpen] = useState(true)
   const dragging = useDndContext().active !== null
   const settings = snapshot.settings
   const compact = settings.sidebarCompact
@@ -66,16 +65,16 @@ export function Sidebar({ snapshot, panels, openPage, openPanel, windowControls 
 
   return <aside className="group/sidebar relative flex w-[var(--ath-sidebar-width)] min-w-[var(--ath-sidebar-min)] max-w-[var(--ath-sidebar-max)] shrink-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground data-[collapsed=true]:w-[var(--ath-rail-width)] data-[collapsed=true]:min-w-[var(--ath-rail-width)] data-[collapsed=true]:max-w-[var(--ath-rail-width)]"
     data-part="sidebar" data-collapsed={String(compact)} data-side={settings.sidebarSide} style={{ '--ath-sidebar-width': `${settings.sidebarWidth}px` } as React.CSSProperties}>
-    <div className={`flex h-12 shrink-0 items-center justify-between gap-2 ps-2.5 pe-1.5 rail:h-auto rail:flex-col rail:justify-center rail:gap-2 rail:px-0 rail:py-3`} data-part="sidebar-header" onPointerDown={dragWindow} onDoubleClick={toggleWindow}>
-      <div className="flex w-full items-center justify-between rail:w-auto rail:flex-col rail:gap-2" data-no-drag>
-        <Tip label={compact ? 'Expand sidebar' : 'Collapse sidebar'} shortcut="Ctrl+B" side="right"><Button variant="ghost" size="icon-sm" aria-label={compact ? 'Expand sidebar' : 'Collapse sidebar'} onClick={() => void api.setSettings({ sidebarCompact: !compact })}>{compact ? <PanelLeft /> : <PanelLeftClose />}</Button></Tip>
+    <div className="flex h-11 shrink-0 items-center gap-1 ps-2 pe-1.5 rail:h-auto rail:flex-col rail:justify-center rail:gap-1 rail:px-0 rail:py-2" data-part="sidebar-header" onPointerDown={dragWindow} onDoubleClick={toggleWindow}>
+      <NavCluster snapshot={snapshot} activeTab={activeTab ?? null} className="rail:hidden" />
+      <span className="flex-1 rail:hidden" />
+      <div className="flex items-center rail:flex-col rail:gap-2" data-no-drag>
+        <Tip label={compact ? 'Expand sidebar' : 'Collapse sidebar'} shortcut="Ctrl+B" side="right"><Button variant="ghost" size="icon" className="size-8 rounded-lg" aria-label={compact ? 'Expand sidebar' : 'Collapse sidebar'} onClick={() => void api.setSettings({ sidebarCompact: !compact })}>{compact ? <PanelLeft /> : <PanelLeftClose />}</Button></Tip>
         {windowControls}
       </div>
     </div>
 
-    <div className={`px-2.5 pb-2 rail:flex rail:justify-center`}>
-      <Tip label="New tab" shortcut="Ctrl+T" side="right" disabled={!compact}><Button variant="outline" className={`h-9 w-full justify-start gap-2.5 rounded-lg border-border/80 bg-background px-2.5 text-[13px] font-medium text-foreground shadow-xs hover:bg-background hover:shadow-sm rail:size-10 rail:justify-center rail:gap-0 rail:rounded-xl rail:border-transparent rail:bg-transparent rail:px-0 rail:shadow-none rail:hover:bg-tab-hover`} data-part="new-tab-button" aria-label="New tab" onClick={() => void api.openTab()}><Plus /><span className="sb-label">New tab</span><Kbd className="sb-label ms-auto border-0 bg-transparent rail:ms-0">Ctrl T</Kbd></Button></Tip>
-    </div>
+    <div className="px-2.5 pb-2 rail:flex rail:justify-center rail:px-0"><UrlPill snapshot={snapshot} activeTab={activeTab ?? null} compact={compact} onOpen={openBar} onSettings={() => openPage('settings')} className="rail:size-10 rail:w-10 rail:rounded-xl" /></div>
 
     <OverlayContextMenu>
       <ContextMenuTrigger asChild>
@@ -85,31 +84,24 @@ export function Sidebar({ snapshot, panels, openPage, openPanel, windowControls 
             <m.div key={workspace.activeSpace} custom={slide.current}
               variants={{ enter: (d: number) => ({ x: d * 36, opacity: 0 }), center: { x: 0, opacity: 1 }, exit: (d: number) => ({ x: d * -36, opacity: 0 }) }}
               initial="enter" animate="center" exit="exit" transition={enter}>
-              <Section label="Pinned" open={pinOpen} onToggle={() => setPinOpen((v) => !v)} hidden={groups.pinned.length === 0 && !dragging} action={<IconAction label="New pinned tab" onClick={() => void api.openTab({ pinned: true })}><Plus /></IconAction>}>
-                <PinnedDrop><div className={`grid grid-cols-4 gap-1.5 px-0.5 pt-0.5 rail:grid-cols-1`} data-part="pinned-grid"><AnimatePresence initial={false} mode="popLayout">{groups.pinned.map((tab) => <Item key={tab.id}><PinnedTile {...rowProps(tab)} /></Item>)}</AnimatePresence></div></PinnedDrop>
-              </Section>
+              <Block hidden={groups.pinned.length === 0 && !dragging}>
+                <PinnedDrop><div className="grid grid-cols-4 gap-1.5 px-0.5 pt-0.5 rail:grid-cols-1" data-part="pinned-grid"><AnimatePresence initial={false} mode="popLayout">{groups.pinned.map((tab) => <Item key={tab.id}><PinnedTile {...rowProps(tab)} /></Item>)}</AnimatePresence></div></PinnedDrop>
+              </Block>
 
-              <Section label="Folders" open={folderOpen} onToggle={() => setFolderOpen((v) => !v)} hidden={groups.folders.length === 0 && !dragging} action={<IconAction label="New folder" onClick={() => void createFolder()}><FolderPlus /></IconAction>}>
+              <Block data-part="tab-flow">
+                {dragging && <DropTarget id="root-drop" label="Drop here to take a tab out of its folder" />}
                 {groups.folders.map(({ folder, tabs }) => <FolderGroup key={folder.id} folder={folder} count={tabs.length} compact={compact}>
                   <Collapse open={!folder.collapsed}><div className="ms-3.5 flex flex-col gap-px border-s border-border ps-1.5 rail:ms-0 rail:border-s-0 rail:ps-0"><AnimatePresence initial={false} mode="popLayout">{tabs.map((tab) => <Item key={tab.id}><TabRow {...rowProps(tab)} /></Item>)}</AnimatePresence></div></Collapse>
                 </FolderGroup>)}
-              </Section>
+                <div className="relative flex flex-col gap-px"><AnimatePresence initial={false} mode="popLayout">{groups.root.map((tab) => <Item key={tab.id}><TabRow {...rowProps(tab)} /></Item>)}</AnimatePresence>
+                  <NavRow icon={<Plus />} label="New tab" compact={compact} data-part="new-tab-button" className="text-muted-foreground hover:text-foreground" onClick={() => void api.openTab()} />
+                </div>
+              </Block>
 
-              <Section label="Tabs" action={<><DropTarget id="root-drop" label="Drop here to unfile" /><IconAction label="New folder" onClick={() => void createFolder()}><FolderPlus /></IconAction></>}>
-                <div className="relative flex flex-col gap-px"><AnimatePresence initial={false} mode="popLayout">{groups.root.map((tab) => <Item key={tab.id}><TabRow {...rowProps(tab)} /></Item>)}</AnimatePresence></div>
-              </Section>
-
-              <Section label="Archive" open={archiveOpen} onToggle={() => setArchiveOpen((v) => !v)} count={groups.archived.length} hidden={groups.archived.length === 0 && compact} action={<IconAction label="Archive inactive tabs now" onClick={() => void api.archiveInactiveNow()}><History /></IconAction>}>
-                <AnimatePresence initial={false} mode="popLayout">{groups.archived.map((tab) => <Item key={tab.id}><ArchivedRow tab={tab} compact={compact} snapshot={snapshot} activeTab={activeTab} spaceFolders={spaceFolders} /></Item>)}</AnimatePresence>
-              </Section>
-
-              {panels.some((item) => item.ext) && <Section label="Panels" open={panelOpen} onToggle={() => setPanelOpen((v) => !v)}>
-                {panels.filter((item) => item.ext).map((item) => <NavRow key={`${item.ext}/${item.id}`} icon={<AppIcon name={item.icon} />} label={item.title} compact={compact} onClick={() => openPanel(item)} />)}
-              </Section>}
-
-              <Section label="Collections">
-                <NavRow icon={<LayoutPanelTop />} label="Reference boards" compact={compact} data-part="board" onClick={() => openPage('boards')} />
-              </Section>
+              {groups.archived.length > 0 && <Block>
+                <button type="button" className={cn(rowBase, 'text-muted-foreground hover:bg-tab-hover hover:text-foreground')} aria-expanded={archiveOpen} onClick={() => setArchiveOpen((v) => !v)}><Archive /><span className="sb-label min-w-0 flex-1">Archive</span><span className="text-xs tabular-nums rail:hidden">{groups.archived.length}</span></button>
+                <Collapse open={archiveOpen}><AnimatePresence initial={false} mode="popLayout">{groups.archived.map((tab) => <Item key={tab.id}><ArchivedRow tab={tab} compact={compact} snapshot={snapshot} activeTab={activeTab} spaceFolders={spaceFolders} /></Item>)}</AnimatePresence></Collapse>
+              </Block>}
             </m.div>
           </AnimatePresence>
           </div>
@@ -128,12 +120,19 @@ export function Sidebar({ snapshot, panels, openPage, openPanel, windowControls 
       </ContextMenuContent>
     </OverlayContextMenu>
 
-    <footer className={`flex shrink-0 items-center gap-1 border-t border-sidebar-border p-2.5 rail:flex-col rail:gap-2 rail:py-3`} data-part="space-switcher">
-      <div className={`flex min-w-0 flex-1 items-center gap-1 rail:flex-none rail:flex-col rail:gap-1.5`}>
+    <footer className="flex shrink-0 items-center gap-1 p-2.5 rail:flex-col rail:gap-2 rail:py-3" data-part="space-switcher">
+      <div className="flex min-w-0 flex-1 items-center gap-0.5 rail:flex-none rail:flex-col rail:gap-1.5">
         {workspace.spaces.map((space) => <SpaceChip key={space.id} space={space} active={space.id === workspace.activeSpace} snapshot={snapshot} />)}
-        <Tip label="New space" side="top"><Button variant="ghost" size="icon-sm" className="border border-dashed border-border" aria-label="Add space" onClick={() => void createSpace()}><Plus /></Button></Tip>
+        <Tip label="New space" side="top"><Button variant="ghost" size="icon-sm" className="size-8 rounded-lg text-muted-foreground" aria-label="Add space" onClick={() => void createSpace()}><Plus /></Button></Tip>
       </div>
-      <Tip label="Settings" side="top"><Button variant="ghost" size="icon-sm" aria-label="Settings" onClick={() => openPage('settings')}><Settings /></Button></Tip>
+      <div className="flex items-center gap-0.5 rail:flex-col rail:gap-1.5">
+        <Tip label="Reference boards" side="top"><Button variant="ghost" size="icon-sm" className="size-8 rounded-lg text-muted-foreground" aria-label="Reference boards" data-part="board" onClick={() => openPage('boards')}><LayoutPanelTop /></Button></Tip>
+        {panels.some((item) => item.ext) && <OverlayDropdownMenu>
+          <Tip label="Extension panels" side="top"><DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" className="size-8 rounded-lg text-muted-foreground" aria-label="Extension panels"><Puzzle /></Button></DropdownMenuTrigger></Tip>
+          <DropdownMenuContent side="top" align="end" className="w-56">{panels.filter((item) => item.ext).map((item) => <DropdownMenuItem key={`${item.ext}/${item.id}`} onSelect={() => openPanel(item)}><AppIcon name={item.icon} />{item.title}</DropdownMenuItem>)}</DropdownMenuContent>
+        </OverlayDropdownMenu>}
+        <Tip label="Settings" side="top"><Button variant="ghost" size="icon-sm" className="size-8 rounded-lg text-muted-foreground" aria-label="Settings" onClick={() => openPage('settings')}><Settings /></Button></Tip>
+      </div>
     </footer>
     <div className="absolute inset-y-0 z-10 w-1 cursor-ew-resize transition-colors hover:bg-foreground/10 group-data-[side=left]/sidebar:-end-0.5 group-data-[side=right]/sidebar:-start-0.5" role="separator" aria-label="Resize sidebar" onPointerDown={resizeStart} />
   </aside>
@@ -158,23 +157,14 @@ function ActivePill() {
   return <m.span layoutId="active-pill" transition={snap} aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 rounded-[inherit] border border-border/70 bg-tab-active shadow-[0_1px_2px_oklch(0_0_0/0.07)]" />
 }
 
-function IconAction({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
-  return <Tip label={label} side="right"><button type="button" aria-label={label} className="grid size-6 place-items-center rounded-md text-muted-foreground outline-none hover:bg-foreground/8 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 [&_svg]:size-3.5" onClick={onClick}>{children}</button></Tip>
-}
-
-function Section({ label, open = true, onToggle, hidden, count, action, children }: { label: string; open?: boolean; onToggle?: () => void; hidden?: boolean; count?: number; action?: React.ReactNode; children?: React.ReactNode }) {
+/** One group in the sidebar flow. In the icon rail groups are told apart by a hairline instead of whitespace. */
+function Block({ hidden, children, ...rest }: { hidden?: boolean; children?: React.ReactNode } & React.HTMLAttributes<HTMLElement>) {
   if (hidden) return null
-  return <section className="mt-3 first:mt-0 rail:mt-2 rail:border-t rail:border-border rail:pt-2" data-part="section" data-section={label.toLowerCase()}>
-    <div className={`group/heading flex h-7 items-center justify-between ps-1 pe-0.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/90 rail:hidden`}>
-      {onToggle ? <button type="button" className="flex items-center gap-1 rounded-md px-1 py-0.5 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40" aria-expanded={open} onClick={onToggle}><ChevronDown className={cn('size-3 transition-transform duration-200', !open && '-rotate-90')} />{label}{count !== undefined && count > 0 && <span className="ms-0.5 tabular-nums">{count}</span>}</button> : <span className="px-1 py-0.5">{label}</span>}
-      <div className="flex items-center opacity-0 transition-opacity group-hover/heading:opacity-100 focus-within:opacity-100">{action}</div>
-    </div>
-    <Collapse open={open || false}>{children}</Collapse>
-  </section>
+  return <section className="mt-2.5 first:mt-0 rail:mt-2 rail:border-t rail:border-border rail:pt-2" data-part="section" {...rest}>{children}</section>
 }
 
-function NavRow({ icon, label, compact, onClick, ...rest }: { icon: React.ReactNode; label: string; compact: boolean; onClick: () => void } & React.HTMLAttributes<HTMLButtonElement>) {
-  return <Tip label={label} side="right" disabled={!compact}><button type="button" className={cn(rowBase, 'hover:bg-tab-hover [&_svg]:text-muted-foreground')} onClick={onClick} aria-label={label} {...rest}>{icon}<span className="sb-label min-w-0 flex-1">{label}</span></button></Tip>
+function NavRow({ icon, label, compact, onClick, className, ...rest }: { icon: React.ReactNode; label: string; compact: boolean; onClick: () => void } & React.HTMLAttributes<HTMLButtonElement>) {
+  return <Tip label={label} side="right" disabled={!compact}><button type="button" className={cn(rowBase, 'hover:bg-tab-hover [&_svg]:text-muted-foreground', className)} onClick={onClick} aria-label={label} {...rest}>{icon}<span className="sb-label min-w-0 flex-1">{label}</span></button></Tip>
 }
 
 function PinnedDrop({ children }: { children: React.ReactNode }) {
@@ -184,7 +174,7 @@ function PinnedDrop({ children }: { children: React.ReactNode }) {
 
 function DropTarget({ id, label }: { id: string; label: string }) {
   const { setNodeRef, isOver } = useDroppable({ id })
-  return <Tip label={label} side="right"><span ref={setNodeRef} className="inline-grid size-6 place-items-center rounded-md border border-dashed border-transparent text-muted-foreground transition-colors data-[over=true]:border-ring data-[over=true]:bg-accent" data-over={String(isOver)} aria-label={label}><ArrowDownToLine className="size-3.5" /></span></Tip>
+  return <div ref={setNodeRef} className="mb-1 grid h-8 place-items-center rounded-lg border border-dashed border-border text-xs text-muted-foreground transition-colors data-[over=true]:border-ring data-[over=true]:bg-accent data-[over=true]:text-foreground rail:hidden" data-over={String(isOver)} aria-label={label}>{label}</div>
 }
 
 type TabMenuCtx = { tab: Tab; snapshot: Snapshot; activeTab: Tab | undefined; spaceFolders: Snapshot['workspace']['folders'] }

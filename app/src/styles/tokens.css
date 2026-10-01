@@ -23,6 +23,7 @@
   --ath-sidebar-min: 13rem; --ath-sidebar-max: 25rem; --ath-rail-width: 3.75rem;
   --ath-settings-nav-width: 14rem; --ath-toolbar-omnibox: 40rem; --ath-board-list-width: 14rem; --ath-board-list-mobile: 8rem; --ath-board-name-width: 12rem; --ath-board-image-max-px: 520;
   --ath-round-small: 0.5rem; --ath-round-medium: 0.75rem; --ath-round-large: 1rem; --ath-round-pill: 999px;
+  --ath-stage-radius: 0.875rem; --ath-stage-shadow: 0 0 0 1px oklch(0 0 0 / 0.07), 0 1px 2px oklch(0 0 0 / 0.04), 0 12px 32px -16px oklch(0 0 0 / 0.25);
   --ath-shadow: 0 8px 30px oklch(0 0 0 / 0.1); --ath-shadow-menu: 0 0 0 1px oklch(0 0 0 / 0.02), 0 10px 32px -6px oklch(0 0 0 / 0.14), 0 2px 6px oklch(0 0 0 / 0.05); --ath-motion: 140ms; --ease-snap: cubic-bezier(0.2, 0.9, 0.25, 1); --ease-spring: linear(0, 0.2 4%, 0.55 9%, 0.84 15%, 1.02 22%, 1.07 28%, 1.06 34%, 1.02 44%, 0.995 56%, 1 70%, 1);
 }
 :root[data-theme-dark='true'] {
@@ -39,6 +40,7 @@
   --sidebar: #111113; --sidebar-foreground: #fafafa; --sidebar-primary: #fafafa; --sidebar-primary-foreground: #0a0a0a; --sidebar-accent: #1c1c1f; --sidebar-accent-foreground: #fafafa; --sidebar-border: #232326; --sidebar-ring: #71717a;
   --ath-tab-active: #1f1f23; --ath-tab-hover: #19191c; --ath-space-accent: #fafafa;
   --ath-space-default-color: #a1a1aa; --ath-board-default: #111113; --ath-dialog-dim: oklch(0 0 0 / 0.6);
+  --ath-stage-shadow: 0 0 0 1px oklch(1 0 0 / 0.08), 0 14px 36px -14px oklch(0 0 0 / 0.7);
   --ath-shadow: 0 10px 40px oklch(0 0 0 / 0.5); --ath-shadow-menu: 0 0 0 1px oklch(1 0 0 / 0.04), 0 12px 36px -6px oklch(0 0 0 / 0.65), 0 2px 6px oklch(0 0 0 / 0.4);
 }
 @custom-variant rail ([data-collapsed='true'] &);
@@ -78,3 +80,6 @@
 
 /* Thinner strokes read as more refined at 16px. */
 svg.lucide { stroke-width: 1.75; }
+
+/* The window itself: one continuous chrome surface the page card floats on. */
+.ath-chrome { background: radial-gradient(120% 90% at 0% 0%, color-mix(in oklab, var(--background) 55%, var(--sidebar)) 0%, var(--sidebar) 60%), var(--sidebar); }

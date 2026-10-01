@@ -256,7 +256,32 @@ impl EngineBackend for DesktopEngine {
     }
 
     fn set_bounds(&self, id: &str, rect: Rect) -> EngineResult {
-        self.get(id)?.set_bounds(bounds(rect)).map_err(err)
+        let wv = self.get(id)?;
+        wv.set_bounds(bounds(rect)).map_err(err)?;
+        // The rounded clip is a fixed shape: redo it for the new size (queued after the resize on the UI thread).
+        #[cfg(windows)]
+        if crate::win::corner_radius() > 0 {
+            let _ = wv.with_webview(|pw| unsafe {
+                let _ = crate::win::apply_corner_radius(&pw.controller());
+            });
+        }
+        Ok(())
+    }
+
+    fn set_corner_radius(&self, radius: i32) -> EngineResult {
+        #[cfg(windows)]
+        {
+            crate::win::store_corner_radius(radius);
+            let views: Vec<_> = self.tabs.lock().values().cloned().collect();
+            for wv in views {
+                let _ = wv.with_webview(|pw| unsafe {
+                    let _ = crate::win::apply_corner_radius(&pw.controller());
+                });
+            }
+        }
+        #[cfg(not(windows))]
+        let _ = radius;
+        Ok(())
     }
 
     fn set_visible(&self, id: &str, visible: bool) -> EngineResult {

@@ -147,6 +147,10 @@ pub trait EngineBackend: Send + Sync {
     fn resolve_context_menu(&self, _id: &str, _command: Option<i32>) -> EngineResult {
         Ok(())
     }
+    /// Round the corners of every tab view (physical pixels; 0 = square). Optional capability.
+    fn set_corner_radius(&self, _radius: i32) -> EngineResult {
+        Ok(())
+    }
     /// Free the renderer of a tab but keep the Athanor tab entry (archive / memory saver).
     fn discard(&self, id: &str) -> EngineResult {
         self.close_tab(id)

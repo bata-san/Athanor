@@ -29,3 +29,9 @@ Native tab views draw above the shell, so any popup that can reach the page area
 ## Motion
 
 Springs and easings live in `lib/motion.ts` and `styles/tokens.css`. Rows ease in and out, the active-tab highlight is one shared element (`layoutId`) that glides between rows, spaces slide in the direction you switch, and the sidebar collapses by animating width while labels fold (CSS `rail:` variant, no JS reflow). Keep new motion on these tokens so the shell stays uniformly quick.
+
+## Layout (v2)
+
+The window is one continuous chrome surface (`.ath-chrome`, derived from `--sidebar`) with the page floating on it as a rounded card (`data-part="content"`, `--ath-stage-radius`). There is no top toolbar: the **sidebar** holds back / forward / reload, the address pill (`UrlPill`: lock, host, blocked count, protection popover) and the tabs; a slim `StageBar` above the card carries the page title, split / developer / command-bar buttons and the window buttons. Clicking the pill, `Ctrl+L`, `Ctrl+K` or `Ctrl+T` opens the single **command bar** (`CommandBar`): addresses, searches, open tabs, commands, developer tools and dev servers in one list (`Ctrl+L` pre-fills the current address, `Ctrl+T` opens the result in a new tab).
+
+The native page view is clipped to the card's rounded corners: the shell reports the radius (`set_page_radius`, physical px) and the Windows adapter applies a rounded `SetWindowRgn` to each view's container window, re-applying it on every resize. The clip also removes the corners from hit-testing.
