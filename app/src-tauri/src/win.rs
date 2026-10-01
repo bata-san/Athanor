@@ -248,7 +248,7 @@ unsafe fn register_main_document_start(
     url: &str,
     armed: Arc<Mutex<HashSet<String>>>,
 ) -> windows::core::Result<bool> {
-    if !filter.enabled() || !is_web(url) {
+    if !(filter.enabled() || filter.block_drm()) || !is_web(url) {
         return Ok(false);
     }
     let Some(script) = document_start_payload(&filter, url) else {

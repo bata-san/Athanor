@@ -198,3 +198,11 @@ native callback into `Filter::cosmetic_query_reply` through
 URL-specific document-start payloads. Prefer `verdict_with_rewrite` for request types where the
 Android WebView adapter can cancel and reissue a rewritten request; the old `verdict`
 intentionally maps `Rewrite` to `Allow` for compatibility.
+
+## Built-in page features: YouTube ads and the DRM switch
+
+Two page features ship inside `athanor-adblock` (`assets/youtube-ads.js`, `assets/drm-off.js`, selected by `Blocker::builtin_scripts(url)`) and travel with the cosmetic payload, so every adapter (WebView2, Android) gets them through the same `Filter::cosmetic_js` path at document start (top frame).
+
+* **YouTube ads** (`youtube_ad_skip`, default on, needs the blocker enabled and the site not switched off). Three layers: (1) ad data (`adPlacements`, `playerAds`, `adSlots`, ...) is stripped from every player response the page parses (`JSON.parse`, `Response.json` for `/youtubei/v1/*`, and the `ytInitialPlayerResponse` global); (2) ad containers are hidden by CSS; (3) if an ad still plays, the player is muted, sped up, fast-forwarded to the end and the skip button pressed, then volume and speed are restored; the "ad blockers are not allowed" interstitial is dismissed. Clean-room code, covered by `js-tests/builtin.test.cjs` (jsdom) and `builtin_scripts_follow_the_switches` (Rust).
+* **Turn off DRM** (`block_drm`, default off, independent of the blocker). Tells pages that encrypted media is unavailable (`requestMediaKeySystemAccess` rejects with `NotSupportedError`, the EME interfaces are removed). It does not defeat or bypass any protection; it only declines to take part, like a browser built without a CDM. Protected video (Netflix, Spotify...) will not play while it is on. Top frame only: players inside third-party iframes are not covered.
+* Both apply to pages opened after the setting changes (the scripts are registered per navigation). Settings > Privacy, and the Privacy step of the welcome tour.

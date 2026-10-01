@@ -91,6 +91,12 @@ export default function SettingsPage() {
       {!settings ? <Callout><AppIcon name="CircleHelp" className="size-4 shrink-0" />Settings are not available yet.</Callout> : <>
         {section === 'General' && <>
           <Section title="Search and startup">
+            <Row title="New tab opens" description="The page a new tab starts on." htmlFor="homepage">
+              <Select value={settings.homepage === 'athanor://newtab' ? 'athanor' : settings.homepage === 'https://www.google.com/' ? 'google' : 'custom'} onValueChange={(value) => { if (value === 'google') patch({ homepage: 'https://www.google.com/' }); else if (value === 'athanor') patch({ homepage: 'athanor://newtab' }) }}>
+                <SelectTrigger id="homepage" aria-label="New tab opens" className="w-56 max-sm:w-full max-md:h-11"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="google">Google</SelectItem><SelectItem value="athanor">Athanor start page</SelectItem>{settings.homepage !== 'athanor://newtab' && settings.homepage !== 'https://www.google.com/' && <SelectItem value="custom">{settings.homepage}</SelectItem>}</SelectContent>
+              </Select>
+            </Row>
             <Row title="Search engine" description="Choose where searches from the address bar go." htmlFor="search-engine">
               <Select value={searchEngines.some(([value]) => value === settings.searchEngine) ? settings.searchEngine : 'custom'} onValueChange={(value) => {
                 if (value !== 'custom') patch({ searchEngine: value })
@@ -149,6 +155,12 @@ export default function SettingsPage() {
             <MyFiltersEditor />
           </Section>
           <Section title="Protection preferences">
+            <Row title="Skip YouTube ads" description="Removes ad data, hides ad slots and fast-forwards any ad that still plays. Applies to pages you open next.">
+              <TouchSwitch label="Skip YouTube ads" checked={settings.youtubeAdSkip} onCheckedChange={(youtubeAdSkip) => patch({ youtubeAdSkip })} />
+            </Row>
+            <Row title="Turn off DRM" description="Tells sites that encrypted media (Widevine) is unavailable, so protected video will not play. Applies to pages you open next.">
+              <TouchSwitch label="Turn off DRM" checked={settings.blockDrm} onCheckedChange={(blockDrm) => patch({ blockDrm })} />
+            </Row>
             <Row title="Upgrade to HTTPS" description="Prefer encrypted connections when available.">
               <TouchSwitch label="Upgrade to HTTPS" checked={settings.httpsUpgrade} onCheckedChange={(httpsUpgrade) => patch({ httpsUpgrade })} />
             </Row>

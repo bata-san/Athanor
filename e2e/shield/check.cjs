@@ -6,6 +6,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const all = () => browser.contexts().flatMap((c) => c.pages());
   const shell = all().find((p) => p.url().startsWith('http://tauri.localhost'));
   if (!shell) { console.log('RESULT: shell not found'); process.exit(2); }
+  await shell.evaluate(() => window.__TAURI_INTERNALS__.invoke('set_settings', { patch: { onboarded: true } })); // skip the first-run welcome overlay
   const snap = await shell.evaluate(() => window.__TAURI_INTERNALS__.invoke('get_snapshot'));
   const tab = snap.workspace.activeTab;
   await shell.evaluate(([t]) => window.__TAURI_INTERNALS__.invoke('navigate', { tab: t, input: 'http://shield-test.example.com:8099/' }), [tab]);

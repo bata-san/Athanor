@@ -18,3 +18,6 @@ release/
 
 # PP Fraktion Mono is not redistributable: drop the web fonts here locally (never commit them)
 public/fonts/
+
+# scratch target dirs used by delegated agents
+/target-import/

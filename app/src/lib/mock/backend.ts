@@ -33,7 +33,7 @@ const initialTabs: Tab[] = [
   makeTab('tab-news', 'Hacker News', 'https://news.ycombinator.com', 'space-work', null, { lastActive: now - 40 * 60_000 }),
   makeTab('tab-yt', 'Lo-fi beats to code to - YouTube', 'https://youtube.com/watch?v=x', 'space-work', null, { lastActive: now - 8 * 3_600_000 }),
 ]
-const defaultSettings: Settings = { searchEngine: 'https://www.google.com/search?q={q}', archiveAfterHours: 24, httpsUpgrade: true, stripTracking: true, autoFile: true, restoreSession: true, sidebarSide: 'left', sidebarCompact: false, sidebarWidth: 236, theme: 'chalk', adblockEnabled: true }
+const defaultSettings: Settings = { searchEngine: 'https://www.google.com/search?q={q}', archiveAfterHours: 24, httpsUpgrade: true, stripTracking: true, autoFile: true, restoreSession: true, sidebarSide: 'left', sidebarCompact: false, sidebarWidth: 236, theme: 'chalk', adblockEnabled: true, homepage: 'https://www.google.com/', youtubeAdSkip: true, blockDrm: false, onboarded: !new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).has('welcome') }
 const initialSnapshot = (): Snapshot => ({ workspace: { spaces, folders, tabs: initialTabs, activeSpace: 'space-work', activeTab: 'tab-welcome', split: null }, runtime: Object.fromEntries(initialTabs.map((tab) => [tab.id, { loading: false, canGoBack: tab.url !== 'athanor://newtab', canGoForward: false, blocked: tab.id === 'tab-github' ? 12 : 0, audible: false, secure: tab.url.startsWith('https:') }])), settings: defaultSettings, filingRules: [{ id: 'rule-github', folder: 'Development', host: 'github.com', pathPrefix: null, titleContains: null, enabled: true }, { id: 'rule-docs', folder: 'Reading list', host: 'developer.mozilla.org', pathPrefix: null, titleContains: null, enabled: true }, { id: 'rule-design', folder: 'Design', host: 'figma.com', pathPrefix: null, titleContains: null, enabled: true }, { id: 'rule-shopping', folder: 'Shopping', host: 'amazon.com', pathPrefix: null, titleContains: null, enabled: true }, { id: 'rule-social', folder: 'Social', host: 'reddit.com', pathPrefix: null, titleContains: null, enabled: true }], platform: 'windows', version: '0.1.0 mock', blockedTotal: 128 })
 let state = initialSnapshot()
 if (mockGetPlatformFromUrl()) state.platform = mockGetPlatformFromUrl()!
@@ -179,6 +179,13 @@ export async function mockInvoke<K extends keyof CommandArgs>(name: K, rawArgs: 
     case 'set_content_bounds': bounds = { x: args.x, y: args.y, w: args.w, h: args.h }; break
     case 'set_overlay_open': overlay = args.open; void overlay; break
     case 'set_page_radius': break
+    case 'import_detect': result = [
+      { id: 'chrome', name: 'Google Chrome', engine: 'chromium', profiles: [{ id: 'Default', name: 'Person 1', hasBookmarks: true, hasHistory: true }, { id: 'Profile 1', name: 'Work', hasBookmarks: true, hasHistory: true }] },
+      { id: 'edge', name: 'Microsoft Edge', engine: 'chromium', profiles: [{ id: 'Default', name: 'Default', hasBookmarks: true, hasHistory: true }] },
+      { id: 'firefox', name: 'Firefox', engine: 'firefox', profiles: [{ id: 'abc.default-release', name: 'default-release', hasBookmarks: true, hasHistory: true }] },
+    ]; break
+    case 'import_run': { await new Promise((resolve) => setTimeout(resolve, 1400)); result = { bookmarks: 1204, folders: 38, history: 18332, skipped: 21, space: null, warnings: [] }; break }
+    case 'import_pick_file': result = null; break
     case 'capture_frame': result = svgData('Frozen page', 210); break
     case 'resolve_context_menu': mockResolvedMenus.push({ tab: args.tab, command: args.command }); break
     case 'context_action': emit('athanor://toast', { level: 'info', message: `Context action: ${args.action}` }); break

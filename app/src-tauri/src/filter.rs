@@ -271,8 +271,22 @@ impl Filter {
 
     /// JS to run in the page as early as possible (cosmetic filters + scriptlets).
     pub fn cosmetic_js(&self, page_url: &str) -> Option<String> {
-        let c = self.blocker.cosmetic(page_url);
-        (!c.js.is_empty()).then_some(c.js)
+        let mut js = self.blocker.cosmetic(page_url).js;
+        // Athanor's own page features (YouTube handling, DRM switch) ride along with the cosmetic payload.
+        js.push_str(&self.blocker.builtin_scripts(page_url));
+        (!js.is_empty()).then_some(js)
+    }
+
+    pub fn set_youtube_ad_skip(&self, on: bool) {
+        self.blocker.set_youtube_ad_skip(on);
+    }
+
+    pub fn set_block_drm(&self, on: bool) {
+        self.blocker.set_block_drm(on);
+    }
+
+    pub fn block_drm(&self) -> bool {
+        self.blocker.block_drm()
     }
 
     /// Match observed DOM classes and IDs against URL-specific generic cosmetic rules.

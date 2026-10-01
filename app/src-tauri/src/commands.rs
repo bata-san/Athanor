@@ -548,6 +548,61 @@ pub async fn context_action(b: B<'_>, action: String, data: String) -> R {
     Ok(())
 }
 
+// ---------- first-run import ----------
+
+#[tauri::command]
+pub async fn import_detect() -> R<serde_json::Value> {
+    #[cfg(windows)]
+    {
+        let found = tauri::async_runtime::spawn_blocking(crate::import::detect)
+            .await
+            .map_err(e)?;
+        serde_json::to_value(found).map_err(e)
+    }
+    #[cfg(not(windows))]
+    Ok(serde_json::json!([]))
+}
+
+#[tauri::command]
+pub async fn import_run(b: B<'_>, request: serde_json::Value) -> R<serde_json::Value> {
+    #[cfg(windows)]
+    {
+        let request: crate::import::ImportRequest = serde_json::from_value(request).map_err(e)?;
+        let browser = b.inner().clone();
+        let report =
+            tauri::async_runtime::spawn_blocking(move || crate::import::run(&browser, request))
+                .await
+                .map_err(e)??;
+        serde_json::to_value(report).map_err(e)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (b, request);
+        Err("importing from other browsers is only available on Windows".into())
+    }
+}
+
+#[tauri::command]
+pub async fn import_pick_file(app: AppHandle) -> R<Option<String>> {
+    #[cfg(desktop)]
+    {
+        use tauri_plugin_dialog::DialogExt;
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        app.dialog()
+            .file()
+            .add_filter("Bookmarks (HTML)", &["html", "htm"])
+            .pick_file(move |p| {
+                let _ = tx.send(p.map(|p| p.to_string()));
+            });
+        rx.await.map_err(e)
+    }
+    #[cfg(mobile)]
+    {
+        let _ = app;
+        Ok(None)
+    }
+}
+
 // ---------- adblock ----------
 
 #[tauri::command]

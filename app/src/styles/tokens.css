@@ -21,7 +21,7 @@
   --ath-s0: 0.125rem; --ath-s1: 0.25rem; --ath-s2: 0.375rem; --ath-s3: 0.5rem; --ath-s4: 0.75rem; --ath-s5: 1rem; --ath-s6: 1.25rem; --ath-s7: 1.5rem; --ath-s8: 2rem; --ath-s9: 2.5rem; --ath-s10: 3rem; --ath-s11: 4rem;
   --ath-icon-size: 1rem; --ath-icon-small: 0.875rem; --ath-avatar-size: 1.75rem; --ath-control-height: 2.25rem; --ath-touch-target: 2.75rem;
   --ath-titlebar-height: 2.5rem; --ath-toolbar-height: 3rem; --ath-mobile-top-height: 3.75rem; --ath-mobile-bottom-height: 4rem;
-  --ath-sidebar-min: 13rem; --ath-sidebar-max: 25rem; --ath-rail-width: 3.25rem;
+  --ath-sidebar-min: 13rem; --ath-sidebar-max: 25rem; --ath-rail-width: 3.5rem;
   --ath-settings-nav-width: 14rem; --ath-toolbar-omnibox: 40rem; --ath-board-list-width: 14rem; --ath-board-list-mobile: 8rem; --ath-board-name-width: 12rem; --ath-board-image-max-px: 520;
   --ath-round-small: 0.5rem; --ath-round-medium: 0.75rem; --ath-round-large: 1rem; --ath-round-pill: 999px;
   --ath-stage-radius: 0.75rem; --ath-stage-shadow: 0 0 0 1px oklch(0 0 0 / 0.07), 0 1px 2px oklch(0 0 0 / 0.04), 0 12px 32px -16px oklch(0 0 0 / 0.25);
@@ -87,3 +87,4 @@ svg.lucide { stroke-width: 1.75; }
 
 @keyframes ath-indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
 .tnum { font-variant-numeric: tabular-nums; }
+@keyframes ath-tick { 0%, 100% { opacity: 0.18; transform: scaleY(0.6); } 50% { opacity: 1; transform: scaleY(1); } }

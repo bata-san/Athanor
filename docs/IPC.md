@@ -231,3 +231,9 @@ for the full list of part names.
 
 The shell registers document-level shortcuts for when the shell itself has focus; the backend forwards the same combos
 via `athanor://shortcut` when a page has focus. Use one shared handler for both.
+
+## Settings added for the welcome tour
+
+`Settings.homepage` (where new tabs open; default `https://www.google.com/`, or `athanor://newtab`), `youtubeAdSkip`, `blockDrm`, `onboarded`. The default search engine is Google.
+
+Import (Windows): `import_detect() -> DetectedBrowser[]` (`{ id, name, engine, profiles: [{ id, name, hasBookmarks, hasHistory }] }`), `import_run({ request: { source: { kind: 'browser', browser, profile } | { kind: 'file', path }, bookmarks, history } }) -> { bookmarks, folders, history, skipped, space, warnings }`, `import_pick_file() -> string | null` (HTML bookmarks). The shell names a detected browser/profile; paths are resolved again on the host.

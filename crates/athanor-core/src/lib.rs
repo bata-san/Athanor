@@ -9,6 +9,7 @@ pub mod devtools;
 pub mod engine;
 pub mod filing;
 pub mod history;
+pub mod import;
 pub mod layout;
 pub mod model;
 pub mod plan;

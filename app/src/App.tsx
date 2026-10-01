@@ -1,8 +1,9 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import type * as React from 'react'
 import { Toaster, toast } from 'sonner'
-import { DndContext, type DragEndEvent } from '@dnd-kit/core'
+import { DndContext, DragOverlay } from '@dnd-kit/core'
 import { ArrowLeft, ArrowRight, Command as CommandIcon, Plus, ShieldCheck } from 'lucide-react'
+import { AnimatePresence } from 'motion/react'
 import { api } from './lib/api'
 import { listen } from './lib/events'
 import { useAppStore, bootStore } from './lib/store'
@@ -16,7 +17,8 @@ import { cn } from './lib/utils'
 import { AthanorMark } from './components/AthanorMark'
 import { Button } from './components/ui/button'
 import { TooltipProvider } from './components/ui/tooltip'
-import { Sidebar } from './components/Sidebar'
+import { Sidebar, DragGhost } from './components/Sidebar'
+import { useDragState, useTabDnd } from './lib/tabDnd'
 import { StageBar, MobileBar } from './components/Toolbar'
 import { CommandBar, type BarMode } from './components/CommandBar'
 import { hostOf } from './components/UrlPill'
@@ -25,6 +27,7 @@ import { NewTabPage } from './components/NewTabPage'
 import { SuspenseCard } from './components/SuspenseCard'
 import { PageContextMenuView } from './components/PageContextMenu'
 import { DialogHost } from './components/dialogs'
+import { Welcome } from './components/welcome/Welcome'
 import { WindowControls, dragWindow, toggleWindow } from './components/WindowControls'
 const DevPanel = lazy(() => import('./pages/DevTools'))
 
@@ -84,6 +87,7 @@ export function App() {
   const setPaletteOpen = useCallback((open: boolean) => setBar((current) => ({ ...current, open })), [])
   const openBar = useCallback((mode: BarMode = 'navigate', seed = '') => setBar({ open: true, mode, seed }), [])
   const [devOpen, setDevOpen] = useState(false)
+  const [tour, setTour] = useState(false)
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const [splitRects, setSplitRects] = useState<SplitRects | null>(null)
   const [pageMenu, setPageMenu] = useState<{ request: PageContextMenu; anchor: { x: number; y: number } } | null>(null)
@@ -92,6 +96,8 @@ export function App() {
   const contentRef = useRef<HTMLElement>(null)
   const mobile = (snapshot?.platform === 'android' || snapshot?.platform === 'ios') || narrow
   const anyOverlay = useAnyOverlay()
+  const dnd = useTabDnd()
+  const draggingId = useDragState((state) => state.dragging)
   const splitRectsRef = useRef(splitRects)
   splitRectsRef.current = splitRects
 
@@ -192,16 +198,6 @@ export function App() {
     return () => { void unlisten.then((off) => off()) }
   }, [])
 
-  const startDrag = (event: DragEndEvent) => {
-    if (!event.over) return
-    const activeId = String(event.active.id).replace(/^tab:/, '')
-    const target = String(event.over.id)
-    if (target === 'pinned-drop') void api.moveTab({ tab: activeId, pinned: true })
-    else if (target === 'root-drop') void api.moveTab({ tab: activeId, folder: null })
-    else if (target.startsWith('folder:')) void api.moveTab({ tab: activeId, folder: target.slice(7) })
-    else if (target.startsWith('space:')) void api.moveTab({ tab: activeId, space: target.slice(6), folder: null })
-    else if (target.startsWith('tab-target:') && event.activatorEvent instanceof MouseEvent && event.activatorEvent.altKey) void api.splitWith({ tab: target.slice(11), dir: 'row' })
-  }
   const openTabUrl = (url: string) => { void api.openTab({ url }); setPaletteOpen(false); setSwitcherOpen(false); setPanel(null); setScreen('browser') }
   const openInternalPage = (page: Exclude<Screen, 'browser' | 'board-window'>) => {
     const url = page === 'settings' ? 'athanor://settings' : page === 'boards' ? 'athanor://boards' : 'athanor://extensions'
@@ -219,6 +215,7 @@ export function App() {
       if (cmd === 'devtools') { setDevOpen(true); setPaletteOpen(false) }
       if (cmd === 'split' && snapshot) { const next = snapshot.workspace.tabs.find((t) => t.space === snapshot.workspace.activeSpace && t.id !== snapshot.workspace.activeTab && !t.archived); if (next) void api.splitWith({ tab: next.id, dir: 'row' }); setPaletteOpen(false) }
       if (cmd === 'autofile') { void api.autoFileAll(); setPaletteOpen(false) }
+      if (cmd === 'welcome') { setPaletteOpen(false); setTour(true) }
       return
     }
     const tab = snapshot?.workspace.tabs.find((item) => item.id === value)
@@ -241,7 +238,7 @@ export function App() {
   const framed = !mobile && !standaloneBoardWindow
   const urlSeed = (() => { const url = activeTab?.url ?? ''; return url.startsWith('athanor://') || !hostOf(url) ? '' : url })()
   const showBar = () => openBar('navigate', urlSeed)
-  return <TooltipProvider><DndContext onDragEnd={startDrag}>
+  return <TooltipProvider><DndContext {...dnd}>
     <div className={cn('app-shell ath-chrome flex h-dvh w-full min-h-0 text-foreground', mobile && 'mobile-shell flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]', !mobile && sidebarRight && 'flex-row-reverse', standaloneBoardWindow && 'standalone-board-shell')} data-part="shell" data-side={snapshot.settings.sidebarSide} data-density={density}>
       {framed && <Sidebar snapshot={snapshot} panels={panels} openPage={openInternalPage} openPanel={(selected) => { setPanel(selected); setScreen('browser') }} openBar={showBar} windowControls={controlsInSidebar ? controls : undefined} />}
       <main className={cn('main-column relative flex min-h-0 min-w-0 flex-1 flex-col', framed && (sidebarRight ? 'ps-2 pb-2' : 'pe-2 pb-2'))}>
@@ -278,6 +275,8 @@ export function App() {
       {mobile && !standaloneBoardWindow && <TabSwitcher open={switcherOpen} onClose={() => setSwitcherOpen(false)} snapshot={snapshot} />}
       <PageContextMenuView request={pageMenu?.request ?? null} anchor={pageMenu?.anchor ?? null} searchEngine={snapshot.settings.searchEngine} onClose={closePageMenu} />
       <DialogHost />
+      <AnimatePresence>{(!snapshot.settings.onboarded || tour) && <Welcome key="welcome" snapshot={snapshot} onDone={() => { setTour(false); void api.setSettings({ onboarded: true }) }} />}</AnimatePresence>
+      <DragOverlay dropAnimation={null} zIndex={80}>{draggingId ? (() => { const tab = snapshot.workspace.tabs.find((entry) => entry.id === draggingId); return tab ? <DragGhost tab={tab} /> : null })() : null}</DragOverlay>
       <Toaster className="toast-root" position={mobile ? 'top-center' : 'bottom-right'} theme={isDarkTheme() ? 'dark' : 'light'} style={{ '--normal-bg': 'var(--popover)', '--normal-text': 'var(--popover-foreground)', '--normal-border': 'var(--border)', '--border-radius': 'var(--radius)', fontFamily: 'var(--font-ui)' } as React.CSSProperties} />
     </div>
   </DndContext></TooltipProvider>

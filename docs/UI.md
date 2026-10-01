@@ -39,3 +39,9 @@ The native page view is clipped to the card's rounded corners: the shell reports
 ## Density and type
 
 The shell is deliberately compact: the root font size is 15px, rows are 27px tall (`--ath-tab-height`), controls 28-32px, radii 8px (`--radius`) with a 12px stage. Body text is IBM Plex Sans JP; anything that is data (hosts, paths, counts, idle time, shortcuts, the status line) is IBM Plex Mono with tabular numbers, which is what gives the chrome its instrument-panel character. Dense by design: tabs show the time since last use once idle for 10 minutes, the address pill splits host and path, the stage bar shows `space / folder / title`, the sidebar ends in a one-line status (`space · tabs · blocked`), and a loading page draws a hairline progress bar along the pill.
+
+## First-run welcome and importing from other browsers
+
+`components/welcome/Welcome.tsx` is a full-window overlay shown until `settings.onboarded` is set (also reachable as "Welcome tour and import" in the command bar). Five steps - Welcome, Import, Look, Privacy, Ready - with the step list on the left (inverted panel) and the step on the right. Everything chosen is applied live, so skipping is always safe.
+
+The Import step lists the browsers found on this machine (`import_detect`) and copies their bookmarks and history (`import_run`): Chrome, Edge, Brave, Vivaldi, Opera, Chromium and Firefox, or a Netscape-format HTML bookmarks file. The readers are the pure crate `crates/athanor-import` (they work on copies of the other browser's files; passwords, cookies and cards are never read). Athanor has no separate bookmark store: bookmarks become **archived tabs** in a dedicated space ("From Chrome"), one folder per bookmark folder (`Workspace::import_bookmarks`, capped at 5,000), and history is merged into the omnibox history (`History::import`, capped at 20,000). Windows only; other platforms report an empty list.

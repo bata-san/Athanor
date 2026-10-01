@@ -33,12 +33,20 @@ pub struct Settings {
     pub sidebar_width: u32,
     pub theme: String,
     pub adblock_enabled: bool,
+    /// Where new tabs open: a web address, or `athanor://newtab` for Athanor's own start page.
+    pub homepage: String,
+    /// Built-in YouTube ad handling (needs the blocker on).
+    pub youtube_ad_skip: bool,
+    /// Tell pages that encrypted media (DRM) is unavailable.
+    pub block_drm: bool,
+    /// Set once the first-run welcome has been completed or skipped.
+    pub onboarded: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            search_engine: "https://duckduckgo.com/?q={q}".into(),
+            search_engine: "https://www.google.com/search?q={q}".into(),
             archive_after_hours: 12,
             https_upgrade: true,
             strip_tracking: true,
@@ -49,6 +57,10 @@ impl Default for Settings {
             sidebar_width: 236,
             theme: "chalk".into(),
             adblock_enabled: true,
+            homepage: "https://www.google.com/".into(),
+            youtube_ad_skip: true,
+            block_drm: false,
+            onboarded: false,
         }
     }
 }
@@ -68,6 +80,10 @@ pub struct SettingsPatch {
     pub sidebar_width: Option<u32>,
     pub theme: Option<String>,
     pub adblock_enabled: Option<bool>,
+    pub homepage: Option<String>,
+    pub youtube_ad_skip: Option<bool>,
+    pub block_drm: Option<bool>,
+    pub onboarded: Option<bool>,
 }
 
 impl Settings {
@@ -86,7 +102,11 @@ impl Settings {
             sidebar_compact,
             sidebar_width,
             theme,
-            adblock_enabled
+            adblock_enabled,
+            homepage,
+            youtube_ad_skip,
+            block_drm,
+            onboarded
         );
         self.sanitize();
     }
@@ -103,6 +123,20 @@ impl Settings {
         if self.theme.trim().is_empty() {
             self.theme = Settings::default().theme;
         }
+        let home = self.homepage.trim();
+        let valid = home == "athanor://newtab"
+            || home.starts_with("https://")
+            || home.starts_with("http://");
+        self.homepage = if valid {
+            home.to_string()
+        } else {
+            Settings::default().homepage
+        };
+    }
+
+    /// The address a new tab opens at.
+    pub fn new_tab_url(&self) -> String {
+        self.homepage.clone()
     }
 }
 
@@ -203,6 +237,30 @@ mod tests {
         assert_eq!(s.sidebar_width, 180);
         assert_eq!(s.sidebar_side, "left");
         assert_eq!(s.theme, "chalk");
+        assert_eq!(s.homepage, "https://www.google.com/");
+    }
+
+    #[test]
+    fn google_is_the_default_search_and_start_page() {
+        let s = Settings::default();
+        assert!(s.search_engine.starts_with("https://www.google.com/search"));
+        assert_eq!(s.new_tab_url(), "https://www.google.com/");
+        assert!(!s.onboarded && s.youtube_ad_skip && !s.block_drm);
+    }
+
+    #[test]
+    fn homepage_must_be_a_web_address_or_the_start_page() {
+        let mut s = Settings::default();
+        s.apply(SettingsPatch {
+            homepage: Some("javascript:alert(1)".into()),
+            ..Default::default()
+        });
+        assert_eq!(s.homepage, "https://www.google.com/");
+        s.apply(SettingsPatch {
+            homepage: Some("athanor://newtab".into()),
+            ..Default::default()
+        });
+        assert_eq!(s.homepage, "athanor://newtab");
     }
 
     #[test]

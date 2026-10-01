@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import type * as React from 'react'
-import { useDndContext, useDraggable, useDroppable } from '@dnd-kit/core'
-import { CSS } from '@dnd-kit/utilities'
+import { useDraggable, useDroppable } from '@dnd-kit/core'
+import { dropId, useDragState } from '@/lib/tabDnd'
 import { AnimatePresence, m } from 'motion/react'
 import {
   Archive, ArrowDownToLine, AudioLines, ChevronRight, Columns2, Copy, Folder as FolderIcon, FolderInput, FolderPlus, Globe, LayoutPanelTop, Link2, Loader2, Lock, PanelLeft, PanelLeftClose, Palette, Pencil, Pin, PinOff, Plus, Puzzle, RotateCcw, Settings, Smile, Trash2, Volume2, VolumeX, WandSparkles, X, XCircle,
@@ -37,7 +37,9 @@ const rowBase = `flex h-[var(--ath-tab-height)] w-full items-center gap-2 rounde
 
 export function Sidebar({ snapshot, panels, openPage, openPanel, openBar, windowControls }: Props) {
   const [archiveOpen, setArchiveOpen] = useState(false)
-  const dragging = useDndContext().active !== null
+  const dragging = useDragState((state) => state.dragging !== null)
+  const { setNodeRef: setListRef } = useDroppable({ id: dropId.unfile })
+  const unfileHint = useDragState((state) => state.hint?.kind === 'unfile')
   const settings = snapshot.settings
   const compact = settings.sidebarCompact
   const { workspace } = snapshot
@@ -73,9 +75,10 @@ export function Sidebar({ snapshot, panels, openPage, openPanel, openBar, window
       <UrlPill snapshot={snapshot} activeTab={activeTab ?? null} compact={compact} onOpen={openBar} onSettings={() => openPage('settings')} className="min-w-0 flex-1 rail:size-9 rail:w-9 rail:flex-none rail:rounded-lg" />
     </div>
 
+    <div className="relative flex min-h-0 flex-1 flex-col">
     <OverlayContextMenu>
       <ContextMenuTrigger asChild>
-        <div className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-2 pb-2 [scrollbar-width:thin] [scrollbar-color:var(--border)_transparent]" data-part="tab-list">
+        <div ref={setListRef} className={cn("relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-2 pb-2 rail:ps-1.5 rail:pe-3.5 [scrollbar-width:thin] [scrollbar-color:var(--border)_transparent] transition-shadow", unfileHint && "shadow-[inset_0_0_0_2px_var(--ring)]")} data-part="tab-list">
           <div key={String(compact)} className="contents">
           <AnimatePresence mode="popLayout" initial={false} custom={slide.current}>
             <m.div key={workspace.activeSpace} custom={slide.current}
@@ -86,7 +89,6 @@ export function Sidebar({ snapshot, panels, openPage, openPanel, openBar, window
               </Block>
 
               <Block data-part="tab-flow">
-                {dragging && <DropTarget id="root-drop" label="Drop here to take a tab out of its folder" />}
                 {groups.folders.map(({ folder, tabs }) => <FolderGroup key={folder.id} folder={folder} count={tabs.length} compact={compact}>
                   <Collapse open={!folder.collapsed}><div className="ms-3 flex flex-col border-s border-border ps-1 rail:ms-0 rail:border-s-0 rail:ps-0"><AnimatePresence initial={false} mode="popLayout">{tabs.map((tab) => <Item key={tab.id}><TabRow {...rowProps(tab)} /></Item>)}</AnimatePresence></div></Collapse>
                 </FolderGroup>)}
@@ -116,6 +118,8 @@ export function Sidebar({ snapshot, panels, openPage, openPanel, openBar, window
         <ContextMenuItem onSelect={() => void api.setSettings({ sidebarSide: settings.sidebarSide === 'left' ? 'right' : 'left' })}><Columns2 />Move sidebar to the {settings.sidebarSide === 'left' ? 'right' : 'left'}</ContextMenuItem>
       </ContextMenuContent>
     </OverlayContextMenu>
+    <TabRuler snapshot={snapshot} orientation="vertical" className="absolute inset-y-2 end-1 hidden rail:flex" />
+    </div>
 
     <div className="shrink-0 border-t border-sidebar-border pt-2 rail:hidden"><TabRuler snapshot={snapshot} /></div>
     <div className="shrink-0 truncate px-3 pt-1.5 font-instr text-[9.5px] uppercase tracking-[0.08em] tabular-nums text-muted-foreground" data-part="status">
@@ -169,13 +173,25 @@ function NavRow({ icon, label, compact, onClick, className, ...rest }: { icon: R
 }
 
 function PinnedDrop({ children }: { children: React.ReactNode }) {
-  const { setNodeRef, isOver } = useDroppable({ id: 'pinned-drop' })
-  return <div ref={setNodeRef} className="rounded-lg transition-colors data-[over=true]:bg-accent/60" data-over={String(isOver)}>{children}</div>
+  const { setNodeRef } = useDroppable({ id: dropId.pin })
+  const over = useDragState((state) => state.hint?.kind === 'pin')
+  const dragging = useDragState((state) => state.dragging !== null)
+  return <div ref={setNodeRef} className={cn('min-h-9 rounded-lg transition-colors', dragging && 'bg-foreground/[0.04] ring-1 ring-dashed ring-border', over && 'bg-accent/70 ring-2 ring-ring/60')}>{children}</div>
 }
 
-function DropTarget({ id, label }: { id: string; label: string }) {
-  const { setNodeRef, isOver } = useDroppable({ id })
-  return <div ref={setNodeRef} className="mb-1 grid h-8 place-items-center rounded-lg border border-dashed border-border text-xs text-muted-foreground transition-colors data-[over=true]:border-ring data-[over=true]:bg-accent data-[over=true]:text-foreground rail:hidden" data-over={String(isOver)} aria-label={label}>{label}</div>
+/** The line that shows where the dragged tab will land (horizontal in lists, vertical between pinned tiles). */
+function DropLine({ tab, vertical = false }: { tab: Tab; vertical?: boolean }) {
+  const edge = useDragState((state) => state.hint && (state.hint.kind === 'before' || state.hint.kind === 'after') && state.hint.target === tab.id ? state.hint.kind : null)
+  if (!edge) return null
+  return <span aria-hidden="true" className={cn('pointer-events-none absolute z-20 rounded-full bg-foreground shadow-[0_0_0_2px_var(--sidebar)]', vertical ? 'inset-y-1 w-0.5' : 'inset-x-1.5 h-0.5', vertical ? (edge === 'before' ? '-start-0.5' : '-end-0.5') : (edge === 'before' ? '-top-px' : '-bottom-px'))} />
+}
+
+/** The picture that follows the pointer while dragging. */
+export function DragGhost({ tab }: { tab: Tab }) {
+  return <div className="pointer-events-none flex h-[var(--ath-tab-height)] w-56 cursor-grabbing items-center gap-2 rounded-md border border-border bg-popover px-2 text-[12.5px] font-medium text-popover-foreground shadow-menu">
+    {tab.favicon ? <img src={tab.favicon} alt="" className="size-[15px] rounded-[3px] object-contain" /> : <Globe className="size-[15px] text-muted-foreground" />}
+    <span className="min-w-0 flex-1 truncate">{tab.title}</span>
+  </div>
 }
 
 type TabMenuCtx = { tab: Tab; snapshot: Snapshot; activeTab: Tab | undefined; spaceFolders: Snapshot['workspace']['folders'] }
@@ -228,15 +244,16 @@ const tabAction = `grid size-[22px] place-items-center rounded text-muted-foregr
 
 function TabRow(props: RowProps) {
   const { tab, active, runtime, compact } = props
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: `tab:${tab.id}` })
-  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: `tab-target:${tab.id}` })
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `tab:${tab.id}` })
+  const { setNodeRef: setDropRef } = useDroppable({ id: dropId.tab(tab.id), disabled: isDragging })
   const close = () => void api.closeTab(tab.id)
   const idle = active || tab.pinned ? '' : idleLabel(tab.lastActive)
   const row = <div ref={(element) => { setNodeRef(element); setDropRef(element) }} role="group" aria-label={`${tab.title} tab`} onContextMenu={ownContextMenu}
-    className={`group/tab relative isolate flex h-[var(--ath-tab-height)] cursor-grab items-center gap-1.5 rounded-md ps-1.5 pe-0.5 text-[12.5px] transition-colors hover:bg-tab-hover active:cursor-grabbing data-[active=true]:bg-transparent data-[active=true]:font-medium data-[archived=true]:opacity-60 data-[over=true]:ring-2 data-[over=true]:ring-ring/50 rail:h-9 rail:justify-center rail:gap-0 rail:px-0`}
-    data-part="tab" data-active={String(active)} data-pinned={String(tab.pinned)} data-loading={String(runtime?.loading ?? false)} data-audible={String(runtime?.audible ?? false)} data-archived={String(tab.archived)} data-over={String(isOver)}
-    style={{ transform: CSS.Transform.toString(transform), opacity: isDragging ? 0.45 : undefined }}>
+    className={`group/tab relative isolate flex h-[var(--ath-tab-height)] cursor-grab items-center gap-1.5 rounded-md ps-1.5 pe-0.5 text-[12.5px] transition-colors hover:bg-tab-hover active:cursor-grabbing data-[active=true]:bg-transparent data-[active=true]:font-medium data-[archived=true]:opacity-60 rail:h-9 rail:justify-center rail:gap-0 rail:px-0`}
+    data-part="tab" data-active={String(active)} data-pinned={String(tab.pinned)} data-loading={String(runtime?.loading ?? false)} data-audible={String(runtime?.audible ?? false)} data-archived={String(tab.archived)}
+    style={{ opacity: isDragging ? 0.35 : undefined }}>
     {active && <ActivePill />}
+    <DropLine tab={tab} />
     <button type="button" {...attributes} {...listeners} className={`flex h-full min-w-0 flex-1 items-center gap-1.5 rounded text-start outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rail:justify-center rail:gap-0`} onClick={() => void api.activateTab(tab.id)} onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); close() } }} title={compact ? undefined : tab.url}>
       <Favicon tab={tab} runtime={runtime} className={`rail:size-[18px]`} />
       <span className="sb-label min-w-0 flex-1 truncate" data-part="tab-title">{tab.title}</span>
@@ -251,11 +268,13 @@ function TabRow(props: RowProps) {
 
 function PinnedTile(props: RowProps) {
   const { tab, active, runtime } = props
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: `tab:${tab.id}` })
-  const tile = <button ref={setNodeRef} type="button" {...attributes} {...listeners} onContextMenu={ownContextMenu} onClick={() => void api.activateTab(tab.id)}
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `tab:${tab.id}` })
+  const { setNodeRef: setDropRef } = useDroppable({ id: dropId.tab(tab.id), disabled: isDragging })
+  const tile = <button ref={(element) => { setNodeRef(element); setDropRef(element) }} type="button" {...attributes} {...listeners} onContextMenu={ownContextMenu} onClick={() => void api.activateTab(tab.id)}
     className="relative isolate grid aspect-square w-full min-w-0 place-items-center rounded-lg bg-sidebar-accent/70 text-muted-foreground outline-none transition-colors hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 data-[active=true]:bg-transparent data-[active=true]:text-foreground"
-    data-part="pinned-tab" data-pinned="true" data-active={String(active)} style={{ transform: CSS.Transform.toString(transform) }} aria-label={tab.title}>
+    data-part="pinned-tab" data-pinned="true" data-active={String(active)} style={{ opacity: isDragging ? 0.35 : undefined }} aria-label={tab.title}>
     {active && <ActivePill />}
+    <DropLine tab={tab} vertical />
     <Favicon tab={tab} runtime={runtime} className="size-[18px]" />
   </button>
   return <OverlayContextMenu><ContextMenuTrigger asChild><div><Tip label={tab.title} side="right">{tile}</Tip></div></ContextMenuTrigger><TabMenu {...props} /></OverlayContextMenu>
@@ -267,7 +286,8 @@ function ArchivedRow({ tab, compact, snapshot, activeTab, spaceFolders }: TabMen
 }
 
 function FolderGroup({ folder, count, compact, children }: { folder: Snapshot['workspace']['folders'][number]; count: number; compact: boolean; children?: React.ReactNode }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `folder:${folder.id}` })
+  const { setNodeRef } = useDroppable({ id: dropId.folder(folder.id) })
+  const over = useDragState((state) => state.hint?.kind === 'folder' && state.hint.folder === folder.id)
   const rename = async () => { const name = await askText({ title: 'Rename folder', label: 'Name', initial: folder.name }); if (name) void api.renameFolder(folder.id, name) }
   const remove = async (closeTabs: boolean) => {
     const ok = await askConfirm({ title: closeTabs ? `Delete “${folder.name}” and close its tabs?` : `Delete “${folder.name}”?`, description: closeTabs ? 'Every tab in this folder will be closed.' : 'Its tabs stay open and move out of the folder.', confirm: 'Delete', destructive: true })
@@ -282,7 +302,7 @@ function FolderGroup({ folder, count, compact, children }: { folder: Snapshot['w
     {folder.auto && <Tip label="Filed automatically" side="top"><WandSparkles className={`!size-3 text-muted-foreground/70 rail:hidden`} /></Tip>}
     <span className={`font-mono text-[10.5px] font-normal tabular-nums text-muted-foreground rail:hidden`}>{count}</span>
   </button>
-  return <div ref={setNodeRef} className="rounded-lg transition-colors data-[over=true]:bg-accent/60 data-[over=true]:ring-2 data-[over=true]:ring-ring/40" data-part="folder" data-over={String(isOver)}>
+  return <div ref={setNodeRef} className="rounded-lg transition-colors data-[over=true]:bg-accent/70 data-[over=true]:ring-2 data-[over=true]:ring-ring/60" data-part="folder" data-over={String(over)}>
     <OverlayContextMenu>
       <ContextMenuTrigger asChild><div><Tip label={folder.name} side="right" disabled={!compact}>{header}</Tip></div></ContextMenuTrigger>
       <ContextMenuContent className="w-56">
@@ -301,7 +321,8 @@ function FolderGroup({ folder, count, compact, children }: { folder: Snapshot['w
 }
 
 function SpaceChip({ space, active, snapshot }: { space: Snapshot['workspace']['spaces'][number]; active: boolean; snapshot: Snapshot }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `space:${space.id}` })
+  const { setNodeRef } = useDroppable({ id: dropId.space(space.id) })
+  const isOver = useDragState((state) => state.hint?.kind === 'space' && state.hint.space === space.id)
   const rename = async () => { const name = await askText({ title: 'Rename space', label: 'Name', initial: space.name }); if (name) void api.renameSpace(space.id, name) }
   const remove = async () => { if (await askConfirm({ title: `Delete “${space.name}”?`, description: 'The space and the tabs inside it will be closed.', confirm: 'Delete', destructive: true })) void api.removeSpace(space.id) }
   const chip = <button ref={setNodeRef} type="button" aria-label={`Switch to ${space.name}`} onContextMenu={ownContextMenu} onClick={() => void api.switchSpace(space.id)}

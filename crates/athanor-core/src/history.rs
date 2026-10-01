@@ -75,6 +75,57 @@ impl History {
         }
     }
 
+    /// Merge visits imported from another browser: `(url, title, visits, last_visit)`. Known pages gain the
+    /// visits and keep the newest timestamp; unknown ones are added. The cap is raised to `ceiling` first (an
+    /// import is far larger than day-to-day browsing), then the least useful entries are dropped to fit.
+    /// Returns how many entries were added or updated.
+    pub fn import(
+        &mut self,
+        items: impl IntoIterator<Item = (String, String, u32, Millis)>,
+        ceiling: usize,
+    ) -> usize {
+        self.cap = self.cap.max(ceiling.clamp(100, 100_000));
+        let mut index: std::collections::HashMap<String, usize> = self
+            .entries
+            .iter()
+            .enumerate()
+            .map(|(i, e)| (e.url.clone(), i))
+            .collect();
+        let mut changed = 0;
+        for (url, title, visits, last) in items {
+            if !(url.starts_with("http://") || url.starts_with("https://")) {
+                continue;
+            }
+            let key = url.split('#').next().unwrap_or(&url).to_string();
+            match index.get(&key) {
+                Some(&i) => {
+                    let e = &mut self.entries[i];
+                    e.visits = e.visits.saturating_add(visits.max(1));
+                    e.last = e.last.max(last);
+                    if e.title.is_empty() && !title.is_empty() {
+                        e.title = title;
+                    }
+                }
+                None => {
+                    index.insert(key.clone(), self.entries.len());
+                    self.entries.push(Entry {
+                        url: key,
+                        title,
+                        visits: visits.max(1),
+                        last,
+                    });
+                }
+            }
+            changed += 1;
+        }
+        if self.entries.len() > self.cap {
+            self.entries
+                .sort_by_key(|e| std::cmp::Reverse((e.visits.min(5), e.last)));
+            self.entries.truncate(self.cap);
+        }
+        changed
+    }
+
     /// Count a visit on an existing entry only. For callers that already called
     /// [`Self::record`] for the same page load (and so already counted it) use this; a fresh
     /// [`Self::record`] counts on its own.
@@ -142,6 +193,31 @@ impl History {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn import_merges_raises_the_cap_and_trims_by_usefulness() {
+        let mut h = History::default();
+        h.record("https://a.test/", "A", 10);
+        let added = h.import(
+            vec![
+                ("https://a.test/".into(), "".into(), 4, 99),
+                ("https://b.test/#frag".into(), "B".into(), 2, 50),
+                ("ftp://x".into(), "x".into(), 1, 1),
+            ],
+            5_000,
+        );
+        assert_eq!(added, 2);
+        assert_eq!(h.len(), 2);
+        let hits = h.search("a.test", 5, 100);
+        assert_eq!(hits[0].visits, 5);
+        assert_eq!(hits[0].last, 99);
+        let mut small = History::default().sanitized();
+        let many: Vec<_> = (0..4_000)
+            .map(|i| (format!("https://h{i}.test/"), String::new(), 1, i as u64))
+            .collect();
+        small.import(many, 3_500);
+        assert_eq!(small.len(), 3_500, "trimmed to the raised cap, newest kept");
+    }
+
     use super::*;
 
     #[test]

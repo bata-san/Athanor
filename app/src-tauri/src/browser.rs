@@ -117,7 +117,7 @@ impl Browser {
             ws = Workspace::default();
         }
         if ws.tabs.is_empty() {
-            ws.open_tab(urlutil::NEW_TAB_URL, OpenOptions::default(), now());
+            ws.open_tab(&settings.new_tab_url(), OpenOptions::default(), now());
         } else if ws.active_tab.as_deref().and_then(|a| ws.tab(a)).is_none() {
             let first = ws.tabs.iter().find(|t| !t.archived).map(|t| t.id.clone());
             match first {
@@ -125,7 +125,7 @@ impl Browser {
                     ws.activate(&id, now());
                 }
                 None => {
-                    ws.open_tab(urlutil::NEW_TAB_URL, OpenOptions::default(), now());
+                    ws.open_tab(&settings.new_tab_url(), OpenOptions::default(), now());
                 }
             }
         }
@@ -164,6 +164,8 @@ impl Browser {
             settings.strip_tracking,
             std::sync::atomic::Ordering::Relaxed,
         );
+        filter.set_youtube_ad_skip(settings.youtube_ad_skip);
+        filter.set_block_drm(settings.block_drm);
         let inner = Inner {
             ws,
             runtime,
@@ -601,7 +603,7 @@ impl Browser {
         let (id, _) = {
             let mut g = self.inner.lock();
             let url = match a.url.as_deref() {
-                None | Some("") => urlutil::NEW_TAB_URL.to_string(),
+                None | Some("") => g.settings.new_tab_url(),
                 Some(u) => urlutil::resolve_input(u, &g.settings.search_engine).into_url(),
             };
             let opts = OpenOptions {
@@ -693,8 +695,9 @@ impl Browser {
             g.view.live.remove(tab);
             if g.ws.tabs.is_empty() {
                 let space = g.ws.active_space.clone();
+                let home = g.settings.new_tab_url();
                 g.ws.open_tab(
-                    urlutil::NEW_TAB_URL,
+                    &home,
                     OpenOptions {
                         space: Some(space),
                         ..Default::default()
@@ -779,6 +782,27 @@ impl Browser {
 
     pub fn move_tab(self: &Arc<Self>, tab: &str, dest: MoveDest) {
         self.with_ws(|w| w.move_tab(tab, dest));
+    }
+
+    /// Bring bookmarks in as archived tabs of their own space (see `athanor_core::import`).
+    pub fn import_bookmarks(
+        self: &Arc<Self>,
+        space_name: &str,
+        nodes: &[athanor_core::import::ImportNode],
+        max_tabs: usize,
+    ) -> athanor_core::import::ImportCounts {
+        self.with_ws(|w| w.import_bookmarks(space_name, nodes, now(), max_tabs))
+    }
+
+    /// Merge imported history into the omnibox history.
+    pub fn import_history(
+        self: &Arc<Self>,
+        items: Vec<(String, String, u32, u64)>,
+        ceiling: usize,
+    ) -> usize {
+        let n = self.inner.lock().history.import(items, ceiling);
+        self.changed();
+        n
     }
 
     pub fn restore_tab(self: &Arc<Self>, tab: &str) {
@@ -916,6 +940,8 @@ impl Browser {
         self.filter
             .strip_tracking
             .store(s.strip_tracking, std::sync::atomic::Ordering::Relaxed);
+        self.filter.set_youtube_ad_skip(s.youtube_ad_skip);
+        self.filter.set_block_drm(s.block_drm);
         self.changed();
     }
 

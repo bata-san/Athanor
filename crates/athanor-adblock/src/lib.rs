@@ -31,6 +31,8 @@ const FALLBACK: &str = include_str!("fallback.txt");
 /// Adapters should register this for all frames before starting navigation.
 pub const COSMETIC_BRIDGE_JS: &str = include_str!("../assets/cosmetic-bridge.js");
 const PROCEDURAL_RUNTIME_JS: &str = include_str!("../assets/procedural-runtime.js");
+const YOUTUBE_ADS_JS: &str = include_str!("../assets/youtube-ads.js");
+const DRM_OFF_JS: &str = include_str!("../assets/drm-off.js");
 
 /// Native resource category.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -441,6 +443,8 @@ struct Inner {
     config: RwLock<Config>,
     extra_lists: RwLock<HashMap<String, String>>,
     enabled: AtomicBool,
+    youtube_ad_skip: AtomicBool,
+    block_drm: AtomicBool,
     blocked: AtomicU64,
     by_host: Mutex<HashMap<String, u64>>,
     build_lock: Mutex<()>,
@@ -472,6 +476,8 @@ impl Blocker {
                 config: RwLock::new(Config::default()),
                 extra_lists: RwLock::new(HashMap::new()),
                 enabled: AtomicBool::new(true),
+                youtube_ad_skip: AtomicBool::new(true),
+                block_drm: AtomicBool::new(false),
                 blocked: AtomicU64::new(0),
                 by_host: Mutex::new(HashMap::new()),
                 build_lock: Mutex::new(()),
@@ -834,6 +840,44 @@ impl Blocker {
     /// Return the global switch.
     pub fn enabled(&self) -> bool {
         self.inner.enabled.load(Ordering::Relaxed)
+    }
+    /// Built-in YouTube ad handling (data pruning, hiding, auto-skip). On by default; needs the blocker enabled.
+    pub fn set_youtube_ad_skip(&self, on: bool) {
+        self.inner.youtube_ad_skip.store(on, Ordering::Relaxed);
+    }
+    pub fn youtube_ad_skip(&self) -> bool {
+        self.inner.youtube_ad_skip.load(Ordering::Relaxed)
+    }
+    /// Tell pages that encrypted media (EME / Widevine) is unavailable. Off by default, independent of the blocker.
+    pub fn set_block_drm(&self, on: bool) {
+        self.inner.block_drm.store(on, Ordering::Relaxed);
+    }
+    pub fn block_drm(&self) -> bool {
+        self.inner.block_drm.load(Ordering::Relaxed)
+    }
+    /// Scripts for Athanor's own page features that apply to `page_url` right now (YouTube handling, DRM switch),
+    /// ready to be evaluated at document start. Empty when nothing applies.
+    pub fn builtin_scripts(&self, page_url: &str) -> String {
+        let Ok(url) = url::Url::parse(page_url) else {
+            return String::new();
+        };
+        if !matches!(url.scheme(), "http" | "https") {
+            return String::new();
+        }
+        let mut js = String::new();
+        if self.youtube_ad_skip()
+            && self.enabled()
+            && !self.site_disabled(page_url)
+            && url.host_str().is_some_and(is_youtube_host)
+        {
+            js.push_str(YOUTUBE_ADS_JS);
+            js.push('\n');
+        }
+        if self.block_drm() {
+            js.push_str(DRM_OFF_JS);
+            js.push('\n');
+        }
+        js
     }
     /// Configure a list; call `rebuild` for the change to take effect.
     pub fn set_list_enabled(&self, id: &str, on: bool) {
@@ -1218,8 +1262,55 @@ fn replace_file(temp: &Path, path: &Path) -> std::io::Result<()> {
     }
 }
 
+fn is_youtube_host(host: &str) -> bool {
+    let host = host.to_ascii_lowercase();
+    host == "youtube.com" || host.ends_with(".youtube.com")
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn youtube_hosts_are_recognised() {
+        for host in [
+            "youtube.com",
+            "www.youtube.com",
+            "m.youtube.com",
+            "music.youtube.com",
+        ] {
+            assert!(super::is_youtube_host(host), "{host}");
+        }
+        for host in [
+            "notyoutube.com",
+            "youtube.com.evil.test",
+            "youtu.be",
+            "example.com",
+        ] {
+            assert!(!super::is_youtube_host(host), "{host}");
+        }
+    }
+
+    #[test]
+    fn builtin_scripts_follow_the_switches() {
+        let dir = std::env::temp_dir().join("athanor-builtin-scripts");
+        let b = super::Blocker::new(dir);
+        let yt = "https://www.youtube.com/watch?v=x";
+        assert!(b.builtin_scripts(yt).contains("__athanorYtAds"));
+        assert!(b.builtin_scripts("https://example.com/").is_empty());
+        b.set_youtube_ad_skip(false);
+        assert!(b.builtin_scripts(yt).is_empty());
+        b.set_youtube_ad_skip(true);
+        b.set_site_disabled("www.youtube.com", true);
+        assert!(b.builtin_scripts(yt).is_empty(), "per-site shield off");
+        b.set_site_disabled("www.youtube.com", false);
+        b.set_enabled(false);
+        assert!(b.builtin_scripts(yt).is_empty(), "blocker off");
+        assert!(!b.block_drm());
+        b.set_block_drm(true);
+        let drm = b.builtin_scripts("https://example.com/");
+        assert!(drm.contains("__athanorDrmOff") && !drm.contains("__athanorYtAds"));
+        assert!(b.builtin_scripts("about:blank").is_empty());
+    }
+
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 

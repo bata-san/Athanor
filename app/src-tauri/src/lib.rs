@@ -10,6 +10,8 @@ mod engine_desktop;
 mod engine_mobile;
 mod ext_host;
 mod filter;
+#[cfg(windows)]
+mod import;
 #[cfg(target_os = "android")]
 mod jni_bridge;
 #[cfg(desktop)]
@@ -87,7 +89,11 @@ pub fn run() {
             asset_response(ctx.app_handle(), req.uri().path().trim_start_matches('/'))
         })
         .setup(|app| {
-            let data = app.path().app_data_dir()?;
+            // ATHANOR_DATA_DIR points the session/settings/history files elsewhere (used by end-to-end tests).
+            let data = match std::env::var_os("ATHANOR_DATA_DIR") {
+                Some(dir) if !dir.is_empty() => std::path::PathBuf::from(dir),
+                _ => app.path().app_data_dir()?,
+            };
             std::fs::create_dir_all(&data)?;
             let paths = Paths { root: data };
             let filter = Arc::new(Filter::new(paths.adblock()));
@@ -182,6 +188,9 @@ pub fn run() {
             commands::set_content_bounds,
             commands::set_overlay_open,
             commands::capture_frame,
+            commands::import_detect,
+            commands::import_run,
+            commands::import_pick_file,
             commands::set_page_radius,
             commands::resolve_context_menu,
             commands::context_action,

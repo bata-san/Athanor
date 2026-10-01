@@ -16,6 +16,7 @@ const out = process.argv[2] || process.env.TEMP || '.';
   if (!shell) { console.log('RESULT: shell not found', all().map((p) => p.url())); process.exit(2); }
   const invoke = (cmd, args = {}) => shell.evaluate(([c, a]) => window.__TAURI_INTERNALS__.invoke(c, a), [cmd, args]);
 
+  await invoke('set_settings', { patch: { onboarded: true } }); // skip the first-run welcome overlay
   const snap = await invoke('get_snapshot');
   const tab = snap.workspace.activeTab;
   for (const t of snap.workspace.tabs) if (t.id !== tab && /shield-test|link-target/.test(t.url)) await invoke('close_tab', { tab: t.id });
