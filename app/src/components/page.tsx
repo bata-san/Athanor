@@ -12,7 +12,7 @@ import { Card } from './ui/card'
 export function Page({ title, description, actions, children, className, ...props }: { title: React.ReactNode; description?: React.ReactNode; actions?: React.ReactNode } & Omit<React.HTMLAttributes<HTMLDivElement>, 'title'>) {
   return <div className={cn('flex h-full min-w-0 flex-1 flex-col overflow-hidden', className)} {...props}>
     <header className="flex min-h-11 shrink-0 items-center justify-between gap-4 border-b border-border px-6 py-2 max-md:px-4">
-      <div className="min-w-0"><h1 className="m-0 truncate text-[1rem] font-semibold tracking-tight">{title}</h1>{description && <p className="m-0 mt-0.5 truncate text-[0.8667rem] text-muted-foreground">{description}</p>}</div>
+      <div className="min-w-0"><h1 className="m-0 truncate text-[1rem] font-semibold tracking-tight">{title}</h1>{description && <p className="m-0 mt-0.5 line-clamp-2 text-[0.8667rem] text-muted-foreground">{description}</p>}</div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
     </header>
     <div className="min-h-0 flex-1 overflow-y-auto"><div className="mx-auto flex w-full max-w-4xl flex-col gap-3.5 px-6 py-5 max-md:px-4">{children}</div></div>
@@ -29,8 +29,13 @@ export function Section({ title, description, actions, children, className }: { 
 
 /** A label/description on the left and a control on the right. Rows inside a `Section` get hairline dividers. */
 export function Row({ title, description, children, className, htmlFor }: { title: React.ReactNode; description?: React.ReactNode; children?: React.ReactNode; className?: string; htmlFor?: string }) {
+  // A `label` is only real when it points at a control; the rest of the rows label their switch or slider by aria-label.
+  const titleClass = 'text-[0.8667rem] font-medium leading-5'
   return <div className={cn('flex min-h-11 items-center justify-between gap-6 py-2 max-sm:flex-col max-sm:items-stretch max-sm:gap-2', className)}>
-    <div className="flex min-w-0 flex-col gap-0.5"><label htmlFor={htmlFor} className="text-[0.8667rem] font-medium leading-5">{title}</label>{description && <span className="text-xs leading-4 text-muted-foreground">{description}</span>}</div>
+    <div className="flex min-w-0 flex-col gap-0.5">
+      {htmlFor ? <label htmlFor={htmlFor} className={titleClass}>{title}</label> : <span className={titleClass}>{title}</span>}
+      {description && <span className="text-xs leading-4 text-muted-foreground">{description}</span>}
+    </div>
     {children !== undefined && <div className="flex shrink-0 items-center gap-2 max-sm:w-full">{children}</div>}
   </div>
 }
