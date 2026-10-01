@@ -80,7 +80,10 @@ pub fn resolve_permission(request: u32, allow: bool) {
     if let Some(pending) = PERMISSIONS.with(|p| p.borrow_mut().remove(&request)) {
         unsafe {
             // The answer lives in Athanor's own settings; WebView2 must not keep a second copy.
-            if let Ok(args3) = pending.args.cast::<ICoreWebView2PermissionRequestedEventArgs3>() {
+            if let Ok(args3) = pending
+                .args
+                .cast::<ICoreWebView2PermissionRequestedEventArgs3>()
+            {
                 let _ = args3.SetSavesInProfile(false);
             }
             let _ = pending.args.SetState(if allow {

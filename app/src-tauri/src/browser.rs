@@ -1194,9 +1194,13 @@ impl Browser {
 
     /// Keyboard focus to the shell UI (e.g. the find bar) or back to a page.
     pub fn focus_shell(&self) {
-        use tauri::Manager;
-        if let Some(shell) = self.app.get_webview("shell") {
-            let _ = shell.set_focus();
+        // Mobile has a single webview and no focus to move.
+        #[cfg(desktop)]
+        {
+            use tauri::Manager;
+            if let Some(shell) = self.app.get_webview("shell") {
+                let _ = shell.set_focus();
+            }
         }
     }
 
@@ -1240,10 +1244,13 @@ impl Browser {
 
     /// Full screen for the main window.
     pub fn toggle_fullscreen(&self) {
-        use tauri::Manager;
-        if let Some(window) = self.app.get_window("main") {
-            let on = window.is_fullscreen().unwrap_or(false);
-            let _ = window.set_fullscreen(!on);
+        #[cfg(desktop)]
+        {
+            use tauri::Manager;
+            if let Some(window) = self.app.get_window("main") {
+                let on = window.is_fullscreen().unwrap_or(false);
+                let _ = window.set_fullscreen(!on);
+            }
         }
     }
 
