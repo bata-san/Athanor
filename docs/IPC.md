@@ -223,7 +223,7 @@ The shell uses shadcn/ui with the standard CSS variables (`--background`, `--for
 `--secondary`, `--muted`, `--accent`, `--destructive`, `--border`, `--input`, `--ring`, `--radius` + their `-foreground`
 counterparts, `--sidebar*`) plus Athanor tokens: `--ath-tab-height`, `--ath-sidebar-width`, `--ath-tab-active`, `--ath-tab-hover`,
 `--ath-space-accent`, `--ath-blur`, `--font-ui`, `--font-mono`. **Never hardcode colours, radii, fonts or sizes in components — always use these variables** so themes reach everything. Every meaningful element carries
-a `data-part="…"` attribute and state attributes (`data-active`, `data-pinned`, `data-loading`, `data-collapsed`, `data-audible`,
+a `data-part="…"` attribute and state attributes (`data-active`, `data-pinned`, `data-loading`, `data-collapsed` (the sidebar when it is the icon rail), `data-folded` (a closed folder header), `data-audible`,
 `data-archived`); the root element carries `data-side="left|right"` and `data-density="compact|comfortable"`. See `docs/THEMING.md`
 for the full list of part names.
 

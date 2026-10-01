@@ -89,7 +89,7 @@ export default function SettingsPage() {
   }
   const deleteRule = (rule: FilingRule) => {
     persistRules(rules.filter((item) => item.id !== rule.id))
-    toast('Filing rule removed', { action: { label: 'Undo', onClick: () => persistRules([...rules, rule]) } })
+    toast('Filing rule removed', { action: { label: 'Undo', onClick: () => setRules((current) => { const next = [...current.filter((item) => item.id !== rule.id), rule]; void api.setFilingRules(next); return next }) } })
   }
   const install = async () => {
     const path = await api.pickDirectory()

@@ -215,7 +215,7 @@ export function App() {
       if (shortcutOwner(canonicalShortcut(combo))) { event.preventDefault(); handleShortcut(combo) }
     }
     document.addEventListener('keydown', keydown)
-    const unlisten = listen('athanor://shortcut', ({ combo }) => handleShortcut(combo, true))
+    const unlisten = listen('athanor://shortcut', ({ combo }) => { if (combo === 'CtrlDown' || combo === 'CtrlUp') useCtrlHeld.getState().set(combo === 'CtrlDown'); else handleShortcut(combo, true) })
     return () => { document.removeEventListener('keydown', keydown); void unlisten.then((off) => off()) }
   }, [handleShortcut])
   // While Ctrl is held the sidebar shows which number opens which tab.

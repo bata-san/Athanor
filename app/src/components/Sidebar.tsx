@@ -77,7 +77,7 @@ export function Sidebar({ snapshot, panels, openPage, openPanel, windowControls 
   }
   const numbers = useMemo(() => tabNumbers(groups), [groups])
   const ctrlHeld = useCtrlHeld((state) => state.held)
-  const rowProps = (tab: Tab) => ({ tab, compact, active: tab.id === activeId, runtime: snapshot.runtime[tab.id], snapshot, activeTab, spaceFolders, number: ctrlHeld ? numbers.get(tab.id) : undefined })
+  const rowProps = (tab: Tab) => ({ tab, compact, active: tab.id === activeId, runtime: snapshot.runtime[tab.id], snapshot, activeTab, spaceFolders, number: ctrlHeld ? numbers.get(tab.id) : undefined, shortcutNumber: numbers.get(tab.id) })
 
   return <aside className="group/sidebar relative flex w-[var(--ath-sidebar-width)] min-w-[var(--ath-sidebar-min)] max-w-[var(--ath-sidebar-max)] shrink-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground data-[collapsed=true]:w-[var(--ath-rail-width)] data-[collapsed=true]:min-w-[var(--ath-rail-width)] data-[collapsed=true]:max-w-[var(--ath-rail-width)]"
     data-part="sidebar" data-collapsed={String(compact)} data-side={settings.sidebarSide} style={{ '--ath-sidebar-width': `calc(${settings.sidebarWidth}px * var(--ath-ui-scale, 1))` } as React.CSSProperties}>
@@ -247,11 +247,11 @@ function TabMenu({ tab, snapshot, activeTab, spaceFolders }: TabMenuCtx) {
   </ContextMenuContent>
 }
 
-type RowProps = TabMenuCtx & { compact: boolean; active: boolean; runtime: Snapshot['runtime'][string] | undefined; /** The Ctrl+number this tab answers to, shown while Ctrl is held. */ number?: number }
+type RowProps = TabMenuCtx & { compact: boolean; active: boolean; runtime: Snapshot['runtime'][string] | undefined; /** The Ctrl+number this tab answers to, shown while Ctrl is held. */ number?: number; /** Always set: exposed to assistive technology as the row's keyboard shortcut. */ shortcutNumber?: number }
 
 /** The little numeral that appears on a tab while Ctrl is held: it is the key that opens it. */
 function NumberBadge({ value, className }: { value: number; className?: string }) {
-  return <span className={cn('grid h-[1.1rem] min-w-[1.1rem] place-items-center rounded-[0.3rem] bg-foreground px-1 font-instr text-[0.7333rem] font-medium tabular-nums text-background', className)} data-part="tab-number" aria-label={`Ctrl+${value}`}>{value}</span>
+  return <span className={cn('grid h-[1.1rem] min-w-[1.1rem] place-items-center rounded-[0.3rem] bg-foreground px-1 font-instr text-[0.7333rem] font-medium tabular-nums text-background', className)} data-part="tab-number" aria-hidden="true">{value}</span>
 }
 
 function Favicon({ tab, runtime, className }: { tab: Tab; runtime?: Snapshot['runtime'][string]; className?: string }) {
@@ -272,7 +272,7 @@ function idleLabel(lastActive: number) {
 const tabAction = `grid size-[1.4667rem] place-items-center rounded text-muted-foreground hover:bg-foreground/10 hover:text-foreground rail:hidden [&_svg]:size-3.5`
 
 function TabRow(props: RowProps) {
-  const { tab, active, runtime, compact, number } = props
+  const { tab, active, runtime, compact, number, shortcutNumber } = props
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `tab:${tab.id}` })
   const { setNodeRef: setDropRef } = useDroppable({ id: dropId.tab(tab.id), disabled: isDragging })
   const close = () => void api.closeTab(tab.id)
@@ -283,7 +283,7 @@ function TabRow(props: RowProps) {
     style={{ opacity: isDragging ? 0.35 : undefined }}>
     {active && <ActivePill />}
     <DropLine tab={tab} />
-    <button type="button" {...attributes} {...listeners} className={`flex h-full min-w-0 flex-1 items-center gap-1.5 rounded text-start outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rail:justify-center rail:gap-0`} aria-current={active ? 'page' : undefined} onClick={() => void api.activateTab(tab.id)} onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); close() } }} title={compact ? undefined : tab.url}>
+    <button type="button" {...attributes} {...listeners} className={`flex h-full min-w-0 flex-1 items-center gap-1.5 rounded text-start outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rail:justify-center rail:gap-0`} aria-current={active ? 'page' : undefined} aria-keyshortcuts={shortcutNumber ? `Control+${shortcutNumber}` : undefined} onClick={() => void api.activateTab(tab.id)} onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); close() } }} title={compact ? undefined : tab.url}>
       <Favicon tab={tab} runtime={runtime} className={`rail:size-[1.2rem]`} />
       <span className="sb-label min-w-0 flex-1 truncate" data-part="tab-title">{tab.title}</span>
     </button>
@@ -298,12 +298,12 @@ function TabRow(props: RowProps) {
 }
 
 function PinnedTile(props: RowProps) {
-  const { tab, active, runtime, number } = props
+  const { tab, active, runtime, number, shortcutNumber } = props
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `tab:${tab.id}` })
   const { setNodeRef: setDropRef } = useDroppable({ id: dropId.tab(tab.id), disabled: isDragging })
   const tile = <button ref={(element) => { setNodeRef(element); setDropRef(element) }} type="button" {...attributes} {...listeners} onClick={() => void api.activateTab(tab.id)}
     className="relative isolate grid aspect-square w-full min-w-0 place-items-center rounded-lg bg-sidebar-accent/70 text-muted-foreground outline-none transition-colors hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 data-[active=true]:bg-transparent data-[active=true]:text-foreground"
-    data-part="pinned-tab" data-pinned="true" data-active={String(active)} style={{ opacity: isDragging ? 0.35 : undefined }} aria-label={tab.title}>
+    data-part="pinned-tab" data-pinned="true" data-active={String(active)} aria-keyshortcuts={shortcutNumber ? `Control+${shortcutNumber}` : undefined} style={{ opacity: isDragging ? 0.35 : undefined }} aria-label={tab.title}>
     {active && <ActivePill />}
     <DropLine tab={tab} vertical />
     <Favicon tab={tab} runtime={runtime} className="size-[1.2rem]" />

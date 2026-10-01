@@ -256,6 +256,14 @@ impl Workspace {
             .as_deref()
             .and_then(|p| self.tabs.iter().position(|t| t.id == p))
             .map(|i| i + 1);
+        // A tab opened into a closed folder (a link from a tab inside it) opens the folder, so it is seen arriving.
+        if let Some(folder) = tab
+            .folder
+            .clone()
+            .and_then(|f| self.folders.iter_mut().find(|x| x.id == f))
+        {
+            folder.collapsed = false;
+        }
         match pos {
             Some(i) => self.tabs.insert(i, tab),
             None => self.tabs.push(tab),
@@ -273,6 +281,11 @@ impl Workspace {
         t.last_active = now;
         t.archived = false;
         let space = t.space.clone();
+        // Never leave the current tab hidden inside a closed folder: opening it opens the folder.
+        let folder = t.folder.clone().filter(|_| !t.pinned);
+        if let Some(folder) = folder.and_then(|f| self.folders.iter_mut().find(|x| x.id == f)) {
+            folder.collapsed = false;
+        }
         self.active_tab = Some(id.to_string());
         self.active_space = space;
         if let Some(s) = &mut self.split {
@@ -642,6 +655,45 @@ mod tests {
 
     fn ws() -> Workspace {
         Workspace::default()
+    }
+
+    #[test]
+    fn activating_or_opening_into_a_closed_folder_opens_it() {
+        let mut w = ws();
+        let space = w.active_space.clone();
+        let a = w.open_tab("https://a.test/", Default::default(), 1);
+        let f = w.create_folder(&space, "Work", false);
+        w.move_tab(
+            &a,
+            MoveDest {
+                folder: Some(f.clone()),
+                ..Default::default()
+            },
+        );
+        let b = w.open_tab("https://b.test/", Default::default(), 2);
+        w.toggle_folder(&f);
+        assert!(w.folders.iter().find(|x| x.id == f).unwrap().collapsed);
+        w.activate(&b, 3); // b is loose: the folder stays closed
+        assert!(w.folders.iter().find(|x| x.id == f).unwrap().collapsed);
+        w.activate(&a, 4);
+        assert!(
+            !w.folders.iter().find(|x| x.id == f).unwrap().collapsed,
+            "the current tab is never hidden"
+        );
+        w.toggle_folder(&f);
+        w.open_tab(
+            "https://c.test/",
+            OpenOptions {
+                parent: Some(a.clone()),
+                background: true,
+                ..Default::default()
+            },
+            5,
+        );
+        assert!(
+            !w.folders.iter().find(|x| x.id == f).unwrap().collapsed,
+            "a child opened into the folder shows it"
+        );
     }
 
     #[test]

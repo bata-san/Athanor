@@ -948,18 +948,30 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
     // --- native shortcuts (before the page sees them) ---
     {
         let (sink, tab) = (ctx.sink.clone(), tab.clone());
+        let ctrl_is_down = std::sync::atomic::AtomicBool::new(false);
         controller.add_AcceleratorKeyPressed(
             &AcceleratorKeyPressedEventHandler::create(Box::new(move |_, args| {
                 let Some(args) = args else { return Ok(()) };
                 let mut kind = COREWEBVIEW2_KEY_EVENT_KIND_KEY_UP;
                 args.KeyEventKind(&mut kind)?;
-                if kind != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN
-                    && kind != COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN
-                {
-                    return Ok(());
-                }
+                let pressed = kind == COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN
+                    || kind == COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN;
                 let mut vk = 0u32;
                 args.VirtualKey(&mut vk)?;
+                // While a page has the keyboard the shell hears nothing: tell it when Ctrl goes down or up (the
+                // sidebar shows the tab numbers meanwhile). The page still gets the key.
+                if matches!(vk, 0x11 | 0xA2 | 0xA3) {
+                    if ctrl_is_down.swap(pressed, std::sync::atomic::Ordering::Relaxed) != pressed {
+                        sink(EngineEvent::Shortcut {
+                            tab: tab.clone(),
+                            combo: if pressed { "CtrlDown" } else { "CtrlUp" }.to_string(),
+                        });
+                    }
+                    return Ok(());
+                }
+                if !pressed {
+                    return Ok(());
+                }
                 let down = |k: i32| GetKeyState(k) < 0;
                 if let Some(c) = combo(vk, down(0x11), down(0x10), down(0x12)) {
                     args.SetHandled(true)?;

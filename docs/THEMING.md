@@ -25,7 +25,7 @@ Layout variables are `--radius`, `--font-ui`, `--font-mono`, `--ath-sidebar-side
 
 The React shell should expose these `data-part` values for extension CSS: `shell`, `titlebar`, `sidebar`, `sidebar-header`, `space-switcher`, `space`, `pinned-grid`, `pinned-tab`, `tab-list`, `folder`, `folder-header`, `tab`, `tab-favicon`, `tab-title`, `tab-close`, `new-tab-button`, `omnibox`, `toolbar`, `nav-button`, `content`, `split-divider`, `palette`, `palette-item`, `new-tab-page`, `board`, `board-toolbar`, `dev-panel`, `shield-badge`, `window-controls`, `frozen-page`, `page-context-menu`, `settings`, `extension-panel`.
 
-Expose state attributes where applicable: `data-active`, `data-pinned`, `data-loading`, `data-collapsed`, `data-audible`, `data-archived`, `data-side`, and `data-density`. Boolean attributes should use string values `true` or `false` consistently. Theme authors should target parts and state instead of generated React class names.
+Expose state attributes where applicable: `data-active`, `data-pinned`, `data-loading`, `data-collapsed` (the sidebar when it is the icon rail), `data-folded` (a closed folder header), `data-audible`, `data-archived`, `data-side`, and `data-density`. Boolean attributes should use string values `true` or `false` consistently. Theme authors should target parts and state instead of generated React class names.
 
 For example, a right-hand compact rail can be supplied entirely by a theme's `ui` fields above and this `shell.css`:
 
