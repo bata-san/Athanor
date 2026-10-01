@@ -114,6 +114,19 @@ fn main() {
         c.css.len(),
         c.js.len()
     );
+    let yt = fresh.cosmetic("https://www.youtube.com/watch?v=x");
+    let scriptlets = yt.js.contains("adPlacements") && yt.js.contains("ytInitialPlayerResponse");
+    println!(
+        "youtube: engine scriptlets injected = {scriptlets}, built-in rule css = {}",
+        yt.css.contains("ytd-ad-slot-renderer")
+    );
+    if std::env::var_os("YT_DEBUG").is_some() {
+        println!(
+            "--- youtube js ---
+{}",
+            yt.js
+        );
+    }
     let t = Instant::now();
     let c = fresh.cosmetic(page);
     println!(

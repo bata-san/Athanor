@@ -32,6 +32,54 @@ const FALLBACK: &str = include_str!("fallback.txt");
 pub const COSMETIC_BRIDGE_JS: &str = include_str!("../assets/cosmetic-bridge.js");
 const PROCEDURAL_RUNTIME_JS: &str = include_str!("../assets/procedural-runtime.js");
 const YOUTUBE_ADS_JS: &str = include_str!("../assets/youtube-ads.js");
+/// Filter rules shipped inside the engine for the YouTube feature (scriptlets, cosmetics, ad pings).
+const BUILTIN_YOUTUBE_RULES: &str = include_str!("../assets/builtin-youtube.txt");
+const BUILTIN_ID: &str = "athanor-builtin";
+const SCRIPTLET_SET_CONSTANT: &str = include_str!("../assets/scriptlets/set-constant.js");
+const SCRIPTLET_JSON_PRUNE: &str = include_str!("../assets/scriptlets/json-prune.js");
+const SCRIPTLET_ABORT_ON_PROPERTY: &str = include_str!("../assets/scriptlets/abort-on-property.js");
+
+/// Athanor's own scriptlets, written for this project (uBlock Origin's are GPL, Brave's resource pack ships only a
+/// handful). They use uBlock-compatible names and argument conventions, so the many filter-list rules that say
+/// `+js(set-constant, ...)`, `+js(json-prune, ...)`, `+js(aopr, ...)` start working. Function-style resources: the
+/// engine appends the call with the rule's arguments.
+fn builtin_resources() -> Vec<adblock::resources::Resource> {
+    use adblock::resources::{MimeType, PermissionMask, Resource, ResourceType};
+    use base64::Engine as _;
+    let make = |name: &str, aliases: &[&str], content: String| Resource {
+        name: name.to_string(),
+        aliases: aliases.iter().map(|a| (*a).to_string()).collect(),
+        kind: ResourceType::Mime(MimeType::ApplicationJavascript),
+        content: base64::engine::general_purpose::STANDARD.encode(content),
+        dependencies: Vec::new(),
+        permission: PermissionMask::default(),
+    };
+    // The abort scriptlet is shared: drop its header line and give each flavour its own one-argument function.
+    let abort_body = SCRIPTLET_ABORT_ON_PROPERTY
+        .split_once('\n')
+        .map_or("", |(_, rest)| rest);
+    let abort = |function: &str, mode: &str| {
+        format!("function {function}(chain) {{\n  const mode = '{mode}';\n{abort_body}")
+    };
+    vec![
+        make(
+            "set-constant.js",
+            &["set.js"],
+            SCRIPTLET_SET_CONSTANT.to_string(),
+        ),
+        make("json-prune.js", &[], SCRIPTLET_JSON_PRUNE.to_string()),
+        make(
+            "abort-on-property-read.js",
+            &["aopr.js"],
+            abort("athanorAbortOnPropertyRead", "read"),
+        ),
+        make(
+            "abort-on-property-write.js",
+            &["aopw.js"],
+            abort("athanorAbortOnPropertyWrite", "write"),
+        ),
+    ]
+}
 const DRM_OFF_JS: &str = include_str!("../assets/drm-off.js");
 
 /// Native resource category.
@@ -843,7 +891,10 @@ impl Blocker {
     }
     /// Built-in YouTube ad handling (data pruning, hiding, auto-skip). On by default; needs the blocker enabled.
     pub fn set_youtube_ad_skip(&self, on: bool) {
-        self.inner.youtube_ad_skip.store(on, Ordering::Relaxed);
+        // The engine carries the YouTube rules, so a real change recompiles it (an unchanged value is free).
+        if self.inner.youtube_ad_skip.swap(on, Ordering::Relaxed) != on {
+            self.rebuild();
+        }
     }
     pub fn youtube_ad_skip(&self) -> bool {
         self.inner.youtube_ad_skip.load(Ordering::Relaxed)
@@ -989,6 +1040,20 @@ impl Blocker {
                 lists.push((source, raw));
             }
         }
+        if self.youtube_ad_skip() {
+            hasher.update(BUILTIN_ID.as_bytes());
+            hasher.update(BUILTIN_YOUTUBE_RULES.as_bytes());
+            lists.push((
+                ListSource {
+                    id: BUILTIN_ID.into(),
+                    name: "Athanor built-in".into(),
+                    url: String::new(),
+                    kind: ListKind::Network,
+                    default_enabled: true,
+                },
+                BUILTIN_YOUTUBE_RULES.to_string(),
+            ));
+        }
         for (id, text) in self.inner.extra_lists.read().iter() {
             let source = ListSource {
                 id: format!("extension:{id}"),
@@ -1001,7 +1066,9 @@ impl Blocker {
             hasher.update(text.as_bytes());
             lists.push((source, text.clone()));
         }
-        let any = lists.iter().any(|(s, _)| s.kind != ListKind::Resources);
+        let any = lists
+            .iter()
+            .any(|(s, _)| s.kind != ListKind::Resources && s.id != BUILTIN_ID);
         if !any {
             hasher.update(FALLBACK.as_bytes());
         }
@@ -1116,7 +1183,9 @@ fn compile(raw: &[(ListSource, String)]) -> Compiled {
             }
             continue;
         }
-        any = true;
+        if source.id != BUILTIN_ID {
+            any = true;
+        }
         counts.insert(
             source.id.clone(),
             text.lines()
@@ -1131,7 +1200,8 @@ fn compile(raw: &[(ListSource, String)]) -> Compiled {
         let normalized_text = normalize_denyallow(text, &mut denyallow);
         let permissions = if source.id.starts_with("brave-") {
             adblock::resources::PermissionMask::from_bits(0b10)
-        } else if source.id.starts_with("ubo-") {
+        } else if source.id.starts_with("ubo-") || source.id == BUILTIN_ID {
+            // Our own rules are trusted: they may use the uBlock-compatible scriptlets (json-prune, set-constant...).
             adblock::resources::PermissionMask::from_bits(0b01)
         } else {
             Default::default()
@@ -1149,6 +1219,8 @@ fn compile(raw: &[(ListSource, String)]) -> Compiled {
         set.add_filter_list(FALLBACK.into(), ParseOptions::default());
     }
     let mut engine = Engine::new_with_filter_set(set);
+    // Downloaded packs first; a name they already define wins over ours.
+    resources.extend(builtin_resources());
     engine.use_resources(resources);
     let denyallow_keys = denyallow.keys().cloned().collect::<HashSet<_>>();
     let mut plain_rule_lines = HashSet::new();
@@ -1187,6 +1259,7 @@ fn decode_cache(bytes: &[u8], hash: &str, raw: &[(ListSource, String)]) -> Optio
         .filter(|(s, _)| s.kind == ListKind::Resources)
         .filter_map(|(_, s)| parse_resources(s).ok())
         .flatten()
+        .chain(builtin_resources())
         .collect::<Vec<_>>();
     engine.use_resources(resources);
     Some(Compiled {
@@ -1269,6 +1342,75 @@ fn is_youtube_host(host: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_builtin_youtube_rules_live_in_the_engine_and_follow_the_switch() {
+        let dir = std::env::temp_dir().join("athanor-builtin-engine");
+        let _ = std::fs::remove_dir_all(&dir);
+        let b = super::Blocker::new(dir);
+        b.rebuild();
+        let yt = "https://www.youtube.com/watch?v=x";
+        let css = b.cosmetic(yt).css;
+        assert!(
+            css.contains("ytd-ad-slot-renderer"),
+            "cosmetic rules compiled in: {css}"
+        );
+        let ping = super::Request {
+            url: "https://www.youtube.com/api/stats/ads?x=1",
+            source_url: yt,
+            resource_type: super::ResourceType::Xhr,
+        };
+        assert!(
+            matches!(b.check(&ping), super::Decision::Block { .. }),
+            "ad ping blocked"
+        );
+        // the embedded list must not displace the fallback list when nothing was downloaded
+        let tracker = super::Request {
+            url: "https://doubleclick.net/ad.js",
+            source_url: "https://example.com/",
+            resource_type: super::ResourceType::Script,
+        };
+        assert!(
+            matches!(b.check(&tracker), super::Decision::Block { .. }),
+            "fallback list still active"
+        );
+        b.set_youtube_ad_skip(false);
+        assert!(
+            !b.cosmetic(yt).css.contains("ytd-ad-slot-renderer"),
+            "rules leave with the switch"
+        );
+        assert!(matches!(b.check(&ping), super::Decision::Allow));
+        b.set_youtube_ad_skip(true);
+        assert!(b.cosmetic(yt).css.contains("ytd-ad-slot-renderer"));
+    }
+
+    #[test]
+    fn builtin_scriptlets_work_without_any_downloaded_resources() {
+        let dir = std::env::temp_dir().join("athanor-builtin-scriptlets");
+        let _ = std::fs::remove_dir_all(&dir);
+        let b = super::Blocker::new(dir);
+        b.rebuild();
+        let js = b.cosmetic("https://www.youtube.com/watch?v=x").js;
+        assert!(
+            js.contains("athanorJsonPrune"),
+            "json-prune scriptlet injected for the built-in rule"
+        );
+        assert!(
+            js.contains("athanorSetConstant"),
+            "set-constant scriptlet injected"
+        );
+        assert!(js.contains("adPlacements"), "with the rule's arguments");
+        let extra = vec![(
+            "t".to_string(),
+            "t.example.com##+js(aopr, adsReady)\nt.example.com##+js(set, adConfig.enabled, false)\n".to_string(),
+        )];
+        assert!(b.set_extra_lists(extra).is_empty());
+        let js = b.cosmetic("https://t.example.com/").js;
+        assert!(
+            js.contains("athanorAbortOnPropertyRead(") && js.contains("athanorSetConstant("),
+            "uBlock aliases resolve: {js}"
+        );
+    }
+
     #[test]
     fn youtube_hosts_are_recognised() {
         for host in [

@@ -104,3 +104,52 @@ test("drm: encrypted media is refused and the API surface is removed", async () 
   assert.equal(video.mediaKeys, null);
   await assert.rejects(video.setMediaKeys(null), (e) => e.name === "NotSupportedError");
 });
+
+// ---- Athanor's own scriptlets (assets/scriptlets): the engine calls them with the rule's arguments.
+const scriptlet = (name) => fs.readFileSync(path.join(__dirname, "..", "assets", "scriptlets", name), "utf8");
+
+test("scriptlet set-constant: owner objects created later are covered, values parse", () => {
+  const { window } = page();
+  window.eval(scriptlet("set-constant.js"));
+  window.athanorSetConstant("player.config.ads", "undefined");
+  window.athanorSetConstant("flags.level", "3");
+  window.athanorSetConstant("flags.off", "false");
+  window.eval("var player = { config: { ads: [1], keep: 1 } }; var flags = {};");
+  assert.equal(window.player.config.ads, undefined);
+  assert.equal(window.player.config.keep, 1);
+  assert.equal(window.flags.level, 3);
+  assert.equal(window.flags.off, false);
+  window.athanorSetConstant("bad", "{evil}"); // unsupported value: ignored
+  assert.equal("bad" in window, false);
+});
+
+test("scriptlet json-prune: wildcard paths, needle gating, JSON.parse only affected when needles exist", () => {
+  const { window } = page();
+  window.eval(scriptlet("json-prune.js"));
+  window.athanorJsonPrune("a.b items.[].ad", "");
+  const parsed = window.JSON.parse(JSON.stringify({ a: { b: 1, c: 2 }, items: [{ ad: 1, id: 1 }, { ad: 2, id: 2 }] }));
+  assert.equal(parsed.a.b, undefined);
+  assert.equal(parsed.a.c, 2);
+  assert.equal(parsed.items[0].ad, undefined);
+  assert.equal(parsed.items[1].id, 2);
+  // a second rule adds to the same wrapper instead of wrapping twice
+  window.athanorJsonPrune("gate.secret", "gate.marker");
+  const gated = window.JSON.parse(JSON.stringify({ gate: { secret: 1, marker: 1 } }));
+  assert.equal(gated.gate.secret, undefined, "needle present: pruned");
+  const ungated = window.JSON.parse(JSON.stringify({ gate: { secret: 1 } }));
+  assert.equal(ungated.gate.secret, 1, "needle absent: left alone");
+});
+
+test("scriptlets abort-on-property-read / -write", () => {
+  const { window } = page();
+  const body = scriptlet("abort-on-property.js").split("\n").slice(1).join("\n");
+  window.eval(`function athanorAbortOnPropertyRead(chain) {\n  const mode = 'read';\n${body}`);
+  window.eval(`function athanorAbortOnPropertyWrite(chain) {\n  const mode = 'write';\n${body}`);
+  window.athanorAbortOnPropertyRead("adsReady");
+  assert.throws(() => window.eval("adsReady"), /ReferenceError|[a-z0-9]{6,}/);
+  window.athanorAbortOnPropertyWrite("adsConfig.enabled");
+  window.eval("var adsConfig = {}");
+  assert.throws(() => window.eval("adsConfig.enabled = true"));
+  window.eval("adsConfig.other = 1");
+  assert.equal(window.adsConfig.other, 1);
+});

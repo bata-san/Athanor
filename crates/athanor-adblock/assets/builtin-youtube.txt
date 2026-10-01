@@ -1,0 +1,35 @@
+! Athanor built-in rules: YouTube (adblock-rust / uBlock Origin filter syntax).
+! Compiled into the same engine as every other list, so scriptlets, cosmetic rules and network rules go through the
+! engine's own machinery. youtube-ads.js (injected alongside) is the fallback for anything these miss and for
+! the case where the scriptlet resources have not been downloaded yet.
+! Written for this project; switched on and off with the "Skip YouTube ads" setting.
+
+! Strip ad data from player responses before the player sees it.
+youtube.com,youtube-nocookie.com##+js(json-prune, playerResponse.adPlacements playerResponse.playerAds playerResponse.adSlots adPlacements playerAds adSlots)
+youtube.com,youtube-nocookie.com##+js(set-constant, ytInitialPlayerResponse.playerAds, undefined)
+youtube.com,youtube-nocookie.com##+js(set-constant, ytInitialPlayerResponse.adPlacements, undefined)
+youtube.com,youtube-nocookie.com##+js(set-constant, ytInitialPlayerResponse.adSlots, undefined)
+
+! Ad containers.
+youtube.com##.video-ads.ytp-ad-module
+youtube.com##.ytp-ad-overlay-container
+youtube.com##.ytp-paid-content-overlay
+youtube.com###masthead-ad
+youtube.com###player-ads
+youtube.com##ytd-display-ad-renderer
+youtube.com##ytd-ad-slot-renderer
+youtube.com##ytd-in-feed-ad-layout-renderer
+youtube.com##ytd-banner-promo-renderer
+youtube.com##ytd-statement-banner-renderer
+youtube.com##ytd-promoted-sparkles-web-renderer
+youtube.com##ytd-promoted-video-renderer
+youtube.com##ytd-companion-slot-renderer
+youtube.com##ytd-action-companion-ad-renderer
+youtube.com##ytd-player-legacy-desktop-watch-ads-renderer
+youtube.com##ytd-rich-item-renderer:has(> #content > ytd-ad-slot-renderer)
+
+! Ad tracking pings that carry no video.
+||youtube.com/api/stats/ads$xhr,image,ping,~third-party
+||youtube.com/pagead/$xhr,image,ping,~third-party
+||youtube.com/ptracking$xhr,image,ping,~third-party
+||youtube.com/get_midroll_info$xhr,~third-party
