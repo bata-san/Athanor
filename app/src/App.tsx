@@ -192,7 +192,8 @@ export function App() {
     const tab = current?.workspace.tabs.find((item) => item.id === current.workspace.activeTab)
     // Backend-owned keys pressed while the shell has focus are forwarded (the page never saw them).
     if (!fromNative && owner === 'backend') { void api.runShortcut(combo); return }
-    if (combo === 'Ctrl+F' && tab && !tab.url.startsWith('athanor://')) { setFindOpen(true); setFindSeed((value) => value + 1) }
+    if (combo === 'Ctrl+F' && tab && tab.url.startsWith('athanor://')) toast('Find isn’t available on Athanor pages', { duration: 2200 })
+    else if (combo === 'Ctrl+F' && tab) { setFindOpen(true); setFindSeed((value) => value + 1) }
     else if ((combo === 'Ctrl+G' || combo === 'Ctrl+Shift+G') && tab) { if (findOpen) findCommand.current?.(combo === 'Ctrl+G' ? 'next' : 'prev'); else if (!tab.url.startsWith('athanor://')) { setFindOpen(true); setFindSeed((value) => value + 1) } }
     else if (combo === 'Ctrl+D' && tab) { void api.setPinned(tab.id, !tab.pinned); toast(tab.pinned ? 'Unpinned' : 'Pinned to the top of the sidebar', { duration: 1800 }) }
     else if (combo === 'Ctrl+,') openInternalPage('settings')
@@ -285,7 +286,7 @@ export function App() {
         {mobile && !standaloneBoardWindow && <MobileBar snapshot={snapshot} activeTab={activeTab} openBar={showBar} openSwitcher={() => setSwitcherOpen(true)} openMenu={() => openBar('navigate', '')} openPage={openInternalPage} />}
         <AnimatePresence initial={false}>{findOpen && framed && shownTab && !internalPage && <FindBar key="find" tab={shownTab.id} url={shownTab.url} seed={findSeed} onClose={closeFind} commandRef={findCommand} />}</AnimatePresence>
         <section ref={contentRef} className={cn('content relative min-h-0 min-w-0 flex-1 overflow-hidden bg-background', mobile ? 'mobile-content' : standaloneBoardWindow ? '' : 'rounded-[var(--ath-stage-radius)] shadow-[var(--ath-stage-shadow)]')} data-part="content" data-split={String(splitActive)}>
-          <div key={`${currentPage}|${panel?.id ?? ''}|${internalPage ? shownTab?.url : 'web'}`} className="absolute inset-0 animate-[ath-rise_220ms_var(--ease-spring)_both]">
+          <div key={`${currentPage}|${panel?.id ?? ''}|${internalPage ? shownTab?.url : 'web'}`} className="absolute inset-0 animate-[ath-rise_160ms_var(--ease-snap)_both]">
           {currentPage === 'browser' && (panel
             ? <PanelView panel={panel} />
             : !internalPage ? (isMock ? shownTab ? <MockPage tab={shownTab} snapshot={snapshot} /> : <NewTabPage servers={servers} onNavigate={openTabUrl} /> : null)

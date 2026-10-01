@@ -51,6 +51,12 @@ pub struct Settings {
     pub site_zoom: std::collections::HashMap<String, f64>,
     /// Remembered answers to permission prompts: `"https://host|camera"` -> allowed.
     pub site_permissions: std::collections::HashMap<String, bool>,
+    /// Interface size in percent (100-200): text, controls and menus scale together.
+    pub ui_scale: u32,
+    /// Cut animations down to fades, whatever the system says.
+    pub reduce_motion: bool,
+    /// Stronger text and border contrast, whatever the system says.
+    pub high_contrast: bool,
 }
 
 impl Default for Settings {
@@ -75,6 +81,9 @@ impl Default for Settings {
             auto_update: true,
             site_zoom: Default::default(),
             site_permissions: Default::default(),
+            ui_scale: 100,
+            reduce_motion: false,
+            high_contrast: false,
         }
     }
 }
@@ -100,6 +109,9 @@ pub struct SettingsPatch {
     pub onboarded: Option<bool>,
     pub web_font: Option<bool>,
     pub auto_update: Option<bool>,
+    pub ui_scale: Option<u32>,
+    pub reduce_motion: Option<bool>,
+    pub high_contrast: Option<bool>,
 }
 
 impl Settings {
@@ -124,7 +136,10 @@ impl Settings {
             block_drm,
             onboarded,
             web_font,
-            auto_update
+            auto_update,
+            ui_scale,
+            reduce_motion,
+            high_contrast
         );
         self.sanitize();
     }
@@ -138,6 +153,7 @@ impl Settings {
             self.sidebar_side = "left".into();
         }
         self.sidebar_width = self.sidebar_width.clamp(180, 520);
+        self.ui_scale = (self.ui_scale.clamp(100, 200) + 2) / 5 * 5; // steps of 5 %
         self.site_zoom.retain(|host, factor| {
             !host.is_empty() && factor.is_finite() && (*factor - 1.0).abs() >= 0.01
         });
@@ -285,6 +301,8 @@ mod tests {
         assert_eq!(s.new_tab_url(), "https://www.google.com/");
         assert!(!s.onboarded && s.youtube_ad_skip && !s.block_drm);
         assert!(s.web_font && s.auto_update);
+        assert_eq!(s.ui_scale, 100);
+        assert!(!s.reduce_motion && !s.high_contrast);
     }
 
     #[test]

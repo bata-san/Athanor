@@ -48,11 +48,11 @@ export default function DevPanel({ onClose, snapshot }: { onClose: () => void; s
 
     {section === 'Tools' && <div className="grid min-h-0 flex-1 grid-cols-[14rem_minmax(0,1fr)] max-md:grid-cols-[7.5rem_minmax(0,1fr)]">
       <div className="flex min-h-0 flex-col gap-0.5 overflow-y-auto border-e border-border p-2">
-        {tools.map((item) => <button key={item.id} data-active={String(tool === item.id)} onClick={() => { setTool(item.id); setOutput('') }} className="flex h-8 min-w-0 items-center gap-2 rounded-lg px-2 text-start text-[13px] text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 data-[active=true]:bg-accent data-[active=true]:text-foreground max-md:min-h-11"><AppIcon name={item.icon} className="size-4 shrink-0" /><span className="truncate">{item.label}</span></button>)}
+        {tools.map((item) => <button key={item.id} data-active={String(tool === item.id)} onClick={() => { setTool(item.id); setOutput('') }} className="flex h-8 min-w-0 items-center gap-2 rounded-lg px-2 text-start text-[0.8667rem] text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 data-[active=true]:bg-accent data-[active=true]:text-foreground max-md:min-h-11"><AppIcon name={item.icon} className="size-4 shrink-0" /><span className="truncate">{item.label}</span></button>)}
       </div>
       <div className="flex min-h-0 flex-col gap-2 overflow-y-auto p-3">
         <label htmlFor="dev-input" className="text-xs font-medium text-muted-foreground">Input</label>
-        <Textarea id="dev-input" value={input} onChange={(event) => setInput(event.target.value)} className="min-h-24 resize-y font-mono text-[13px]" />
+        <Textarea id="dev-input" value={input} onChange={(event) => setInput(event.target.value)} className="min-h-24 resize-y font-mono text-[0.8667rem]" />
         <div className="flex items-center gap-2">
           <Button size="sm" onClick={() => void run()}>Run tool</Button>
           <Button variant="ghost" size="sm" onClick={() => setInput('')}>Clear</Button>
@@ -61,7 +61,7 @@ export default function DevPanel({ onClose, snapshot }: { onClose: () => void; s
           <span className="text-xs font-medium text-muted-foreground">Output</span>
           <Button variant="outline" size="sm" disabled={!output} onClick={copyOutput}><AppIcon name={copied ? 'Check' : 'Copy'} />{copied ? 'Copied' : 'Copy output'}</Button>
         </div>
-        <pre className="min-h-24 flex-1 overflow-auto rounded-lg border border-border bg-muted/40 p-3 font-mono text-[13px] whitespace-pre-wrap">{output || 'Your result will appear here.'}</pre>
+        <pre className="min-h-24 flex-1 overflow-auto rounded-lg border border-border bg-muted/40 p-3 font-mono text-[0.8667rem] whitespace-pre-wrap">{output || 'Your result will appear here.'}</pre>
       </div>
     </div>}
 
@@ -69,7 +69,7 @@ export default function DevPanel({ onClose, snapshot }: { onClose: () => void; s
       {servers.length ? servers.map((server) => <div key={server.url} className="flex items-center justify-between gap-4 rounded-xl border border-border p-3">
         <div className="flex min-w-0 flex-col gap-0.5">
           <span className="truncate text-sm font-medium">{server.title ?? `localhost:${server.port}`}</span>
-          <span className="truncate text-[13px] text-muted-foreground">{server.url}</span>
+          <span className="truncate text-[0.8667rem] text-muted-foreground">{server.url}</span>
         </div>
         <Button size="sm" className="shrink-0" onClick={() => openServer(server.url)}>Open</Button>
       </div>) : <Callout><AppIcon name="Globe2" className="size-4 shrink-0" />No local development servers detected.</Callout>}
@@ -79,7 +79,7 @@ export default function DevPanel({ onClose, snapshot }: { onClose: () => void; s
     {section === 'Responsive' && <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
       <div>
         <h3 className="m-0 text-sm font-semibold">Viewport emulation</h3>
-        <p className="m-0 mt-0.5 text-[13px] text-muted-foreground">Resize the active native page inside its slot.</p>
+        <p className="m-0 mt-0.5 text-[0.8667rem] text-muted-foreground">Resize the active native page inside its slot.</p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <div className="inline-flex items-center gap-1 rounded-lg border border-border p-1">
@@ -92,7 +92,7 @@ export default function DevPanel({ onClose, snapshot }: { onClose: () => void; s
     {section === 'Page' && <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
       <div>
         <h3 className="m-0 text-sm font-semibold">Page developer tools</h3>
-        <p className="m-0 mt-0.5 text-[13px] text-muted-foreground">Open the native inspector for the current page.</p>
+        <p className="m-0 mt-0.5 text-[0.8667rem] text-muted-foreground">Open the native inspector for the current page.</p>
       </div>
       <div><Button onClick={() => active && api.openDevtools(active.id)} disabled={!active}><AppIcon name="Bug" />Open developer tools</Button></div>
     </div>}

@@ -181,6 +181,8 @@ pub fn run() {
             commands::find_in_page,
             commands::hard_reload,
             commands::print_page,
+            commands::set_software_rendering,
+            commands::reopen_closed,
             commands::resolve_script_dialog,
             commands::resolve_permission,
             commands::reset_site_permissions,

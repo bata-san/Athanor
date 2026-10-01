@@ -8,7 +8,7 @@
   --popover: #ffffff; --popover-foreground: #0a0a0a;
   --primary: #0f0f10; --primary-foreground: #fafafa;
   --secondary: #f4f4f5; --secondary-foreground: #18181b;
-  --muted: #f4f4f5; --muted-foreground: #71717a;
+  --muted: #f4f4f5; --muted-foreground: #666670;
   --accent: #f4f4f5; --accent-foreground: #18181b;
   --destructive: #dc2626; --destructive-foreground: #fafafa;
   --border: #e4e4e7; --input: #e4e4e7; --ring: #a1a1aa; --radius: 0.5rem;
@@ -60,13 +60,13 @@
   --font-sans: var(--font-ui); --font-mono: var(--font-mono); --font-instr: var(--font-instr);
   --radius-sm: calc(var(--radius) - 0.25rem); --radius-md: calc(var(--radius) - 0.125rem); --radius-lg: var(--radius); --radius-xl: calc(var(--radius) + 0.25rem); --radius-2xl: calc(var(--radius) + 0.5rem);
   --shadow-menu: var(--ath-shadow-menu);
-  --animate-in: ath-in 190ms var(--ease-spring) both; --animate-out: ath-out 90ms cubic-bezier(0.4, 0, 1, 1) both;
+  --animate-in: ath-in 130ms var(--ease-snap) both; --animate-out: ath-out 90ms cubic-bezier(0.4, 0, 1, 1) both;
 }
 /* Popups grow out of the point they were opened from (Radix exposes it as --radix-popper-transform-origin). */
-@keyframes ath-in { from { opacity: 0; transform: scale(0.92) translateY(-3px); } to { opacity: 1; transform: none; } }
+@keyframes ath-in { from { opacity: 0; transform: scale(0.975); } to { opacity: 1; transform: none; } }
 @keyframes ath-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(0.96); } }
 @keyframes ath-fade { from { opacity: 0; } to { opacity: 1; } }
-@keyframes ath-rise { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes ath-rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @keyframes ath-sheet { from { transform: translateY(100%); } to { transform: none; } }
 
 /* Sidebar: labels fade and fold away while the width animates, so collapsing never reflows abruptly. */
@@ -88,3 +88,12 @@ svg.lucide { stroke-width: 1.75; }
 @keyframes ath-indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
 .tnum { font-variant-numeric: tabular-nums; }
 @keyframes ath-tick { 0%, 100% { opacity: 0.18; transform: scaleY(0.6); } 50% { opacity: 1; transform: scaleY(1); } }
+
+/* Increase Contrast (system or ours): text and the edges of controls clearly separate from what is behind them.
+   Edges reach 3:1, secondary text 7:1, in both appearances. */
+@media (prefers-contrast: more) {
+  :root { --muted-foreground: #3f3f46; --border: #8a8a93; --input: #8a8a93; --sidebar-border: #8a8a93; --ring: #27272a; }
+  :root[data-theme-dark='true'] { --muted-foreground: #d4d4d8; --border: #71717a; --input: #71717a; --sidebar-border: #71717a; --ring: #e4e4e7; }
+}
+:root[data-contrast='high'] { --muted-foreground: #3f3f46; --border: #8a8a93; --input: #8a8a93; --sidebar-border: #8a8a93; --ring: #27272a; }
+:root[data-contrast='high'][data-theme-dark='true'] { --muted-foreground: #d4d4d8; --border: #71717a; --input: #71717a; --sidebar-border: #71717a; --ring: #e4e4e7; }

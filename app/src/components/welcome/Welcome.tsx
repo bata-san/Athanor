@@ -48,14 +48,14 @@ export function Welcome({ snapshot, onDone }: { snapshot: Snapshot; onDone: () =
     {/* left: where you are */}
     <aside className="relative hidden w-[40%] max-w-[38rem] shrink-0 flex-col justify-between overflow-hidden bg-foreground p-10 text-background md:flex">
       <div className="pointer-events-none absolute -bottom-1/3 -start-1/4 size-[120%] rounded-full opacity-[0.10]" style={{ background: 'radial-gradient(closest-side, currentColor, transparent)' }} aria-hidden="true" />
-      <header className="relative flex items-center gap-3 text-[15px] font-semibold tracking-tight"><span className="grid size-8 place-items-center rounded-lg bg-background text-foreground"><AthanorMark className="size-[18px]" /></span>Athanor</header>
+      <header className="relative flex items-center gap-3 text-[1rem] font-semibold tracking-tight"><span className="grid size-8 place-items-center rounded-lg bg-background text-foreground"><AthanorMark className="size-[1.2rem]" /></span>Athanor</header>
       <nav className="relative" aria-label="Setup progress">
         <ol className="m-0 flex list-none flex-col gap-1 p-0">
           {STEPS.map((label, index) => <li key={label}>
             <button type="button" disabled={index > step} onClick={() => index <= step && go(index)} aria-current={index === step ? 'step' : undefined}
               className={cn('group relative flex w-full items-baseline gap-4 rounded-lg px-3 py-2 text-start outline-none transition-colors focus-visible:ring-2 focus-visible:ring-background/40', index === step ? 'text-background' : index < step ? 'text-background/60 hover:text-background' : 'text-background/30')}>
               {index === step && <m.span layoutId="welcome-rail" transition={snap} className="absolute inset-y-1 start-0 w-0.5 rounded-full bg-background" />}
-              <span className="font-instr text-[11px] tabular-nums opacity-70">{String(index + 1).padStart(2, '0')}</span>
+              <span className="font-instr text-[0.7333rem] tabular-nums opacity-70">{String(index + 1).padStart(2, '0')}</span>
               <span className="text-[1.6rem] font-semibold leading-tight tracking-tight">{label}</span>
               {index < step && <Check className="ms-auto size-4 self-center opacity-70" />}
             </button>
@@ -101,7 +101,7 @@ export function Welcome({ snapshot, onDone }: { snapshot: Snapshot; onDone: () =
 
 /** Five labelled stops on a hairline, the active one marked: for narrow screens. */
 function StepScale({ steps, step, onPick }: { steps: readonly StepName[]; step: number; onPick: (index: number) => void }) {
-  return <ol className="flex min-w-0 flex-1 items-center gap-1 font-instr text-[10px] uppercase tracking-[0.16em] text-muted-foreground max-md:gap-0.5" aria-label="Setup progress">
+  return <ol className="flex min-w-0 flex-1 items-center gap-1 font-instr text-[0.7333rem] uppercase tracking-[0.16em] text-muted-foreground max-md:gap-0.5" aria-label="Setup progress">
     {steps.map((name, index) => <li key={name} className="flex items-center gap-1 max-md:flex-1">
       <button type="button" disabled={index > step} onClick={() => onPick(index)} aria-current={index === step ? 'step' : undefined}
         className={cn('relative flex items-center gap-1.5 rounded px-1.5 py-1 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/40 enabled:hover:text-foreground', index === step && 'text-foreground', index > step && 'opacity-50')}>
@@ -116,10 +116,10 @@ function StepScale({ steps, step, onPick }: { steps: readonly StepName[]; step: 
 
 function Title({ index, children, sub, jp }: { index: string; children: React.ReactNode; sub?: React.ReactNode; jp?: string }) {
   return <div className="mb-7">
-    <div className="mb-3 font-instr text-[10px] uppercase tracking-[0.3em] text-muted-foreground">{index}</div>
+    <div className="mb-3 font-instr text-[0.7333rem] uppercase tracking-[0.3em] text-muted-foreground">{index}</div>
     <h1 className="m-0 text-[2rem] font-semibold leading-[1.1] tracking-tight">{children}</h1>
-    {sub && <p className="m-0 mt-3 text-[13.5px] leading-relaxed text-muted-foreground">{sub}</p>}
-    {jp && <p className="m-0 mt-1 text-[12px] leading-relaxed text-muted-foreground/70">{jp}</p>}
+    {sub && <p className="m-0 mt-3 text-[0.9rem] leading-relaxed text-muted-foreground">{sub}</p>}
+    {jp && <p className="m-0 mt-1 text-[0.8rem] leading-relaxed text-muted-foreground/70">{jp}</p>}
   </div>
 }
 
@@ -137,7 +137,7 @@ function Count({ value }: { value: number }) {
 
 function Chip({ checked, onChange, children, disabled }: { checked: boolean; onChange: (value: boolean) => void; children: React.ReactNode; disabled?: boolean }) {
   return <button type="button" role="switch" aria-checked={checked} disabled={disabled} onClick={() => onChange(!checked)}
-    className={cn('inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50', checked ? 'border-foreground bg-foreground text-background' : 'border-border text-muted-foreground hover:bg-accent')}>
+    className={cn('inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[0.8667rem] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50', checked ? 'border-foreground bg-foreground text-background' : 'border-border text-muted-foreground hover:bg-accent')}>
     <Check className={cn('size-3.5 transition-opacity', checked ? 'opacity-100' : 'opacity-0')} />{children}
   </button>
 }
@@ -145,7 +145,7 @@ function Chip({ checked, onChange, children, disabled }: { checked: boolean; onC
 function ToggleRow({ icon, title, description, checked, onChange }: { icon: React.ReactNode; title: string; description: string; checked: boolean; onChange: (value: boolean) => void }) {
   return <div className="flex items-start gap-3 py-2.5">
     <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-secondary text-foreground [&_svg]:size-4">{icon}</span>
-    <div className="min-w-0 flex-1"><div className="text-[13.5px] font-medium leading-5">{title}</div><div className="text-xs leading-[1.45] text-muted-foreground">{description}</div></div>
+    <div className="min-w-0 flex-1"><div className="text-[0.9rem] font-medium leading-5">{title}</div><div className="text-xs leading-[1.45] text-muted-foreground">{description}</div></div>
     <Switch checked={checked} aria-label={title} onCheckedChange={onChange} className="mt-1" />
   </div>
 }
@@ -162,8 +162,8 @@ function IntroStep() {
     <Title index="Welcome" sub="A quiet, fast browser for people who keep a lot open." jp="静かで速い、たくさん開く人のためのブラウザ。">Welcome to Athanor.</Title>
     <ul className="m-0 flex list-none flex-col gap-1 p-0">
       {rows.map(([icon, title, text], index) => <m.li key={title} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ ...enter, delay: 0.08 * index }} className="flex items-start gap-3.5 rounded-xl border border-transparent px-1 py-2.5">
-        <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-border bg-card [&_svg]:size-[18px]">{icon}</span>
-        <span className="min-w-0"><span className="block text-[14px] font-medium">{title}</span><span className="block text-[12.5px] leading-[1.5] text-muted-foreground">{text}</span></span>
+        <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-border bg-card [&_svg]:size-[1.2rem]">{icon}</span>
+        <span className="min-w-0"><span className="block text-[0.9333rem] font-medium">{title}</span><span className="block text-[0.8333rem] leading-[1.5] text-muted-foreground">{text}</span></span>
       </m.li>)}
     </ul>
   </div>
@@ -212,50 +212,50 @@ function ImportStep({ imported, onImported }: { imported: ImportReport[]; onImpo
 
     <AnimatePresence mode="wait" initial={false}>
       {phase === 'running' && <m.div key="running" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="rounded-2xl border border-border bg-card p-6">
-        <div className="flex items-center gap-3 text-[13.5px] font-medium"><Loader2 className="size-4 animate-spin" /><m.span key={status} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}>{status}</m.span></div>
-        <div className="mt-5 flex h-4 items-end gap-[3px]" aria-hidden="true">{Array.from({ length: 48 }, (_, i) => <span key={i} className="block w-px flex-1 rounded-full bg-foreground [animation:ath-tick_1.2s_ease-in-out_infinite]" style={{ height: i % 6 === 0 ? 16 : i % 2 === 0 ? 10 : 6, animationDelay: `${i * 22}ms` }} />)}</div>
+        <div className="flex items-center gap-3 text-[0.9rem] font-medium"><Loader2 className="size-4 animate-spin" /><m.span key={status} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}>{status}</m.span></div>
+        <div className="mt-5 flex h-4 items-end gap-[0.2rem]" aria-hidden="true">{Array.from({ length: 48 }, (_, i) => <span key={i} className="block w-px flex-1 rounded-full bg-foreground [animation:ath-tick_1.2s_ease-in-out_infinite]" style={{ height: i % 6 === 0 ? 16 : i % 2 === 0 ? 10 : 6, animationDelay: `${i * 22}ms` }} />)}</div>
       </m.div>}
 
       {phase === 'done' && report && <m.div key="done" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
         <div className="grid grid-cols-3 gap-2">
-          {([['Bookmarks', report.bookmarks], ['Folders', report.folders], ['History', report.history]] as const).map(([label, value]) => <div key={label} className="rounded-xl border border-border bg-card p-3.5"><div className="font-instr text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{label}</div><div className="mt-1 font-instr text-2xl tabular-nums"><Count value={value} /></div></div>)}
+          {([['Bookmarks', report.bookmarks], ['Folders', report.folders], ['History', report.history]] as const).map(([label, value]) => <div key={label} className="rounded-xl border border-border bg-card p-3.5"><div className="font-instr text-[0.7333rem] uppercase tracking-[0.18em] text-muted-foreground">{label}</div><div className="mt-1 font-instr text-2xl tabular-nums"><Count value={value} /></div></div>)}
         </div>
-        <p className="mt-3 text-[12.5px] leading-[1.5] text-muted-foreground">{report.bookmarks > 0 ? 'Bookmarks are waiting in their own space as archived tabs: click one to open it. ' : ''}{report.history > 0 ? 'Your history now powers the address suggestions.' : ''}{report.skipped > 0 ? ` ${report.skipped} duplicates were skipped.` : ''}</p>
+        <p className="mt-3 text-[0.8333rem] leading-[1.5] text-muted-foreground">{report.bookmarks > 0 ? 'Bookmarks are waiting in their own space as archived tabs: click one to open it. ' : ''}{report.history > 0 ? 'Your history now powers the address suggestions.' : ''}{report.skipped > 0 ? ` ${report.skipped} duplicates were skipped.` : ''}</p>
         {report.warnings.length > 0 && <p className="mt-2 text-xs text-muted-foreground">{report.warnings.join(' · ')}</p>}
         <div className="mt-4 flex gap-2"><Button variant="outline" size="sm" onClick={() => { setPhase('idle'); setReport(null) }}>Import another</Button></div>
       </m.div>}
 
       {(phase === 'idle' || phase === 'error') && <m.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-        {browsers === null && <div className="flex items-center gap-2 py-6 text-[13px] text-muted-foreground"><Loader2 className="size-4 animate-spin" />Looking for browsers…</div>}
-        {browsers !== null && browsers.length === 0 && <div className="rounded-xl border border-dashed border-border px-4 py-5 text-[13px] text-muted-foreground">No other browsers were found on this computer. You can still import a bookmarks file.</div>}
+        {browsers === null && <div className="flex items-center gap-2 py-6 text-[0.8667rem] text-muted-foreground"><Loader2 className="size-4 animate-spin" />Looking for browsers…</div>}
+        {browsers !== null && browsers.length === 0 && <div className="rounded-xl border border-dashed border-border px-4 py-5 text-[0.8667rem] text-muted-foreground">No other browsers were found on this computer. You can still import a bookmarks file.</div>}
         {browsers !== null && browsers.length > 0 && <div role="radiogroup" aria-label="Browser to import from" className="flex flex-col gap-1.5">
           {browsers.map((browser) => {
             const selected = browser.id === browserId
             return <button key={browser.id} type="button" role="radio" aria-checked={selected} onClick={() => { setBrowserId(browser.id); setProfileId(browser.profiles[0]?.id ?? null) }}
               className={cn('flex items-center gap-3 rounded-xl border px-3.5 py-2.5 text-start outline-none transition-[border-color,background-color,box-shadow] focus-visible:ring-2 focus-visible:ring-ring/40', selected ? 'border-foreground bg-card shadow-sm' : 'border-border hover:bg-accent/60')}>
               <span className={cn('grid size-8 shrink-0 place-items-center rounded-lg font-instr text-sm uppercase transition-colors', selected ? 'bg-foreground text-background' : 'bg-secondary')}>{browser.name[0]}</span>
-              <span className="min-w-0 flex-1"><span className="block text-[13.5px] font-medium">{browser.name}</span><span className="block text-xs text-muted-foreground">{browser.profiles.length === 1 ? browser.profiles[0]!.name : `${browser.profiles.length} profiles`}</span></span>
+              <span className="min-w-0 flex-1"><span className="block text-[0.9rem] font-medium">{browser.name}</span><span className="block text-xs text-muted-foreground">{browser.profiles.length === 1 ? browser.profiles[0]!.name : `${browser.profiles.length} profiles`}</span></span>
               <span className={cn('grid size-4 place-items-center rounded-full border transition-colors', selected ? 'border-foreground bg-foreground text-background' : 'border-border')}>{selected && <Check className="size-3" />}</span>
             </button>
           })}
         </div>}
 
-        {current && current.profiles.length > 1 && <div className="mt-3 flex items-center gap-3"><span className="text-[13px] text-muted-foreground">Profile</span>
+        {current && current.profiles.length > 1 && <div className="mt-3 flex items-center gap-3"><span className="text-[0.8667rem] text-muted-foreground">Profile</span>
           <Select value={profileId ?? undefined} onValueChange={setProfileId}><SelectTrigger className="w-60" aria-label="Profile"><SelectValue /></SelectTrigger><SelectContent>{current.profiles.map((entry) => <SelectItem key={entry.id} value={entry.id}>{entry.name}</SelectItem>)}</SelectContent></Select>
         </div>}
 
-        {current && <div className="mt-4 flex flex-wrap items-center gap-2"><span className="text-[13px] text-muted-foreground">Bring</span>
+        {current && <div className="mt-4 flex flex-wrap items-center gap-2"><span className="text-[0.8667rem] text-muted-foreground">Bring</span>
           <Chip checked={bookmarks && !!profile?.hasBookmarks} disabled={!profile?.hasBookmarks} onChange={setBookmarks}>Bookmarks</Chip>
           <Chip checked={history && !!profile?.hasHistory} disabled={!profile?.hasHistory} onChange={setHistory}>History</Chip>
         </div>}
 
-        {phase === 'error' && <div role="alert" className="mt-4 rounded-xl border border-destructive/40 bg-destructive/5 px-3.5 py-2.5 text-[12.5px] leading-[1.5] text-destructive">{error || 'The import failed.'}{current && /lock|use|access/i.test(error) ? ' Close the other browser and try again.' : ''}</div>}
+        {phase === 'error' && <div role="alert" className="mt-4 rounded-xl border border-destructive/40 bg-destructive/5 px-3.5 py-2.5 text-[0.8333rem] leading-[1.5] text-destructive">{error || 'The import failed.'}{current && /lock|use|access/i.test(error) ? ' Close the other browser and try again.' : ''}</div>}
 
         <div className="mt-5 flex flex-wrap items-center gap-2">
           {current && profile && <Button className="gap-1.5" disabled={!(bookmarks && profile.hasBookmarks) && !(history && profile.hasHistory)} onClick={() => void run({ source: { kind: 'browser', browser: current.id, profile: profile.id }, bookmarks: bookmarks && profile.hasBookmarks, history: history && profile.hasHistory }, current.name)}><Download />Import from {current.name}</Button>}
           <Button variant="outline" className="gap-1.5" onClick={() => void importFile()}><FileText />Bookmarks file…</Button>
         </div>
-        <p className="mt-4 text-[11.5px] leading-[1.5] text-muted-foreground/80">Passwords, cookies and saved cards are never imported. {imported.length > 0 ? 'You can import more than once.' : 'You can also do this later from the command bar.'}</p>
+        <p className="mt-4 text-[0.7667rem] leading-[1.5] text-muted-foreground/80">Passwords, cookies and saved cards are never imported. {imported.length > 0 ? 'You can import more than once.' : 'You can also do this later from the command bar.'}</p>
       </m.div>}
     </AnimatePresence>
   </div>
@@ -280,7 +280,7 @@ function MiniShell({ dark, side }: { dark: boolean; side: 'left' | 'right' }) {
 function Segmented<T extends string>({ value, onChange, options, label }: { value: T; onChange: (value: T) => void; options: { value: T; label: string; icon?: React.ReactNode }[]; label: string }) {
   return <div role="radiogroup" aria-label={label} className="inline-flex gap-0.5 rounded-lg bg-muted p-0.5">
     {options.map((option) => <button key={option.value} type="button" role="radio" aria-checked={value === option.value} onClick={() => onChange(option.value)}
-      className={cn('inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-[13px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/40 [&_svg]:size-3.5', value === option.value ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>{option.icon}{option.label}</button>)}
+      className={cn('inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-[0.8667rem] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/40 [&_svg]:size-3.5', value === option.value ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>{option.icon}{option.label}</button>)}
   </div>
 }
 
@@ -298,14 +298,14 @@ function LookStep({ snapshot }: { snapshot: Snapshot }) {
         const selected = dark === isDark
         return <button key={id} type="button" role="radio" aria-checked={selected} onClick={() => pick(id, isDark)} className={cn('rounded-xl border p-2 text-start outline-none transition-[border-color,box-shadow] focus-visible:ring-2 focus-visible:ring-ring/40', selected ? 'border-foreground shadow-sm' : 'border-border hover:border-muted-foreground/50')}>
           <MiniShell dark={isDark} side={settings.sidebarSide} />
-          <div className="mt-2 flex items-center justify-between px-1 pb-0.5"><span className="text-[13px] font-medium">{name}</span>{selected && <Check className="size-3.5" />}</div>
+          <div className="mt-2 flex items-center justify-between px-1 pb-0.5"><span className="text-[0.8667rem] font-medium">{name}</span>{selected && <Check className="size-3.5" />}</div>
         </button>
       })}
     </div>
     <div className="mt-6 flex flex-col gap-3.5">
-      <div className="flex items-center justify-between gap-4"><span className="text-[13.5px] font-medium">Sidebar</span><Segmented label="Sidebar side" value={settings.sidebarSide} onChange={(side) => void api.setSettings({ sidebarSide: side })} options={[{ value: 'left', label: 'Left', icon: <PanelLeft /> }, { value: 'right', label: 'Right', icon: <PanelRight /> }]} /></div>
-      <div className="flex items-center justify-between gap-4"><span className="text-[13.5px] font-medium">Density</span><Segmented label="Density" value={densityValue} onChange={(value) => { setDensityValue(value); setDensity(value) }} options={[{ value: 'comfortable', label: 'Comfortable' }, { value: 'compact', label: 'Compact' }]} /></div>
-      <div className="flex items-center justify-between gap-4"><span className="text-[13.5px] font-medium">Collapse to icons</span><Switch checked={settings.sidebarCompact} aria-label="Collapse the sidebar to icons" onCheckedChange={(sidebarCompact) => void api.setSettings({ sidebarCompact })} /></div>
+      <div className="flex items-center justify-between gap-4"><span className="text-[0.9rem] font-medium">Sidebar</span><Segmented label="Sidebar side" value={settings.sidebarSide} onChange={(side) => void api.setSettings({ sidebarSide: side })} options={[{ value: 'left', label: 'Left', icon: <PanelLeft /> }, { value: 'right', label: 'Right', icon: <PanelRight /> }]} /></div>
+      <div className="flex items-center justify-between gap-4"><span className="text-[0.9rem] font-medium">Density</span><Segmented label="Density" value={densityValue} onChange={(value) => { setDensityValue(value); setDensity(value) }} options={[{ value: 'comfortable', label: 'Comfortable' }, { value: 'compact', label: 'Compact' }]} /></div>
+      <div className="flex items-center justify-between gap-4"><span className="text-[0.9rem] font-medium">Collapse to icons</span><Switch checked={settings.sidebarCompact} aria-label="Collapse the sidebar to icons" onCheckedChange={(sidebarCompact) => void api.setSettings({ sidebarCompact })} /></div>
     </div>
   </div>
 }
@@ -327,9 +327,9 @@ function PrivacyStep({ snapshot }: { snapshot: Snapshot }) {
       <ToggleRow icon={<X />} title="Turn off DRM" description="Tells sites encrypted media is unavailable, so protected video won’t play." checked={settings.blockDrm} onChange={(on) => patch({ blockDrm: on })} />
     </div>
     <div className="mt-4 grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-      <label className="flex flex-col gap-1.5 text-[12.5px] text-muted-foreground"><span className="flex items-center gap-1.5"><Search className="size-3.5" />Search engine</span>
+      <label className="flex flex-col gap-1.5 text-[0.8333rem] text-muted-foreground"><span className="flex items-center gap-1.5"><Search className="size-3.5" />Search engine</span>
         <Select value={ENGINES.some(([value]) => value === settings.searchEngine) ? settings.searchEngine : 'custom'} onValueChange={(value) => value !== 'custom' && patch({ searchEngine: value })}><SelectTrigger aria-label="Search engine"><SelectValue /></SelectTrigger><SelectContent>{ENGINES.map(([value, name]) => <SelectItem key={value} value={value}>{name}</SelectItem>)}{!ENGINES.some(([value]) => value === settings.searchEngine) && <SelectItem value="custom">Custom</SelectItem>}</SelectContent></Select></label>
-      <label className="flex flex-col gap-1.5 text-[12.5px] text-muted-foreground"><span className="flex items-center gap-1.5"><AthanorMark className="size-3" />New tab opens</span>
+      <label className="flex flex-col gap-1.5 text-[0.8333rem] text-muted-foreground"><span className="flex items-center gap-1.5"><AthanorMark className="size-3" />New tab opens</span>
         <Select value={settings.homepage === 'athanor://newtab' ? 'athanor' : 'google'} onValueChange={(value) => patch({ homepage: value === 'athanor' ? 'athanor://newtab' : 'https://www.google.com/' })}><SelectTrigger aria-label="New tab opens"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="google">Google</SelectItem><SelectItem value="athanor">Athanor start page</SelectItem></SelectContent></Select></label>
     </div>
   </div>
@@ -351,10 +351,10 @@ function ReadyStep({ snapshot, imported }: { snapshot: Snapshot; imported: Impor
   return <div>
     <Title index="Ready" sub="Here is what you chose, and the few shortcuts worth knowing." jp="準備ができました。">You’re all set.</Title>
     <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-      {lines.map((line, index) => <m.li key={line} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ ...enter, delay: 0.06 * index }} className="flex items-start gap-2.5 text-[13.5px] leading-5"><span className="mt-0.5 grid size-4 shrink-0 place-items-center rounded-full bg-foreground text-background"><Check className="size-3" /></span>{line}</m.li>)}
+      {lines.map((line, index) => <m.li key={line} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ ...enter, delay: 0.06 * index }} className="flex items-start gap-2.5 text-[0.9rem] leading-5"><span className="mt-0.5 grid size-4 shrink-0 place-items-center rounded-full bg-foreground text-background"><Check className="size-3" /></span>{line}</m.li>)}
     </ul>
     <div className="mt-6 grid grid-cols-2 gap-2 max-sm:grid-cols-1">
-      {SHORTCUTS.map(([keys, name]) => <div key={keys} className="flex items-center justify-between rounded-lg border border-border px-3 py-2"><span className="text-[13px]">{name}</span><span className="flex gap-1">{keys.split('+').map((key) => <Kbd key={key} className="font-instr">{key}</Kbd>)}</span></div>)}
+      {SHORTCUTS.map(([keys, name]) => <div key={keys} className="flex items-center justify-between rounded-lg border border-border px-3 py-2"><span className="text-[0.8667rem]">{name}</span><span className="flex gap-1">{keys.split('+').map((key) => <Kbd key={key} className="font-instr">{key}</Kbd>)}</span></div>)}
     </div>
   </div>
 }

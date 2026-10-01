@@ -10,5 +10,5 @@ export const TooltipContent = React.forwardRef<React.ElementRef<typeof TooltipPr
 TooltipContent.displayName = 'TooltipContent'
 /** Wraps a single child in a tooltip carrying a label and an optional shortcut. */
 export function Tip({ label, shortcut, side = 'bottom', disabled = false, children }: { label: string; shortcut?: string; side?: 'top' | 'right' | 'bottom' | 'left'; disabled?: boolean; children: React.ReactElement }) {
-  return <Tooltip open={disabled ? false : undefined}><TooltipTrigger asChild>{children}</TooltipTrigger><TooltipContent side={side}>{label}{shortcut && <span className="ms-2 text-[11px] text-background/60">{shortcut}</span>}</TooltipContent></Tooltip>
+  return <Tooltip open={disabled ? false : undefined}><TooltipTrigger asChild>{children}</TooltipTrigger><TooltipContent side={side}>{label}{shortcut && <span className="ms-2 text-[0.7333rem] text-background/60">{shortcut}</span>}</TooltipContent></Tooltip>
 }

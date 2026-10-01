@@ -36,6 +36,9 @@ pub struct Tab {
     /// True when the current folder was chosen by the auto-filer rather than the user.
     #[serde(default)]
     pub auto_filed: bool,
+    /// Render this tab without the GPU. It then runs in its own browser process (see `docs/UI.md`).
+    #[serde(default)]
+    pub software_rendering: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -191,6 +194,7 @@ impl Workspace {
             archived: false,
             muted: false,
             auto_filed,
+            software_rendering: false,
         };
         let id = tab.id.clone();
         // Insert right after the parent so related tabs cluster; otherwise append.
@@ -315,6 +319,12 @@ impl Workspace {
                 t.folder = None;
                 t.auto_filed = false;
             }
+        }
+    }
+
+    pub fn set_software_rendering(&mut self, id: &str, software: bool) {
+        if let Some(t) = self.tab_mut(id) {
+            t.software_rendering = software;
         }
     }
 

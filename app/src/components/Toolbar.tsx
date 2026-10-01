@@ -1,6 +1,7 @@
 import type * as React from 'react'
 import { ArrowLeft, ArrowRight, Columns2, Command, LayoutPanelTop, MoreHorizontal, PanelLeft, PanelsTopLeft, Puzzle, RotateCw, Settings, SquareTerminal, X } from 'lucide-react'
 import type { Snapshot, Tab } from '@/lib/types'
+import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Button } from './ui/button'
@@ -13,7 +14,7 @@ import { dragWindow, toggleWindow } from './WindowControls'
 type Page = 'settings' | 'boards' | 'extensions'
 
 export function NavButton({ label, shortcut, disabled, active, side = 'bottom', className, onClick, children }: { label: string; shortcut?: string; disabled?: boolean; active?: boolean; side?: 'top' | 'right' | 'bottom' | 'left'; className?: string; onClick: () => void; children: React.ReactNode }) {
-  return <Tip label={label} shortcut={shortcut} side={side}><span className="inline-flex"><Button variant="ghost" size="icon" className={cn('size-7 rounded-md [&_svg]:size-[15px]', active && 'bg-foreground/[0.07] text-foreground', className)} data-part="nav-button" data-active={active === undefined ? undefined : String(active)} aria-label={label} disabled={disabled} onClick={onClick}>{children}</Button></span></Tip>
+  return <Tip label={label} shortcut={shortcut} side={side}><span className="inline-flex"><Button variant="ghost" size="icon" className={cn('size-7 rounded-md [&_svg]:size-[1rem]', active && 'bg-foreground/[0.07] text-foreground', className)} data-part="nav-button" data-active={active === undefined ? undefined : String(active)} aria-label={label} disabled={disabled} onClick={onClick}>{children}</Button></span></Tip>
 }
 
 /** Back / forward / reload for the active tab. */
@@ -32,7 +33,7 @@ export function NavCluster({ snapshot, activeTab, className }: { snapshot: Snaps
  * buttons on the right. Everything you type goes through the address pill / command bar instead.
  */
 export function StageBar({ snapshot, activeTab, openBar, openPage, toggleDev, windowControls }: { snapshot: Snapshot; activeTab: Tab | null; openBar: () => void; openPage: (page: Page) => void; toggleDev: () => void; windowControls?: React.ReactNode }) {
-  const split = () => { const next = snapshot.workspace.tabs.find((tab) => tab.id !== activeTab?.id && tab.space === snapshot.workspace.activeSpace && !tab.archived); if (snapshot.workspace.split) void api.unsplit(); else if (next) void api.splitWith({ tab: next.id, dir: 'row' }) }
+  const split = () => { const next = snapshot.workspace.tabs.find((tab) => tab.id !== activeTab?.id && tab.space === snapshot.workspace.activeSpace && !tab.archived); if (snapshot.workspace.split) void api.unsplit(); else if (next) void api.splitWith({ tab: next.id, dir: 'row' }); else toast('Open another tab to use Split View', { duration: 2400 }) }
   return <div className="flex h-9 shrink-0 items-center gap-1 ps-1.5" data-part="toolbar" onPointerDown={dragWindow} onDoubleClick={toggleWindow}>
     <NavCluster snapshot={snapshot} activeTab={activeTab} className="shrink-0" />
     <div className="flex min-w-0 flex-1 justify-center px-1" data-no-drag>
@@ -43,12 +44,12 @@ export function StageBar({ snapshot, activeTab, openBar, openPage, toggleDev, wi
       <NavButton label="Developer panel" shortcut="Ctrl+Shift+D" onClick={toggleDev}><SquareTerminal /></NavButton>
       <NavButton label="Command bar" shortcut="Ctrl+K" onClick={openBar}><Command /></NavButton>
       <OverlayDropdownMenu>
-        <Tip label="More"><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="size-7 rounded-md data-[state=open]:bg-foreground/[0.07] data-[state=open]:text-foreground [&_svg]:size-[15px]" aria-label="More" data-part="nav-button"><MoreHorizontal /></Button></DropdownMenuTrigger></Tip>
+        <Tip label="More"><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="size-7 rounded-md data-[state=open]:bg-foreground/[0.07] data-[state=open]:text-foreground [&_svg]:size-[1rem]" aria-label="More" data-part="nav-button"><MoreHorizontal /></Button></DropdownMenuTrigger></Tip>
         <DropdownMenuContent align="end" className="w-60">
-          <DropdownMenuItem onSelect={() => openPage('boards')}><LayoutPanelTop />Reference boards</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => openPage('boards')}><LayoutPanelTop />Reference Boards</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => openPage('extensions')}><Puzzle />Extensions</DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => void api.setSettings({ sidebarCompact: !snapshot.settings.sidebarCompact })}><PanelLeft />Toggle sidebar<DropdownMenuShortcut>Ctrl+B</DropdownMenuShortcut></DropdownMenuItem>
-          <DropdownMenuItem disabled={!activeTab} onSelect={() => activeTab && void api.openDevtools(activeTab.id)}><PanelsTopLeft />Page inspector<DropdownMenuShortcut>F12</DropdownMenuShortcut></DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void api.setSettings({ sidebarCompact: !snapshot.settings.sidebarCompact })}><PanelLeft />{snapshot.settings.sidebarCompact ? 'Show Sidebar' : 'Hide Sidebar'}<DropdownMenuShortcut>Ctrl+B</DropdownMenuShortcut></DropdownMenuItem>
+          <DropdownMenuItem disabled={!activeTab} onSelect={() => activeTab && void api.openDevtools(activeTab.id)}><PanelsTopLeft />Page Inspector<DropdownMenuShortcut>F12</DropdownMenuShortcut></DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => openPage('settings')}><Settings />Settings</DropdownMenuItem>
         </DropdownMenuContent>

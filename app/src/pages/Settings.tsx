@@ -114,7 +114,7 @@ export default function SettingsPage() {
               <TouchSwitch label="Restore previous session" checked={settings.restoreSession} onCheckedChange={(restoreSession) => patch({ restoreSession })} />
             </Row>
             <Row title="Archive inactive tabs after" description="Set to Never to keep all inactive tabs in view.">
-              <div className="flex w-64 items-center gap-4 max-sm:w-full"><Slider className="max-md:h-11" aria-label="Archive inactive tabs after" min={0} max={168} step={1} value={[settings.archiveAfterHours]} onValueChange={([archiveAfterHours]) => patch({ archiveAfterHours })} /><span className="w-20 shrink-0 text-right text-[13px] tabular-nums text-muted-foreground">{settings.archiveAfterHours === 0 ? 'Never' : `${settings.archiveAfterHours} hours`}</span></div>
+              <div className="flex w-64 items-center gap-4 max-sm:w-full"><Slider className="max-md:h-11" aria-label="Archive inactive tabs after" min={0} max={168} step={1} value={[settings.archiveAfterHours]} onValueChange={([archiveAfterHours]) => patch({ archiveAfterHours })} /><span className="w-20 shrink-0 text-right text-[0.8667rem] tabular-nums text-muted-foreground">{settings.archiveAfterHours === 0 ? 'Never' : `${settings.archiveAfterHours} hours`}</span></div>
             </Row>
           </Section>
           <Section title="Sidebar">
@@ -127,7 +127,7 @@ export default function SettingsPage() {
               <TouchSwitch label="Compact sidebar" checked={settings.sidebarCompact} onCheckedChange={(sidebarCompact) => patch({ sidebarCompact })} />
             </Row>
             <Row title="Sidebar width" description="Adjust the width of the expanded sidebar.">
-              <div className="flex w-64 items-center gap-4 max-sm:w-full"><Slider className="max-md:h-11" aria-label="Sidebar width" min={208} max={400} step={1} value={[settings.sidebarWidth]} onValueChange={([sidebarWidth]) => patch({ sidebarWidth })} /><span className="w-14 shrink-0 text-right text-[13px] tabular-nums text-muted-foreground">{settings.sidebarWidth}px</span></div>
+              <div className="flex w-64 items-center gap-4 max-sm:w-full"><Slider className="max-md:h-11" aria-label="Sidebar width" min={208} max={400} step={1} value={[settings.sidebarWidth]} onValueChange={([sidebarWidth]) => patch({ sidebarWidth })} /><span className="w-14 shrink-0 text-right text-[0.8667rem] tabular-nums text-muted-foreground">{settings.sidebarWidth}px</span></div>
             </Row>
           </Section>
         </>}
@@ -142,13 +142,13 @@ export default function SettingsPage() {
               <TouchSwitch label="Built-in adblock" checked={adblock?.enabled ?? settings.adblockEnabled} onCheckedChange={(enabled) => void api.setAdblockEnabled(enabled)} />
             </Row>
             <div className="py-2">
-              <h3 className="mb-2 text-[13px] font-medium text-muted-foreground">Filter lists</h3>
+              <h3 className="mb-2 text-[0.8667rem] font-medium text-muted-foreground">Filter lists</h3>
               <div className="divide-y divide-border">
                 {(adblock?.lists ?? []).map((list) => <div className="flex min-h-11 items-center justify-between gap-4 py-2 max-sm:items-start" key={list.id}>
-                  <div className="min-w-0"><p className="m-0 text-sm font-medium">{list.name}</p><p className="m-0 mt-0.5 text-[13px] text-muted-foreground">{list.ruleCount.toLocaleString()} rules · {list.updatedAt ? `Updated ${new Date(list.updatedAt).toLocaleDateString()}` : 'Not updated'}{list.error ? ` · ${list.error}` : ''}</p></div>
+                  <div className="min-w-0"><p className="m-0 text-sm font-medium">{list.name}</p><p className="m-0 mt-0.5 text-[0.8667rem] text-muted-foreground">{list.ruleCount.toLocaleString()} rules · {list.updatedAt ? `Updated ${new Date(list.updatedAt).toLocaleDateString()}` : 'Not updated'}{list.error ? ` · ${list.error}` : ''}</p></div>
                   <TouchSwitch label={`${list.name} list`} checked={list.enabled} onCheckedChange={(enabled) => void api.setAdblockListEnabled(list.id, enabled)} />
                 </div>)}
-                {adblock?.lists.length === 0 && <p className="m-0 py-2 text-[13px] text-muted-foreground">No filter lists are available.</p>}
+                {adblock?.lists.length === 0 && <p className="m-0 py-2 text-[0.8667rem] text-muted-foreground">No filter lists are available.</p>}
               </div>
             </div>
           </Section>
@@ -192,13 +192,24 @@ export default function SettingsPage() {
                   <Input className="max-md:h-11" aria-label="Title contains" placeholder="Title contains (optional)" value={rule.titleContains ?? ''} onChange={(event) => persistRules(rules.map((item) => item.id === rule.id ? { ...item, titleContains: event.target.value || null } : item))} />
                   <Tip label="Delete rule"><Button className="max-md:size-11" type="button" size="icon" variant="ghost" aria-label="Delete rule" onClick={() => persistRules(rules.filter((item) => item.id !== rule.id))}><AppIcon name="Trash2" /></Button></Tip>
                 </div>)}
-                {rules.length === 0 && <p className="m-0 py-4 text-[13px] text-muted-foreground">No filing rules yet. Add a rule to start organizing tabs automatically.</p>}
+                {rules.length === 0 && <p className="m-0 py-4 text-[0.8667rem] text-muted-foreground">No filing rules yet. Add a rule to start organizing tabs automatically.</p>}
               </div>
             </div>
           </Section>
         </>}
 
         {section === 'Appearance' && <>
+          <Section title="Accessibility" description="Make Athanor easier to see and to use. The system settings for Reduce Motion and Increase Contrast are always followed.">
+            <Row title="Interface size" description="Scales text, controls and menus together. Web pages keep their own zoom (Ctrl + / Ctrl -).">
+              <div className="flex w-64 items-center gap-4 max-sm:w-full"><Slider className="max-md:h-11" aria-label="Interface size" min={100} max={200} step={5} value={[settings.uiScale]} onValueChange={([uiScale]) => patch({ uiScale })} /><span className="w-12 text-end text-[13px] tabular-nums text-muted-foreground">{settings.uiScale}%</span></div>
+            </Row>
+            <Row title="Reduce motion" description="Replaces sliding and scaling with simple fades.">
+              <TouchSwitch label="Reduce motion" checked={settings.reduceMotion} onCheckedChange={(reduceMotion) => patch({ reduceMotion })} />
+            </Row>
+            <Row title="Increase contrast" description="Darker text and clearer edges for controls.">
+              <TouchSwitch label="Increase contrast" checked={settings.highContrast} onCheckedChange={(highContrast) => patch({ highContrast })} />
+            </Row>
+          </Section>
           <Section title="Web pages" description="Pages that name their own font are not changed.">
             <Row title="IBM Plex Sans JP as the default font" description="Used by pages that do not pick a font themselves. Applies the next time Athanor starts.">
               <TouchSwitch label="IBM Plex Sans JP as the default font" checked={settings.webFont} onCheckedChange={(webFont) => patch({ webFont })} />
@@ -211,9 +222,9 @@ export default function SettingsPage() {
                   <div className="w-1/4 rounded-md bg-sidebar p-1"><div className="mb-1 h-1.5 rounded bg-muted" /><div className="h-1.5 w-2/3 rounded bg-muted" /></div>
                   <div className="flex flex-1 flex-col gap-2 p-2"><div className="h-2 w-1/2 rounded bg-card" /><div className="h-5 rounded bg-muted" /><div className="h-2 w-2/3 rounded bg-card" /></div>
                 </div>
-                <span className="block text-sm font-medium">{theme.name}</span><span className="mt-0.5 block text-[13px] text-muted-foreground">{theme.dark ? 'Dark' : 'Light'} · {theme.source}</span>
+                <span className="block text-sm font-medium">{theme.name}</span><span className="mt-0.5 block text-[0.8667rem] text-muted-foreground">{theme.dark ? 'Dark' : 'Light'} · {theme.source}</span>
               </button>)}
-              {themes.length === 0 && <p className="m-0 text-[13px] text-muted-foreground">No themes are available.</p>}
+              {themes.length === 0 && <p className="m-0 text-[0.8667rem] text-muted-foreground">No themes are available.</p>}
             </div>
           </Section>
           <Section title="Density" description="Choose the amount of space between tab rows and controls.">
@@ -239,9 +250,9 @@ export default function SettingsPage() {
         {section === 'About' && <Card className="mx-auto w-full max-w-lg p-8 text-center">
           <div className="mx-auto mb-4 grid size-16 place-items-center rounded-2xl bg-primary text-primary-foreground"><AthanorMark className="size-8" /></div>
           <h2 className="m-0 text-lg font-semibold">Athanor</h2>
-          <p className="mb-1 mt-1 text-[13px] text-muted-foreground">Version {snapshot?.version ?? '—'}</p>
+          <p className="mb-1 mt-1 text-[0.8667rem] text-muted-foreground">Version {snapshot?.version ?? '—'}</p>
           <UpdateRow autoUpdate={settings.autoUpdate} onAuto={(autoUpdate) => patch({ autoUpdate })} />
-          <p className="mx-auto mb-6 mt-2 max-w-sm text-[13px] text-muted-foreground">A lightweight browser shell made for focus, research, and developer work.</p>
+          <p className="mx-auto mb-6 mt-2 max-w-sm text-[0.8667rem] text-muted-foreground">A lightweight browser shell made for focus, research, and developer work.</p>
           <div className="grid grid-cols-3 gap-3 text-left max-sm:grid-cols-1">
             <Stat label="Platform" value={snapshot?.platform ?? '—'} className="p-3" />
             <Stat label="Spaces" value={snapshot?.workspace.spaces.length ?? '—'} className="p-3" />
@@ -286,18 +297,18 @@ function MyFiltersEditor() {
   const lines = countFilterLines(text)
 
   return <div className="space-y-3 py-2">
-    <p id="my-filters-help" className="m-0 text-[13px] text-muted-foreground">One rule per line, for example <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">||ads.example.com^</code>, <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">example.com##.banner</code>, <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">@@||example.com^$document</code>.</p>
-    <Textarea ref={area} id="my-filters" data-part="my-filters" className="min-h-60 resize-y font-mono text-[13px] leading-5" aria-label="My filters" aria-describedby="my-filters-help" rows={12} wrap="off" spellCheck={false} value={text} placeholder="||ads.example.com^" onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void save() } }} />
+    <p id="my-filters-help" className="m-0 text-[0.8667rem] text-muted-foreground">One rule per line, for example <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">||ads.example.com^</code>, <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">example.com##.banner</code>, <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">@@||example.com^$document</code>.</p>
+    <Textarea ref={area} id="my-filters" data-part="my-filters" className="min-h-60 resize-y font-mono text-[0.8667rem] leading-5" aria-label="My filters" aria-describedby="my-filters-help" rows={12} wrap="off" spellCheck={false} value={text} placeholder="||ads.example.com^" onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void save() } }} />
     <div className="flex flex-wrap items-center gap-2">
       <Button className="max-md:min-h-11" onClick={() => void save()} disabled={!dirty || saving}><AppIcon name="Check" />{saving ? 'Saving…' : 'Save'}</Button>
       <Button className="max-md:min-h-11" variant="outline" onClick={() => setText(saved)} disabled={!dirty || saving}><AppIcon name="RotateCcw" />Revert</Button>
-      <span className="ms-auto flex items-center gap-3 text-[13px] text-muted-foreground"><span data-part="filter-count">{lineCountLabel(lines)}</span><span className="flex items-center gap-1" aria-label="Save shortcut"><Kbd>Ctrl</Kbd><Kbd>S</Kbd></span></span>
+      <span className="ms-auto flex items-center gap-3 text-[0.8667rem] text-muted-foreground"><span data-part="filter-count">{lineCountLabel(lines)}</span><span className="flex items-center gap-1" aria-label="Save shortcut"><Kbd>Ctrl</Kbd><Kbd>S</Kbd></span></span>
     </div>
     {issues.length > 0 && <div>
-      <p className="mb-2 mt-1 text-[13px] text-muted-foreground">The engine ignored {lineCountLabel(issues.length)}:</p>
+      <p className="mb-2 mt-1 text-[0.8667rem] text-muted-foreground">The engine ignored {lineCountLabel(issues.length)}:</p>
       <ul className="m-0 list-none space-y-2 p-0" data-part="filter-issues" aria-label="Ignored lines">
         {issues.map((issue) => <li key={`${issue.line}-${issue.message}`}>
-          <button type="button" className="flex w-full items-start gap-2 rounded-lg border border-border bg-background px-3 py-2 text-left text-[13px] hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40" data-part="filter-issue" aria-label={issue.line ? `Select line ${issue.line}` : 'Select all filters'} onClick={() => jump(issue.line)}>
+          <button type="button" className="flex w-full items-start gap-2 rounded-lg border border-border bg-background px-3 py-2 text-left text-[0.8667rem] hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40" data-part="filter-issue" aria-label={issue.line ? `Select line ${issue.line}` : 'Select all filters'} onClick={() => jump(issue.line)}>
             <AppIcon name="XCircle" className="mt-0.5 size-4 shrink-0 text-destructive" /><span><strong>{issue.line ? `Line ${issue.line}:` : 'All lines:'}</strong> <span className="text-muted-foreground">{issue.message}</span></span>
           </button>
         </li>)}
@@ -313,7 +324,7 @@ function TouchSwitch({ label, checked, onCheckedChange }: { label: string; check
 function SettingsExtensionRow({ extension, onRefresh }: { extension: ExtensionInfo; onRefresh: () => void }) {
   return <div className="flex min-h-20 items-center gap-3 py-2 max-sm:flex-wrap">
     <IconTile icon="Zap" />
-    <div className="min-w-0 flex-1"><p className="m-0 text-sm font-medium">{extension.name}</p><p className="m-0 mt-0.5 text-[13px] text-muted-foreground">{extension.description}</p><p className="m-0 mt-1 text-xs text-muted-foreground">Permissions: {extension.permissions.join(', ') || 'None'} · {extension.version}</p></div>
+    <div className="min-w-0 flex-1"><p className="m-0 text-sm font-medium">{extension.name}</p><p className="m-0 mt-0.5 text-[0.8667rem] text-muted-foreground">{extension.description}</p><p className="m-0 mt-1 text-xs text-muted-foreground">Permissions: {extension.permissions.join(', ') || 'None'} · {extension.version}</p></div>
     <div className="flex shrink-0 items-center gap-1"><TouchSwitch label={`${extension.enabled ? 'Disable' : 'Enable'} ${extension.name}`} checked={extension.enabled} onCheckedChange={(enabled) => void api.setExtensionEnabled(extension.id, enabled).then(onRefresh)} />{extension.source === 'user' && <Tip label={`Remove ${extension.name}`}><Button className="max-md:size-11" variant="ghost" size="icon" aria-label={`Remove ${extension.name}`} onClick={() => void api.removeExtension(extension.id).then(onRefresh)}><AppIcon name="Trash2" /></Button></Tip>}</div>
   </div>
 }

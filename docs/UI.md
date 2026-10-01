@@ -66,3 +66,5 @@ WebView2 is Microsoft Edge's engine, and left alone it shows Edge in several pla
 * **Autofill / password popups** are off in tabs and in the shell; the shell also has no browser accelerator keys of its own.
 
 Still the engine's own: the PDF viewer, the F12 inspector window, and the process names (`msedgewebview2.exe`) and profile folder (`EBWebView`) on disk.
+
+The design rules behind motion, menus, feedback and accessibility (with what each one became in code) are in [HIG.md](HIG.md).

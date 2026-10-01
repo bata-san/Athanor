@@ -20,10 +20,10 @@ export const CommandEmpty = React.forwardRef<React.ElementRef<typeof CommandPrim
 ))
 CommandEmpty.displayName = 'CommandEmpty'
 export const CommandGroup = React.forwardRef<React.ElementRef<typeof CommandPrimitive.Group>, React.ComponentPropsWithoutRef<typeof CommandPrimitive.Group>>(({ className, ...props }, ref) => (
-  <CommandPrimitive.Group ref={ref} className={cn('overflow-hidden py-1 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1 [&_[cmdk-group-heading]]:text-[10.5px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-muted-foreground', className)} {...props} />
+  <CommandPrimitive.Group ref={ref} className={cn('overflow-hidden py-1 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1 [&_[cmdk-group-heading]]:text-[0.7333rem] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-muted-foreground', className)} {...props} />
 ))
 CommandGroup.displayName = 'CommandGroup'
 export const CommandItem = React.forwardRef<React.ElementRef<typeof CommandPrimitive.Item>, React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item>>(({ className, ...props }, ref) => (
-  <CommandPrimitive.Item ref={ref} className={cn("flex min-h-8 cursor-default items-center gap-2.5 rounded-md px-2 py-1 text-[13px] outline-none select-none data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground", className)} {...props} />
+  <CommandPrimitive.Item ref={ref} className={cn("flex min-h-8 cursor-default items-center gap-2.5 rounded-md px-2 py-1 text-[0.8667rem] outline-none select-none data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground", className)} {...props} />
 ))
 CommandItem.displayName = 'CommandItem'

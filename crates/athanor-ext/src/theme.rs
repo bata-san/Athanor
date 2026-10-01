@@ -187,7 +187,7 @@ impl Theme {
                 css.push_str(&format!("  --{name}: {value};\n"));
             }
         }
-        css.push_str(&format!("  --radius: {};\n  --font-ui: {};\n  --font-mono: {};\n  --ath-sidebar-side: {};\n  --ath-density: {};\n  --ath-tab-height: {}px;\n  --ath-sidebar-width: {}px;\n  --ath-blur: {}px;\n  --ath-show-favicons: {};\n  color-scheme: {};\n}}\n", theme.radius.as_deref().unwrap_or("0.6rem"), theme.fonts.ui.as_deref().unwrap_or("system-ui, sans-serif"), theme.fonts.mono.as_deref().unwrap_or("ui-monospace, monospace"), theme.ui.sidebar_side.as_deref().unwrap_or("left"), theme.ui.density.as_deref().unwrap_or("comfortable"), theme.ui.tab_height.unwrap_or(34), theme.ui.sidebar_width.unwrap_or(260), theme.ui.blur.unwrap_or(0), theme.ui.show_favicons.unwrap_or(true), if theme.dark { "dark" } else { "light" }));
+        css.push_str(&format!("  --radius: {};\n  --font-ui: {};\n  --font-mono: {};\n  --ath-sidebar-side: {};\n  --ath-density: {};\n  --ath-tab-height: calc({}px * var(--ath-ui-scale, 1));\n  --ath-sidebar-width: calc({}px * var(--ath-ui-scale, 1));\n  --ath-blur: {}px;\n  --ath-show-favicons: {};\n  color-scheme: {};\n}}\n", theme.radius.as_deref().unwrap_or("0.6rem"), theme.fonts.ui.as_deref().unwrap_or("system-ui, sans-serif"), theme.fonts.mono.as_deref().unwrap_or("ui-monospace, monospace"), theme.ui.sidebar_side.as_deref().unwrap_or("left"), theme.ui.density.as_deref().unwrap_or("comfortable"), theme.ui.tab_height.unwrap_or(34), theme.ui.sidebar_width.unwrap_or(260), theme.ui.blur.unwrap_or(0), theme.ui.show_favicons.unwrap_or(true), if theme.dark { "dark" } else { "light" }));
         css.push_str(&theme.css);
         css
     }

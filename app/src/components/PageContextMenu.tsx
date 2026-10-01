@@ -7,7 +7,7 @@ import type { ContextItem, PageContextMenu } from '@/lib/types'
 import { api } from '@/lib/api'
 import { useOverlay } from '@/lib/overlay'
 import { cn } from '@/lib/utils'
-import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuShortcut, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger } from './ui/context-menu'
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger } from './ui/context-menu'
 
 /** The engine's own entries we never show: they lead to services Athanor does not ship. */
 const HIDDEN = /moretools|share|webcapture|screenshot|collections|copilot|readaloud|emoji|cast|immersive|translate|reading|bing|sidebar|feedback|lookup|webselect/i
@@ -38,11 +38,11 @@ export function buildPageMenu(request: PageContextMenu, searchEngine: string, an
   const custom = (key: string, label: string, icon: LucideIcon, run: () => void): Entry => ({ type: 'item', key, label, icon, enabled: true, run: () => { answer(null); run() } })
   if (target.linkUrl) {
     const url = target.linkUrl
-    mine.push(custom('athanor-open-link', 'Open link in new tab', ExternalLink, () => void api.openTab({ url, parent: tab })))
+    mine.push(custom('athanor-open-link', 'Open Link in New Tab', ExternalLink, () => void api.openTab({ url, parent: tab })))
   }
   if (target.kind === 'image' && target.sourceUrl && /^https?:\/\//.test(target.sourceUrl)) {
     const src = target.sourceUrl
-    mine.push(custom('athanor-image-board', 'Send image to board', ImagePlus, () => void api.contextAction('send-image-to-board', src)))
+    mine.push(custom('athanor-image-board', 'Send Image to Board', ImagePlus, () => void api.contextAction('send-image-to-board', src)))
   }
   if (target.selectionText) {
     const query = target.selectionText.trim().slice(0, 300)
@@ -59,6 +59,8 @@ export function buildPageMenu(request: PageContextMenu, searchEngine: string, an
       if (/^openlinkinnew(window|tab)/.test(item.name) && target.linkUrl) continue // replaced by our own
       if (/^search/.test(item.name) && target.selectionText) continue
       if (item.kind === 'submenu' && !item.name) continue // the engine's anonymous "More tools" bucket
+      // Context menus show what applies, not what does not (only the clipboard commands may sit dimmed).
+      if (!item.enabled && item.kind !== 'submenu' && !/^(cut|copy|paste|pasteasplaintext|selectall|undo|redo)$/.test(item.name)) continue
       const label = clean(item.label)
       if (item.kind === 'submenu') {
         const children = depth < 2 ? build(item.children, depth + 1) : []
@@ -94,7 +96,7 @@ function Entries({ entries }: { entries: Entry[] }) {
     if (entry.type === 'nav') return <div key={entry.key} className="mb-1 grid grid-cols-3 gap-1">{entry.items.map((item) => { const Icon = item.icon; return <ContextMenuItem key={item.key} data-command={item.name} disabled={!item.enabled} title={`${item.label}${item.shortcut ? ` (${item.shortcut})` : ''}`} aria-label={item.label} className="h-9 justify-center px-0" onSelect={item.run}>{Icon && <Icon />}</ContextMenuItem> })}</div>
     if (entry.type === 'sub') { const Icon = entry.icon; return <ContextMenuSub key={entry.key}><ContextMenuSubTrigger data-command={entry.name || entry.key}>{Icon ? <Icon /> : <span className="size-4" />}{entry.label}</ContextMenuSubTrigger><ContextMenuSubContent><Entries entries={entry.children} /></ContextMenuSubContent></ContextMenuSub> }
     const Icon = entry.icon
-    return <ContextMenuItem key={entry.key} data-command={entry.name ?? entry.key} disabled={!entry.enabled} destructive={entry.destructive} onSelect={entry.run}>{Icon ? <Icon /> : <span className="size-4" />}<span className={cn('truncate', entry.checked && 'font-medium')}>{entry.label}</span>{entry.shortcut && <ContextMenuShortcut>{entry.shortcut}</ContextMenuShortcut>}</ContextMenuItem>
+    return <ContextMenuItem key={entry.key} data-command={entry.name ?? entry.key} disabled={!entry.enabled} destructive={entry.destructive} onSelect={entry.run}>{Icon ? <Icon /> : <span className="size-4" />}<span className={cn('truncate', entry.checked && 'font-medium')}>{entry.label}</span></ContextMenuItem>
   })}</>
 }
 

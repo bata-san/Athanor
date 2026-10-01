@@ -20,7 +20,7 @@ export function NewTabPage({ servers, onNavigate }: { servers: DevServer[]; onNa
   return <div className="relative flex h-full w-full flex-col items-center overflow-y-auto bg-background px-6 pb-12 pt-[clamp(4rem,16vh,9rem)] text-foreground" data-part="new-tab-page">
     <div className="flex w-full max-w-xl flex-col items-center">
       <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"><AthanorMark className="size-5" /></div>
-      <h1 className="mt-2.5 text-[15px] font-semibold tracking-tight">Athanor</h1>
+      <h1 className="mt-2.5 text-[1rem] font-semibold tracking-tight">Athanor</h1>
 
       <form className="mt-7 flex h-11 w-full items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 shadow-xs transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/25" onSubmit={(event) => { event.preventDefault(); submit() }}>
         <AppIcon name="Search" className="size-4 shrink-0 text-muted-foreground" />
@@ -28,9 +28,9 @@ export function NewTabPage({ servers, onNavigate }: { servers: DevServer[]; onNa
         <Kbd className="hidden border-0 bg-transparent sm:inline-flex">Enter</Kbd>
       </form>
 
-      {servers.length > 0 && <div className="mt-3 flex w-full flex-wrap justify-center gap-1.5" aria-label="Development servers">{servers.map((server) => <Button key={server.url} variant="outline" size="sm" className="max-w-full rounded-full px-2.5 max-md:min-h-11" onClick={() => onNavigate(server.url)}><AppIcon name="Terminal" /><span className="truncate">{server.title ?? `localhost:${server.port}`}</span><span className="font-instr text-[10px] text-muted-foreground">:{server.port}</span></Button>)}</div>}
+      {servers.length > 0 && <div className="mt-3 flex w-full flex-wrap justify-center gap-1.5" aria-label="Development servers">{servers.map((server) => <Button key={server.url} variant="outline" size="sm" className="max-w-full rounded-full px-2.5 max-md:min-h-11" onClick={() => onNavigate(server.url)}><AppIcon name="Terminal" /><span className="truncate">{server.title ?? `localhost:${server.port}`}</span><span className="font-instr text-[0.7333rem] text-muted-foreground">:{server.port}</span></Button>)}</div>}
 
-      {(pinned.length > 0 || recent.length > 0) && <div className="mt-7 grid w-full grid-cols-2 gap-2 sm:grid-cols-4">{[...pinned, ...recent].map((tab) => <button key={tab.id} type="button" className="group relative flex min-h-[4.5rem] min-w-0 flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-card p-3 text-[13px] transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40" onClick={() => void api.activateTab(tab.id)} title={tab.url}>
+      {(pinned.length > 0 || recent.length > 0) && <div className="mt-7 grid w-full grid-cols-2 gap-2 sm:grid-cols-4">{[...pinned, ...recent].map((tab) => <button key={tab.id} type="button" className="group relative flex min-h-[4.5rem] min-w-0 flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-card p-3 text-[0.8667rem] transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40" onClick={() => void api.activateTab(tab.id)} title={tab.url}>
         <span className="flex size-7 items-center justify-center rounded-md bg-muted text-foreground"><AppIcon name={tab.pinned ? 'Layers3' : 'Globe2'} className="size-4" /></span>
         <span className="w-full truncate text-center font-medium">{tab.title}</span>
       </button>)}</div>}

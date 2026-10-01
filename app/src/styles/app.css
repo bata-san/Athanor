@@ -2,7 +2,7 @@
 @import './tokens.css';
 
 @layer base {
-  html { font-size: 15px; }
+  html { font-size: calc(15px * var(--ath-ui-scale, 1)); }
   html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
   body { background: var(--background); color: var(--foreground); font-family: var(--font-ui); font-size: var(--ath-font-size, 0.875rem); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
   * { scrollbar-width: thin; scrollbar-color: color-mix(in oklab, var(--foreground) 18%, transparent) transparent; }
@@ -15,4 +15,7 @@
 }
 .toast-root { font-family: var(--font-ui) !important; }
 @keyframes spin { to { transform: rotate(360deg); } }
+/* Reduce Motion: the system setting or ours. Movement goes away; state changes stay visible as plain fades. */
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; } }
+:root[data-reduce-motion='true'] *, :root[data-reduce-motion='true'] *::before, :root[data-reduce-motion='true'] *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+:root[data-reduce-motion='true'] button:not(:disabled):active { transform: none; }

@@ -9,7 +9,7 @@ export const SelectGroup = Primitive.Group
 export const SelectValue = Primitive.Value
 
 export const SelectTrigger = React.forwardRef<React.ElementRef<typeof Primitive.Trigger>, React.ComponentPropsWithoutRef<typeof Primitive.Trigger>>(({ className, children, ...props }, ref) => (
-  <Primitive.Trigger ref={ref} className={cn('flex h-8 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-2.5 text-[13px] whitespace-nowrap text-foreground outline-none transition-colors hover:bg-accent/60 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-50 data-[placeholder]:text-muted-foreground [&>span]:truncate', className)} {...props}>
+  <Primitive.Trigger ref={ref} className={cn('flex h-8 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-2.5 text-[0.8667rem] whitespace-nowrap text-foreground outline-none transition-colors hover:bg-accent/60 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-50 data-[placeholder]:text-muted-foreground [&>span]:truncate', className)} {...props}>
     {children}<Primitive.Icon asChild><ChevronDown className="size-4 shrink-0 text-muted-foreground" /></Primitive.Icon>
   </Primitive.Trigger>
 ))

@@ -109,6 +109,24 @@ impl EngineBackend for DesktopEngine {
         for s in &opts.init_scripts {
             builder = builder.initialization_script(s.clone());
         }
+        // No GPU: WebView2 takes that switch per browser process, so such tabs live in a second one with its own
+        // profile folder (their sign-ins are carried over by cookie when the tab is switched).
+        #[cfg(windows)]
+        if opts.software_rendering {
+            use tauri::Manager;
+            if let Ok(base) = self.window.app_handle().path().app_local_data_dir() {
+                let mut args = String::from(
+                    "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-gpu --disable-gpu-compositing",
+                );
+                // End-to-end tests attach to this second browser on its own debugging port.
+                if let Ok(port) = std::env::var("ATHANOR_SOFTWARE_DEBUG_PORT") {
+                    args.push_str(&format!(" --remote-debugging-port={port}"));
+                }
+                builder = builder
+                    .data_directory(base.join("EBWebView-software"))
+                    .additional_browser_args(&args);
+            }
+        }
 
         // Cross-platform fallbacks; on Windows the WebView2 hooks in `win.rs` report everything itself.
         #[cfg(not(windows))]
@@ -154,14 +172,26 @@ impl EngineBackend for DesktopEngine {
             builder = builder.on_new_window(|_, _| NewWindowResponse::Deny);
         }
 
-        let wv = self
-            .window
-            .add_child(
-                builder,
-                LogicalPosition::new(rect.x, rect.y),
-                LogicalSize::new(rect.w.max(1.0), rect.h.max(1.0)),
-            )
-            .map_err(err)?;
+        // Tests give the software browser its own debugging port; the shared environment variable would otherwise
+        // hand it the main browser's port. (WebView2 reads the variable while the environment is created.)
+        let swap_env =
+            opts.software_rendering && std::env::var_os("ATHANOR_SOFTWARE_DEBUG_PORT").is_some();
+        let saved_env = std::env::var_os("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS");
+        if swap_env {
+            std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "");
+        }
+        let added = self.window.add_child(
+            builder,
+            LogicalPosition::new(rect.x, rect.y),
+            LogicalSize::new(rect.w.max(1.0), rect.h.max(1.0)),
+        );
+        if swap_env {
+            match saved_env {
+                Some(value) => std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", value),
+                None => std::env::remove_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"),
+            }
+        }
+        let wv = added.map_err(err)?;
         if !visible {
             wv.hide().map_err(err)?;
         }
@@ -183,6 +213,7 @@ impl EngineBackend for DesktopEngine {
                 page_url: Arc::new(Mutex::new(url.to_string())),
             };
             let target = url.to_string();
+            let seed = opts.seed_cookies.clone();
             wv.with_webview(move |pw| {
                 let controller = pw.controller();
                 if let Err(e) = unsafe { crate::win::attach(&controller, ctx) } {
@@ -192,8 +223,14 @@ impl EngineBackend for DesktopEngine {
                 if crate::win::corner_radius() > 0 {
                     let _ = unsafe { crate::win::apply_corner_radius(&controller) };
                 }
-                // Hooks are in place: start the real navigation now.
-                if let Err(e) = unsafe { crate::win::navigate(&controller, &target) } {
+                // Hooks are in place: start the real navigation now (after the carried-over cookies, if any).
+                let started = match &seed {
+                    Some(cookies) => unsafe {
+                        crate::win::seed_cookies_and_navigate(&controller, cookies, &target)
+                    },
+                    None => unsafe { crate::win::navigate(&controller, &target) },
+                };
+                if let Err(e) = started {
                     eprintln!("initial navigation failed: {e}");
                 }
             })
@@ -323,6 +360,31 @@ impl EngineBackend for DesktopEngine {
         #[cfg(not(windows))]
         {
             let _ = (id, script, reply);
+            Err(athanor_core::engine::EngineError::Engine(
+                "not supported".into(),
+            ))
+        }
+    }
+
+    fn devtools_json(
+        &self,
+        id: &str,
+        method: &str,
+        params: &str,
+        reply: Box<dyn FnOnce(String) + Send>,
+    ) -> EngineResult {
+        #[cfg(windows)]
+        {
+            let (method, params) = (method.to_string(), params.to_string());
+            self.get(id)?
+                .with_webview(move |pw| unsafe {
+                    let _ = crate::win::devtools_json(&pw.controller(), &method, &params, reply);
+                })
+                .map_err(err)
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (id, method, params, reply);
             Err(athanor_core::engine::EngineError::Engine(
                 "not supported".into(),
             ))

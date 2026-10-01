@@ -145,6 +145,7 @@ impl Workspace {
                         archived: true,
                         muted: false,
                         auto_filed: false,
+                        software_rendering: false,
                     });
                     counts.tabs += 1;
                 }

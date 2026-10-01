@@ -179,6 +179,12 @@ pub async fn run_shortcut(b: B<'_>, combo: String) -> R {
 }
 
 #[tauri::command]
+pub async fn set_software_rendering(b: B<'_>, tab: Id, software: bool) -> R {
+    b.set_software_rendering(&tab, software);
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn resolve_script_dialog(b: B<'_>, tab: Id, accept: bool, text: String) -> R {
     b.resolve_script_dialog(&tab, accept, &text);
     Ok(())
@@ -309,6 +315,12 @@ pub async fn close_other_tabs(b: B<'_>, tab: Id) -> R {
 pub async fn close_tabs_below(b: B<'_>, tab: Id) -> R {
     let ids = b.tabs_to_close(&tab, true);
     b.close_many(ids);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn reopen_closed(b: B<'_>, count: usize) -> R {
+    b.reopen_closed(count);
     Ok(())
 }
 

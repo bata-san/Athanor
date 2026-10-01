@@ -75,6 +75,8 @@ struct Inner {
     closed: Vec<String>,
     /// The address each tab last really arrived at (a typed address that turns out to be a download is not one).
     committed: HashMap<String, String>,
+    /// Cookies waiting for a tab that is being recreated in the other rendering mode.
+    cookie_seed: HashMap<String, String>,
     had_split: bool,
 }
 
@@ -178,6 +180,7 @@ impl Browser {
             blocked_total: 0,
             closed: vec![],
             committed: HashMap::new(),
+            cookie_seed: HashMap::new(),
             had_split: false,
         };
         Arc::new(Self {
@@ -333,7 +336,17 @@ impl Browser {
             }
         }
         for c in &plan.create {
-            let opts = TabOptions::default();
+            let (software, seed, muted) = {
+                let mut g = self.inner.lock();
+                let software = g.ws.tab(&c.id).is_some_and(|t| t.software_rendering);
+                let muted = g.ws.tab(&c.id).is_some_and(|t| t.muted);
+                (software, g.cookie_seed.remove(&c.id), muted)
+            };
+            let opts = TabOptions {
+                software_rendering: software,
+                seed_cookies: seed,
+                ..TabOptions::default()
+            };
             if let Err(e) = self
                 .engine
                 .create_tab(&c.id, &c.url, c.rect, c.visible, &opts)
@@ -341,6 +354,8 @@ impl Browser {
                 log::error!("create_tab {}: {e}", c.id);
                 let mut g = self.inner.lock();
                 g.view.live.remove(&c.id);
+            } else if muted {
+                let _ = self.engine.set_muted(&c.id, true);
             }
         }
         for (id, rect) in &plan.place {
@@ -792,8 +807,36 @@ impl Browser {
     }
 
     pub fn close_tab(self: &Arc<Self>, tab: &str) {
+        let label = {
+            let g = self.inner.lock();
+            g.ws.tab(tab)
+                .filter(|t| !urlutil::is_internal(&t.url))
+                .map(|t| t.title.clone())
+        };
         if self.close_tab_quiet(tab) {
             self.sync();
+            if let Some(title) = label {
+                // The shell offers Undo (a closed page is cheap to bring back, so no confirmation beforehand).
+                let _ = self.app.emit(
+                    "athanor://closed",
+                    serde_json::json!({ "count": 1, "title": title }),
+                );
+            }
+        }
+    }
+
+    /// Bring back the last `count` closed pages, oldest first (the order they were open in).
+    pub fn reopen_closed(self: &Arc<Self>, count: usize) {
+        let urls = {
+            let mut g = self.inner.lock();
+            let keep = g.closed.len().saturating_sub(count.max(1));
+            g.closed.split_off(keep)
+        };
+        for url in urls {
+            self.open_tab(OpenArgs {
+                url: Some(url),
+                ..Default::default()
+            });
         }
     }
 
@@ -845,11 +888,25 @@ impl Browser {
 
     pub fn close_many(self: &Arc<Self>, ids: Vec<Id>) {
         let mut any = false;
+        let mut pages = 0usize;
         for id in ids {
-            any |= self.close_tab_quiet(&id);
+            let web = {
+                let g = self.inner.lock();
+                g.ws.tab(&id).is_some_and(|t| !urlutil::is_internal(&t.url))
+            };
+            if self.close_tab_quiet(&id) {
+                any = true;
+                pages += usize::from(web);
+            }
         }
         if any {
             self.sync();
+            if pages > 0 {
+                let _ = self.app.emit(
+                    "athanor://closed",
+                    serde_json::json!({ "count": pages, "title": "" }),
+                );
+            }
         }
     }
 
@@ -896,6 +953,55 @@ impl Browser {
 
     pub fn set_pinned(self: &Arc<Self>, tab: &str, pinned: bool) {
         self.with_ws(|w| w.set_pinned(tab, pinned));
+    }
+
+    /// Switch one tab between GPU and software rendering. The tab is recreated at its address (a view cannot change
+    /// mode in place); the cookies that apply to its address come along, so it stays signed in.
+    pub fn set_software_rendering(self: &Arc<Self>, tab: &str, software: bool) {
+        let (url, was_live) = {
+            let g = self.inner.lock();
+            let Some(t) = g.ws.tab(tab) else { return };
+            if t.software_rendering == software {
+                return;
+            }
+            (t.url.clone(), g.view.live.contains_key(tab))
+        };
+        let finish = {
+            let this = self.clone();
+            let tab = tab.to_string();
+            move |cookies: Option<String>| {
+                {
+                    let mut g = this.inner.lock();
+                    g.ws.set_software_rendering(&tab, software);
+                    if let Some(cookies) = cookies {
+                        g.cookie_seed.insert(tab.clone(), cookies);
+                    }
+                    g.view.live.remove(&tab);
+                }
+                let _ = this.engine.close_tab(&tab);
+                this.sync();
+            }
+        };
+        if !was_live || !url.starts_with("http") {
+            finish(None);
+            return;
+        }
+        let params = serde_json::json!({ "urls": [url] }).to_string();
+        let on_cookies = {
+            let finish = finish.clone();
+            // Replied on the engine's thread: recreating the view happens elsewhere.
+            move |json: String| {
+                let finish = finish.clone();
+                std::thread::spawn(move || finish(Some(json)));
+            }
+        };
+        if self
+            .engine
+            .devtools_json(tab, "Network.getCookies", &params, Box::new(on_cookies))
+            .is_err()
+        {
+            finish(None);
+        }
     }
 
     pub fn set_muted(self: &Arc<Self>, tab: &str, muted: bool) {

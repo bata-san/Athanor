@@ -1039,6 +1039,52 @@ pub unsafe fn devtools_call(
     )
 }
 
+/// Call a DevTools-protocol method and hand its JSON result to `reply`.
+pub unsafe fn devtools_json(
+    controller: &ICoreWebView2Controller,
+    method: &str,
+    params: &str,
+    reply: Box<dyn FnOnce(String) + Send>,
+) -> windows::core::Result<()> {
+    let slot = std::sync::Mutex::new(Some(reply));
+    controller.CoreWebView2()?.CallDevToolsProtocolMethod(
+        &HSTRING::from(method),
+        &HSTRING::from(params),
+        &CallDevToolsProtocolMethodCompletedHandler::create(Box::new(move |_, result| {
+            if let Some(reply) = slot.lock().ok().and_then(|mut s| s.take()) {
+                reply(result);
+            }
+            Ok(())
+        })),
+    )
+}
+
+/// Put cookies (from `Network.getCookies`) into this view, then navigate to `url`.
+pub unsafe fn seed_cookies_and_navigate(
+    controller: &ICoreWebView2Controller,
+    cookies_json: &str,
+    url: &str,
+) -> windows::core::Result<()> {
+    let params = crate::pagetools::cookie_params(cookies_json);
+    let core = controller.CoreWebView2()?;
+    let Some(params) = params else {
+        return core.Navigate(&HSTRING::from(url));
+    };
+    let url = url.to_owned();
+    core.CallDevToolsProtocolMethod(
+        &HSTRING::from("Network.setCookies"),
+        &HSTRING::from(params),
+        &CallDevToolsProtocolMethodCompletedHandler::create(Box::new({
+            let controller = controller.clone();
+            move |_, _| {
+                controller
+                    .CoreWebView2()?
+                    .Navigate(&HSTRING::from(url.as_str()))
+            }
+        })),
+    )
+}
+
 /// The shell must never zoom itself: zoom belongs to the page.
 pub unsafe fn lock_shell_zoom(controller: &ICoreWebView2Controller) -> windows::core::Result<()> {
     let settings = controller.CoreWebView2()?.Settings()?;

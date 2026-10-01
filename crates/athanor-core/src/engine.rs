@@ -25,6 +25,10 @@ pub struct TabOptions {
     /// Extra JS run at document start in every frame (extension userscripts, shortcuts bridge, ...).
     pub init_scripts: Vec<String>,
     pub incognito: bool,
+    /// Render without the GPU (desktop: the tab lives in a separate browser process).
+    pub software_rendering: bool,
+    /// Cookies (`Network.getCookies` JSON) to put into the new view before it loads, so the tab keeps its sign-ins.
+    pub seed_cookies: Option<String>,
 }
 
 /// What was under the pointer when the page's context menu was requested.
@@ -207,6 +211,18 @@ pub trait EngineBackend: Send + Sync {
     ) -> EngineResult {
         Err(EngineError::Engine(
             "evaluating scripts with a result is not supported by this engine".into(),
+        ))
+    }
+    /// Like [`EngineBackend::devtools_call`], handing the JSON result to `reply`. Optional capability.
+    fn devtools_json(
+        &self,
+        _id: &str,
+        _method: &str,
+        _params: &str,
+        _reply: Box<dyn FnOnce(String) + Send>,
+    ) -> EngineResult {
+        Err(EngineError::Engine(
+            "devtools protocol is not supported by this engine".into(),
         ))
     }
     /// Call a Chrome DevTools Protocol method on the tab (`params` is JSON). Optional capability.

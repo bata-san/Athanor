@@ -23,7 +23,7 @@ export default function ExtensionsPage() {
       <IconTile icon="Zap" className="size-10 rounded-xl" />
       <div className="min-w-0 flex-1">
         <h2 className="m-0 text-sm font-semibold">{extension.name}</h2>
-        <p className="m-0 mt-0.5 text-[13px] text-muted-foreground">{extension.description}</p>
+        <p className="m-0 mt-0.5 text-[0.8667rem] text-muted-foreground">{extension.description}</p>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <span className="me-1 text-xs text-muted-foreground">Permissions:</span>
           {extension.permissions.length ? extension.permissions.map((permission) => <Badge key={permission} variant="outline">{permission}</Badge>) : <Badge variant="outline">None</Badge>}

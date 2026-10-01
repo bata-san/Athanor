@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { resolveDrop } from './tabDnd'
 import type { Snapshot, Tab } from './types'
 
-const tab = (id: string, extra: Partial<Tab> = {}): Tab => ({ id, url: `https://${id}.test`, title: id, favicon: null, space: 's1', folder: null, pinned: false, parent: null, created: 0, lastActive: 0, archived: false, muted: false, autoFiled: false, ...extra })
+const tab = (id: string, extra: Partial<Tab> = {}): Tab => ({ id, url: `https://${id}.test`, title: id, favicon: null, space: 's1', folder: null, pinned: false, parent: null, created: 0, lastActive: 0, archived: false, muted: false, autoFiled: false, softwareRendering: false, ...extra })
 const snapshot = (tabs: Tab[]) => ({ workspace: { spaces: [], folders: [], tabs, activeSpace: 's1', activeTab: tabs[0]?.id ?? null, split: null } }) as unknown as Snapshot
 
 describe('resolveDrop', () => {

@@ -117,7 +117,7 @@ export default function BoardsPage({ standaloneId = null }: { standaloneId?: str
           </DropdownMenu>
         </div>)}
       </div>
-      {summaries.length === 0 && <p className="px-2 py-1.5 text-[13px] text-muted-foreground">Create a board to collect references.</p>}
+      {summaries.length === 0 && <p className="px-2 py-1.5 text-[0.8667rem] text-muted-foreground">Create a board to collect references.</p>}
     </aside>}
     <section data-part="board-workspace" className="relative min-w-0 flex-1 overflow-hidden">
       {!board ? <div className="absolute inset-0 grid place-items-center p-6">
@@ -125,7 +125,7 @@ export default function BoardsPage({ standaloneId = null }: { standaloneId?: str
           <IconTile icon="PanelsTopLeft" className="size-11 rounded-xl [&_svg]:size-5" />
           <div>
             <h2 className="m-0 text-sm font-semibold">No board selected</h2>
-            <p className="m-0 mt-1 text-[13px] text-muted-foreground">Create a board to collect references, notes and page captures.</p>
+            <p className="m-0 mt-1 text-[0.8667rem] text-muted-foreground">Create a board to collect references, notes and page captures.</p>
           </div>
           <Button onClick={() => void createBoard()}><AppIcon name="Plus" />New board</Button>
         </div>
@@ -157,7 +157,7 @@ export default function BoardsPage({ standaloneId = null }: { standaloneId?: str
           {marquee && <div className="pointer-events-none absolute z-10 rounded-sm border border-dashed border-primary/50 bg-primary/5" style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h }} />}
           <div className={`${floatCard} bottom-3 left-3`}>
             <Tip label="Zoom out"><Button size="icon-sm" variant="ghost" aria-label="Zoom out" onClick={() => zoomBy(1 / 1.2)}><AppIcon name="Minus" /></Button></Tip>
-            <span className="min-w-11 text-center text-[13px] font-medium tabular-nums text-muted-foreground">{Math.round(board.view.zoom * 100)}%</span>
+            <span className="min-w-11 text-center text-[0.8667rem] font-medium tabular-nums text-muted-foreground">{Math.round(board.view.zoom * 100)}%</span>
             <Tip label="Zoom in"><Button size="icon-sm" variant="ghost" aria-label="Zoom in" onClick={() => zoomBy(1.2)}><AppIcon name="Plus" /></Button></Tip>
           </div>
           <div className={`${floatCard} right-3 bottom-3 gap-2 p-1.5`}>

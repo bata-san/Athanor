@@ -6,7 +6,7 @@
     "popover": "#ffffff", "popoverForeground": "#0a0a0a",
     "primary": "#0f0f10", "primaryForeground": "#fafafa",
     "secondary": "#f4f4f5", "secondaryForeground": "#18181b",
-    "muted": "#f4f4f5", "mutedForeground": "#71717a",
+    "muted": "#f4f4f5", "mutedForeground": "#666670",
     "accent": "#f4f4f5", "accentForeground": "#18181b",
     "destructive": "#dc2626",
     "border": "#e4e4e7", "input": "#e4e4e7", "ring": "#a1a1aa",

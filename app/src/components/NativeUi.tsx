@@ -32,6 +32,7 @@ export function NativeUi() {
     const offs = [
       listen('athanor://script-dialog', (event) => setDialogs((queue) => [...queue.filter((item) => item.tab !== event.tab), event])),
       listen('athanor://permission', (prompt) => setPrompts((queue) => [...queue, prompt])),
+      listen('athanor://closed', ({ count, title }) => toast(count === 1 ? `Closed \u201c${title || 'tab'}\u201d` : `Closed ${count} tabs`, { duration: 7000, action: { label: 'Undo', onClick: () => { void api.reopenClosed(count) } } })),
       listen('athanor://status-text', (event) => useHover.getState().set(event.tab, event.text)),
       listen('athanor://download', (event) => handleDownload(event, names.current)),
     ]
@@ -70,7 +71,7 @@ function ScriptDialog({ event, onDone }: { event: ScriptDialogEvent; onDone: (ac
       <form onSubmit={(submit) => { submit.preventDefault(); onDone(true, text) }}>
         <DialogHeader>
           <DialogTitle className="text-base font-semibold">{title}</DialogTitle>
-          <DialogDescription className="whitespace-pre-wrap break-words text-[13px] text-foreground/80">{leave ? 'Changes you made may not be saved.' : event.message}</DialogDescription>
+          <DialogDescription className="whitespace-pre-wrap break-words text-[0.8667rem] text-foreground/80">{leave ? 'Changes you made may not be saved.' : event.message}</DialogDescription>
         </DialogHeader>
         {event.kind === 'prompt' && <div className="px-5 pt-4"><Input ref={input} value={text} aria-label="Answer" onChange={(change) => setText(change.target.value)} /></div>}
         <DialogFooter className="pt-5">
@@ -88,9 +89,9 @@ function PermissionDialog({ prompt, onDone }: { prompt: PermissionPrompt; onDone
     <DialogContent className="top-[22vh] w-[min(26rem,calc(100vw-1.25rem))]" data-part="permission-dialog" aria-describedby={undefined}>
       <DialogHeader>
         <DialogTitle className="text-base font-semibold">{prompt.host} wants to {ASKS[prompt.kind] ?? `use ${prompt.kind}`}</DialogTitle>
-        <DialogDescription className="text-[13px] text-muted-foreground">You can change this later in Settings → Privacy.</DialogDescription>
+        <DialogDescription className="text-[0.8667rem] text-muted-foreground">You can change this later in Settings → Privacy.</DialogDescription>
       </DialogHeader>
-      <label className="flex items-center gap-2.5 px-5 pt-4 text-[13px]"><Switch checked={remember} onCheckedChange={setRemember} aria-label="Remember for this site" />Remember for this site</label>
+      <label className="flex items-center gap-2.5 px-5 pt-4 text-[0.8667rem]"><Switch checked={remember} onCheckedChange={setRemember} aria-label="Remember for this site" />Remember for this site</label>
       <DialogFooter className="pt-5">
         <Button type="button" variant="outline" onClick={() => onDone(false, remember)}>Block</Button>
         <Button type="button" autoFocus onClick={() => onDone(true, remember)}>Allow</Button>

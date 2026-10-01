@@ -39,18 +39,18 @@ pub fn enabled_in(settings_file: &Path) -> bool {
 /// Install (or remove) the web font. `local_data` is the app's local data dir; the WebView2 profile lives in
 /// `<local_data>/EBWebView`. Never fails the start-up: problems only cost the font.
 pub fn prepare(local_data: &Path, enabled: bool) {
-    let prefs = local_data
-        .join("EBWebView")
-        .join("Default")
-        .join("Preferences");
     if enabled {
         if let Err(error) = install(&local_data.join("fonts")) {
             log::warn!("web font not installed: {error}");
             return;
         }
     }
-    if let Err(error) = write_preferences(&prefs, enabled) {
-        log::warn!("web font preferences not written: {error}");
+    // The software-rendering browser keeps its profile one level deeper (WebView2 appends `EBWebView`).
+    for folder in ["EBWebView", "EBWebView-software/EBWebView"] {
+        let prefs = local_data.join(folder).join("Default").join("Preferences");
+        if let Err(error) = write_preferences(&prefs, enabled) {
+            log::warn!("web font preferences not written: {error}");
+        }
     }
 }
 

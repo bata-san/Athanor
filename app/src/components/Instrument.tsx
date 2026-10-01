@@ -51,7 +51,7 @@ export function TabRuler({ snapshot, orientation = 'horizontal', className }: { 
     {vertical && hovered && <Tooltip open><TooltipTrigger asChild><span className="pointer-events-none absolute end-0 size-px" style={{ top: `${((hover! + 0.5) / tabs.length) * 100}%` }} /></TooltipTrigger><TooltipContent side="right" sideOffset={10}><span className="font-instr tabular-nums opacity-70">{pad(hover! + 1)}/{pad(tabs.length)}</span> {hovered.title}</TooltipContent></Tooltip>}
   </div>
   if (vertical) return <div className={cn('flex w-2.5 flex-col', className)} data-part="tab-ruler">{scrubber}</div>
-  return <div className={cn('flex items-end gap-2 px-3 font-instr text-[9.5px] uppercase tracking-[0.08em] text-muted-foreground tabular-nums rail:hidden', className)} data-part="tab-ruler">
+  return <div className={cn('flex items-end gap-2 px-3 font-instr text-[0.7333rem] uppercase tracking-[0.08em] text-muted-foreground tabular-nums rail:hidden', className)} data-part="tab-ruler">
     {scrubber}
     <span className="max-w-[45%] shrink-0 truncate leading-none">{hovered ? hovered.title.slice(0, 18) : <>{pad(index + 1)}<span className="opacity-50">/{pad(tabs.length)}</span></>}</span>
   </div>

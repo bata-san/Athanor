@@ -12,13 +12,13 @@ export function ShortcutSheet({ open, onOpenChange }: { open: boolean; onOpenCha
   const groups = useMemo(() => GROUPS.map((group) => ({ group, items: SHORTCUTS.filter((item) => item.group === group) })), [])
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent aria-describedby={undefined} data-part="shortcut-sheet" className="top-[9vh] max-h-[82dvh] w-[min(46rem,calc(100vw-1.25rem))] rounded-xl border-border/70 bg-popover/95 backdrop-blur-xl">
-      <DialogTitle className="px-5 pt-4 text-[15px] font-semibold">Keyboard shortcuts</DialogTitle>
+      <DialogTitle className="px-5 pt-4 text-[1rem] font-semibold">Keyboard shortcuts</DialogTitle>
       <DialogDescription className="sr-only">Every Athanor keyboard shortcut.</DialogDescription>
       <div className="grid min-h-0 grid-cols-2 gap-x-8 gap-y-5 overflow-y-auto px-5 pb-5 pt-3 max-md:grid-cols-1">
         {groups.map(({ group, items }) => <section key={group} aria-label={group}>
-          <h3 className="m-0 mb-1.5 font-instr text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">{group}</h3>
+          <h3 className="m-0 mb-1.5 font-instr text-[0.7333rem] font-medium uppercase tracking-[0.08em] text-muted-foreground">{group}</h3>
           <ul className="m-0 flex list-none flex-col p-0">
-            {items.map((item) => <li key={item.combo} className="flex min-h-7 items-center justify-between gap-3 border-b border-border/50 py-1 text-[13px] last:border-b-0">
+            {items.map((item) => <li key={item.combo} className="flex min-h-7 items-center justify-between gap-3 border-b border-border/50 py-1 text-[0.8667rem] last:border-b-0">
               <span className="min-w-0 truncate">{item.label}</span>
               <span className="flex shrink-0 gap-1">{comboKeys(item.combo).map((key, index) => <KeyCap key={index} k={key} />)}</span>
             </li>)}

@@ -3,7 +3,7 @@ import { Copy, Minus, Square, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
-const base = 'grid h-10 w-11 place-items-center text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:bg-accent [&_svg]:size-[15px] [&_svg]:stroke-[1.6]'
+const base = 'grid h-10 w-11 place-items-center text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:bg-accent [&_svg]:size-[1rem] [&_svg]:stroke-[1.6]'
 
 /** Minimise / maximise / close for the frameless window. */
 export function WindowControls({ className }: { className?: string }) {

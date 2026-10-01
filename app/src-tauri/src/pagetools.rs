@@ -39,6 +39,38 @@ pub fn zoom_key(url: &str) -> Option<String> {
         .map(|h| h.trim_start_matches("www.").to_ascii_lowercase())
 }
 
+/// `Network.getCookies` result -> params for `Network.setCookies` (only the fields a new view needs). `None` when empty.
+pub fn cookie_params(getcookies_json: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(getcookies_json).ok()?;
+    let cookies: Vec<serde_json::Value> = value
+        .get("cookies")?
+        .as_array()?
+        .iter()
+        .filter_map(|c| {
+            let mut out = serde_json::Map::new();
+            for key in [
+                "name", "value", "domain", "path", "secure", "httpOnly", "sameSite", "priority",
+            ] {
+                if let Some(v) = c.get(key) {
+                    out.insert(key.to_owned(), v.clone());
+                }
+            }
+            let session = c.get("session").and_then(|v| v.as_bool()).unwrap_or(false);
+            if !session {
+                if let Some(exp) = c
+                    .get("expires")
+                    .filter(|v| v.as_f64().is_some_and(|e| e > 0.0))
+                {
+                    out.insert("expires".into(), exp.clone());
+                }
+            }
+            (out.contains_key("name") && out.contains_key("domain"))
+                .then_some(serde_json::Value::Object(out))
+        })
+        .collect();
+    (!cookies.is_empty()).then(|| json!({ "cookies": cookies }).to_string())
+}
+
 /// `scheme://host[:port]` of a permission request's page, lower-cased; the whole text when it is not a URL.
 pub fn permission_host(origin: &str) -> String {
     match url::Url::parse(origin) {
@@ -113,6 +145,22 @@ mod tests {
             permission_key("https://a.test/", "camera"),
             permission_key("https://a.test/", "microphone")
         );
+    }
+
+    #[test]
+    fn cookies_are_carried_over_without_the_extras() {
+        let got = r#"{"cookies":[{"name":"sid","value":"abc","domain":".example.com","path":"/","expires":1900000000,"size":6,"httpOnly":true,"secure":true,"session":false,"sameSite":"Lax","priority":"Medium","sourcePort":443},{"name":"tmp","value":"1","domain":"example.com","path":"/","expires":-1,"session":true}]}"#;
+        let params: serde_json::Value = serde_json::from_str(&cookie_params(got).unwrap()).unwrap();
+        let list = params["cookies"].as_array().unwrap();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0]["expires"], 1900000000);
+        assert!(list[0].get("size").is_none() && list[0].get("sourcePort").is_none());
+        assert!(
+            list[1].get("expires").is_none(),
+            "session cookies stay session cookies"
+        );
+        assert!(cookie_params(r#"{"cookies":[]}"#).is_none());
+        assert!(cookie_params("not json").is_none());
     }
 
     #[test]
