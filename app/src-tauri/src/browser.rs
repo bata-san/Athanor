@@ -73,6 +73,8 @@ struct Inner {
     view: ViewState,
     blocked_total: u64,
     closed: Vec<String>,
+    /// The address each tab last really arrived at (a typed address that turns out to be a download is not one).
+    committed: HashMap<String, String>,
     had_split: bool,
 }
 
@@ -175,6 +177,7 @@ impl Browser {
             view: ViewState::default(),
             blocked_total: 0,
             closed: vec![],
+            committed: HashMap::new(),
             had_split: false,
         };
         Arc::new(Self {
@@ -365,7 +368,12 @@ impl Browser {
         match ev {
             EngineEvent::NavigationStarted { tab, url } => {
                 let mut g = self.inner.lock();
+                // The error page is itself a navigation (to a data: document); it is not a place the tab went to.
+                if url.starts_with("data:") && g.runtime.get(&tab).is_some_and(|r| r.failed) {
+                    return;
+                }
                 if let Some(r) = g.runtime.get_mut(&tab) {
+                    r.failed = false;
                     r.loading = true;
                     r.blocked = 0;
                     r.secure = urlutil::is_secure(&url);
@@ -378,9 +386,13 @@ impl Browser {
                     return;
                 }
                 let mut g = self.inner.lock();
+                if url.starts_with("data:") && g.runtime.get(&tab).is_some_and(|r| r.failed) {
+                    return;
+                }
                 if g.ws.tab(&tab).is_none() {
                     return;
                 }
+                g.committed.insert(tab.clone(), url.clone());
                 g.ws.update_tab(&tab, Some(&url), None, None);
                 if let Some(r) = g.runtime.get_mut(&tab) {
                     r.secure = urlutil::is_secure(&url);
@@ -388,8 +400,93 @@ impl Browser {
                 let title = g.ws.tab(&tab).map(|t| t.title.clone()).unwrap_or_default();
                 g.history.record(&url, &title, now());
                 self.auto_file_locked(&mut g, &tab);
+                let zoom = crate::pagetools::zoom_key(&url)
+                    .and_then(|host| g.settings.site_zoom.get(&host).copied())
+                    .unwrap_or(1.0);
                 drop(g);
+                // Zoom belongs to the site, not to the tab: put the remembered level back after every navigation.
+                let _ = self.engine.set_zoom(&tab, zoom);
                 self.changed();
+            }
+            EngineEvent::LoadFailed { tab, .. } => {
+                if let Some(r) = self.inner.lock().runtime.get_mut(&tab) {
+                    r.failed = true;
+                    r.loading = false;
+                }
+                self.changed();
+            }
+            EngineEvent::StatusText { .. } => {
+                let _ = self.app.emit("athanor://status-text", &ev);
+            }
+            EngineEvent::ScriptDialog { .. } => {
+                let _ = self.app.emit("athanor://script-dialog", &ev);
+            }
+            EngineEvent::Download {
+                ref tab, ref state, ..
+            } => {
+                if state == "started" {
+                    // The address that was typed turned out to be a file: the tab stays where it was.
+                    let mut g = self.inner.lock();
+                    let back = g.committed.get(tab).cloned();
+                    if let Some(url) = back {
+                        if g.ws.tab(tab).is_some_and(|t| t.url != url) {
+                            g.ws.update_tab(tab, Some(&url), None, None);
+                        }
+                        if let Some(r) = g.runtime.get_mut(tab) {
+                            r.loading = false;
+                        }
+                        drop(g);
+                        self.changed();
+                    }
+                }
+                let _ = self.app.emit("athanor://download", &ev);
+            }
+            EngineEvent::PermissionRequest {
+                tab,
+                id,
+                origin,
+                kind,
+            } => {
+                let key = crate::pagetools::permission_key(&origin, &kind);
+                let known = self
+                    .inner
+                    .lock()
+                    .settings
+                    .site_permissions
+                    .get(&key)
+                    .copied();
+                match known {
+                    Some(allow) => {
+                        let _ = self.engine.resolve_permission(&tab, id, allow);
+                    }
+                    None => {
+                        let _ = self.app.emit(
+                            "athanor://permission",
+                            serde_json::json!({
+                                "tab": tab, "id": id, "origin": origin, "kind": kind,
+                                "host": crate::pagetools::permission_host(&origin),
+                            }),
+                        );
+                    }
+                }
+            }
+            EngineEvent::ZoomChanged { tab, factor } => {
+                let mut g = self.inner.lock();
+                let key =
+                    g.ws.tab(&tab)
+                        .and_then(|t| crate::pagetools::zoom_key(&t.url));
+                if let Some(host) = key {
+                    let changed = if (factor - 1.0).abs() < 0.01 {
+                        g.settings.site_zoom.remove(&host).is_some()
+                    } else {
+                        let clamped = factor.clamp(0.25, 5.0);
+                        g.settings.site_zoom.insert(host, clamped) != Some(clamped)
+                    };
+                    drop(g);
+                    if changed {
+                        self.changed();
+                    }
+                }
             }
             EngineEvent::TitleChanged { tab, title } => {
                 let mut g = self.inner.lock();
@@ -530,6 +627,31 @@ impl Browser {
             "F12" => {
                 if let Some(t) = active {
                     let _ = self.engine.open_devtools(&t);
+                }
+            }
+            "Ctrl+Shift+R" => {
+                if let Some(t) = active {
+                    self.hard_reload(&t);
+                }
+            }
+            "Ctrl+P" => {
+                if let Some(t) = active {
+                    let _ = self.engine.eval(&t, "window.print()");
+                }
+            }
+            "F11" => self.toggle_fullscreen(),
+            "Ctrl+=" | "Ctrl+-" | "Ctrl+0" => {
+                if let Some(t) = active {
+                    self.zoom_page(
+                        &t,
+                        if combo == "Ctrl+=" {
+                            1
+                        } else if combo == "Ctrl+-" {
+                            -1
+                        } else {
+                            0
+                        },
+                    );
                 }
             }
             "Ctrl+Shift+T" => {
@@ -690,6 +812,7 @@ impl Browser {
             }
             let out = g.ws.close_tab(tab);
             g.runtime.remove(tab);
+            g.committed.remove(tab);
             g.view.emulation.remove(tab);
             g.view.want_live.remove(tab);
             g.view.live.remove(tab);
@@ -1030,9 +1153,135 @@ impl Browser {
         self.inner.lock().ws.tab(tab).map(|t| t.url.clone())
     }
 
+    /// Zoom the page one step (`dir` > 0 in, < 0 out, 0 back to 100 %). Remembered for the site.
+    pub fn zoom_page(self: &Arc<Self>, tab: &str, dir: i32) {
+        let (key, current) = {
+            let g = self.inner.lock();
+            let Some(t) = g.ws.tab(tab) else { return };
+            let key = crate::pagetools::zoom_key(&t.url);
+            let current = key
+                .as_ref()
+                .and_then(|k| g.settings.site_zoom.get(k).copied())
+                .unwrap_or(1.0);
+            (key, current)
+        };
+        let next = crate::pagetools::zoom_step(current, dir);
+        if self.engine.set_zoom(tab, next).is_err() {
+            return;
+        }
+        if let Some(host) = key {
+            let mut g = self.inner.lock();
+            if (next - 1.0).abs() < 0.01 {
+                g.settings.site_zoom.remove(&host);
+            } else {
+                g.settings.site_zoom.insert(host, next);
+            }
+            drop(g);
+            self.changed();
+        }
+    }
+
+    /// Reload ignoring the cache (falls back to a normal reload).
+    pub fn hard_reload(&self, tab: &str) {
+        if self
+            .engine
+            .devtools_call(tab, "Page.reload", r#"{"ignoreCache":true}"#)
+            .is_err()
+        {
+            let _ = self.engine.reload(tab);
+        }
+    }
+
+    /// Keyboard focus to the shell UI (e.g. the find bar) or back to a page.
+    pub fn focus_shell(&self) {
+        use tauri::Manager;
+        if let Some(shell) = self.app.get_webview("shell") {
+            let _ = shell.set_focus();
+        }
+    }
+
+    pub fn focus_page(&self, tab: &str) {
+        let _ = self.engine.focus(tab);
+    }
+
+    /// The shell's answer to a JavaScript dialog.
+    pub fn resolve_script_dialog(&self, tab: &str, accept: bool, text: &str) {
+        let _ = self.engine.resolve_script_dialog(tab, accept, text);
+    }
+
+    /// The shell's answer to a permission prompt; `remember` keeps it for that site.
+    pub fn resolve_permission(
+        &self,
+        tab: &str,
+        id: u32,
+        allow: bool,
+        remember: Option<(String, String)>,
+    ) {
+        if let Some((origin, kind)) = remember {
+            let key = crate::pagetools::permission_key(&origin, &kind);
+            self.inner
+                .lock()
+                .settings
+                .site_permissions
+                .insert(key, allow);
+            self.changed();
+        }
+        let _ = self.engine.resolve_permission(tab, id, allow);
+    }
+
+    pub fn reset_site_permissions(&self) {
+        self.inner.lock().settings.site_permissions.clear();
+        self.changed();
+    }
+
+    pub fn print_page(&self, tab: &str) {
+        let _ = self.engine.eval(tab, "window.print()");
+    }
+
+    /// Full screen for the main window.
+    pub fn toggle_fullscreen(&self) {
+        use tauri::Manager;
+        if let Some(window) = self.app.get_window("main") {
+            let on = window.is_fullscreen().unwrap_or(false);
+            let _ = window.set_fullscreen(!on);
+        }
+    }
+
+    /// One find-in-page action (`start`, `next`, `prev`, `clear`). The result goes to the shell as `athanor://find`.
+    pub fn find_in_page(&self, tab: &str, action: &str, query: &str, match_case: bool) {
+        let script = crate::pagetools::find_script(action, query, match_case);
+        let (app, tab_id) = (self.app.clone(), tab.to_string());
+        let reply: Box<dyn FnOnce(String) + Send> = Box::new(move |json| {
+            let result =
+                serde_json::from_str::<serde_json::Value>(&json).unwrap_or(serde_json::Value::Null);
+            let (count, index) = (
+                result.get("count").and_then(|v| v.as_u64()).unwrap_or(0),
+                result.get("index").and_then(|v| v.as_u64()).unwrap_or(0),
+            );
+            let _ = app.emit(
+                "athanor://find",
+                serde_json::json!({ "tab": tab_id, "count": count, "index": index }),
+            );
+        });
+        let _ = self.engine.eval_json(tab, &script, reply);
+    }
+
     pub fn reload_stop(&self, tab: &str, what: &str) {
         let _ = match what {
-            "reload" => self.engine.reload(tab),
+            "reload" => {
+                // Reloading the error page would reload the error page: try the address that failed instead.
+                let failed_url = {
+                    let g = self.inner.lock();
+                    g.runtime
+                        .get(tab)
+                        .filter(|r| r.failed)
+                        .and_then(|_| g.ws.tab(tab).map(|t| t.url.clone()))
+                };
+                match failed_url {
+                    Some(url) => self.engine.navigate(tab, &url),
+                    None => self.engine.reload(tab),
+                }
+            }
             "stop" => self.engine.stop(tab),
             "back" => self.engine.go_back(tab),
             _ => self.engine.go_forward(tab),

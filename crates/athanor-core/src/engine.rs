@@ -99,6 +99,44 @@ pub enum EngineEvent {
         target: ContextTarget,
         items: Vec<ContextItem>,
     },
+    /// The page failed to load and the engine showed Athanor's error page instead (`url` is what failed).
+    #[serde(rename_all = "camelCase")]
+    LoadFailed { tab: Id, url: String },
+    /// Text for the "link under the pointer" preview; empty when the pointer left the link.
+    #[serde(rename_all = "camelCase")]
+    StatusText { tab: Id, text: String },
+    /// `alert` / `confirm` / `prompt` / leave-page question. Answer with [`EngineBackend::resolve_script_dialog`].
+    #[serde(rename_all = "camelCase")]
+    ScriptDialog {
+        tab: Id,
+        kind: String,
+        message: String,
+        default_text: String,
+        origin: String,
+    },
+    /// The page asks for a permission (`kind`: camera, microphone, location, ...). Answer with
+    /// [`EngineBackend::resolve_permission`].
+    #[serde(rename_all = "camelCase")]
+    PermissionRequest {
+        tab: Id,
+        id: u32,
+        origin: String,
+        kind: String,
+    },
+    /// Progress of a download. `state`: started, progress, done, failed, cancelled.
+    #[serde(rename_all = "camelCase")]
+    Download {
+        tab: Id,
+        id: u32,
+        name: String,
+        path: String,
+        state: String,
+        received: u64,
+        total: u64,
+    },
+    /// The page's zoom changed (keyboard, Ctrl+wheel, pinch). `factor` is 1.0 at 100 %.
+    #[serde(rename_all = "camelCase")]
+    ZoomChanged { tab: Id, factor: f64 },
     /// A custom context-menu entry was chosen (e.g. `send-image-to-board` with the image URL as `data`).
     #[serde(rename_all = "camelCase")]
     ContextAction {
@@ -147,9 +185,35 @@ pub trait EngineBackend: Send + Sync {
     fn resolve_context_menu(&self, _id: &str, _command: Option<i32>) -> EngineResult {
         Ok(())
     }
+    /// Answer a pending [`EngineEvent::ScriptDialog`] of `id`.
+    fn resolve_script_dialog(&self, _id: &str, _accept: bool, _text: &str) -> EngineResult {
+        Ok(())
+    }
+    /// Answer a pending [`EngineEvent::PermissionRequest`].
+    fn resolve_permission(&self, _id: &str, _request: u32, _allow: bool) -> EngineResult {
+        Ok(())
+    }
     /// Round the corners of every tab view (physical pixels; 0 = square). Optional capability.
     fn set_corner_radius(&self, _radius: i32) -> EngineResult {
         Ok(())
+    }
+    /// Run `script` in the page and hand its JSON-encoded result to `reply` (once, possibly on another thread).
+    /// Optional capability: used by find-in-page.
+    fn eval_json(
+        &self,
+        _id: &str,
+        _script: &str,
+        _reply: Box<dyn FnOnce(String) + Send>,
+    ) -> EngineResult {
+        Err(EngineError::Engine(
+            "evaluating scripts with a result is not supported by this engine".into(),
+        ))
+    }
+    /// Call a Chrome DevTools Protocol method on the tab (`params` is JSON). Optional capability.
+    fn devtools_call(&self, _id: &str, _method: &str, _params: &str) -> EngineResult {
+        Err(EngineError::Engine(
+            "devtools protocol is not supported by this engine".into(),
+        ))
     }
     /// Free the renderer of a tab but keep the Athanor tab entry (archive / memory saver).
     fn discard(&self, id: &str) -> EngineResult {

@@ -1,6 +1,8 @@
 //! Athanor application shell (Tauri). Desktop and Android entry point.
 
 mod boards;
+#[cfg(windows)]
+mod brand;
 mod browser;
 mod commands;
 mod devservers;
@@ -8,12 +10,15 @@ mod devservers;
 mod engine_desktop;
 #[cfg(target_os = "android")]
 mod engine_mobile;
+#[cfg(windows)]
+mod errorpage;
 mod ext_host;
 mod filter;
 #[cfg(windows)]
 mod import;
 #[cfg(target_os = "android")]
 mod jni_bridge;
+mod pagetools;
 #[cfg(desktop)]
 #[path = "platform_desktop.rs"]
 mod platform;
@@ -28,6 +33,8 @@ mod updater;
 mod webfont;
 #[cfg(windows)]
 mod win;
+#[cfg(windows)]
+mod win_ui;
 
 use browser::{Browser, Paths};
 use ext_host::ExtHost;
@@ -71,7 +78,6 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(updater::Pending::default());
     let app = builder
-        .plugin(tauri_plugin_dialog::init())
         .register_uri_scheme_protocol("athanor-ext", |ctx, req| {
             let not_found = || {
                 Response::builder()
@@ -171,6 +177,18 @@ pub fn run() {
             commands::close_tab,
             commands::duplicate_tab,
             commands::reload,
+            commands::zoom_page,
+            commands::find_in_page,
+            commands::hard_reload,
+            commands::print_page,
+            commands::resolve_script_dialog,
+            commands::resolve_permission,
+            commands::reset_site_permissions,
+            commands::reveal_download,
+            commands::focus_shell,
+            commands::focus_page,
+            commands::run_shortcut,
+            commands::toggle_fullscreen,
             commands::stop,
             commands::go_back,
             commands::go_forward,

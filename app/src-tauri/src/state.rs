@@ -17,6 +17,8 @@ pub struct TabRuntime {
     pub blocked: u32,
     pub audible: bool,
     pub secure: bool,
+    /// The page failed to load and Athanor's error page is showing.
+    pub failed: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -45,6 +47,10 @@ pub struct Settings {
     pub web_font: bool,
     /// Look for updates at start-up and download them in the background.
     pub auto_update: bool,
+    /// Page zoom remembered per site (host without `www.`); 1.0 is not stored.
+    pub site_zoom: std::collections::HashMap<String, f64>,
+    /// Remembered answers to permission prompts: `"https://host|camera"` -> allowed.
+    pub site_permissions: std::collections::HashMap<String, bool>,
 }
 
 impl Default for Settings {
@@ -67,6 +73,8 @@ impl Default for Settings {
             onboarded: false,
             web_font: true,
             auto_update: true,
+            site_zoom: Default::default(),
+            site_permissions: Default::default(),
         }
     }
 }
@@ -130,6 +138,26 @@ impl Settings {
             self.sidebar_side = "left".into();
         }
         self.sidebar_width = self.sidebar_width.clamp(180, 520);
+        self.site_zoom.retain(|host, factor| {
+            !host.is_empty() && factor.is_finite() && (*factor - 1.0).abs() >= 0.01
+        });
+        for factor in self.site_zoom.values_mut() {
+            *factor = factor.clamp(0.25, 5.0);
+        }
+        if self.site_permissions.len() > 2000 {
+            let mut keys: Vec<_> = self.site_permissions.keys().cloned().collect();
+            keys.sort();
+            for key in keys.into_iter().skip(2000) {
+                self.site_permissions.remove(&key);
+            }
+        }
+        if self.site_zoom.len() > 500 {
+            let mut hosts: Vec<_> = self.site_zoom.keys().cloned().collect();
+            hosts.sort();
+            for host in hosts.into_iter().skip(500) {
+                self.site_zoom.remove(&host);
+            }
+        }
         if self.theme.trim().is_empty() {
             self.theme = Settings::default().theme;
         }

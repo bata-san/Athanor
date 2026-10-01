@@ -305,6 +305,49 @@ impl EngineBackend for DesktopEngine {
         self.get(id)?.set_zoom(factor).map_err(err)
     }
 
+    fn eval_json(
+        &self,
+        id: &str,
+        script: &str,
+        reply: Box<dyn FnOnce(String) + Send>,
+    ) -> EngineResult {
+        #[cfg(windows)]
+        {
+            let script = script.to_string();
+            self.get(id)?
+                .with_webview(move |pw| unsafe {
+                    let _ = crate::win::eval_json(&pw.controller(), &script, reply);
+                })
+                .map_err(err)
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (id, script, reply);
+            Err(athanor_core::engine::EngineError::Engine(
+                "not supported".into(),
+            ))
+        }
+    }
+
+    fn devtools_call(&self, id: &str, method: &str, params: &str) -> EngineResult {
+        #[cfg(windows)]
+        {
+            let (method, params) = (method.to_string(), params.to_string());
+            self.get(id)?
+                .with_webview(move |pw| unsafe {
+                    let _ = crate::win::devtools_call(&pw.controller(), &method, &params);
+                })
+                .map_err(err)
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (id, method, params);
+            Err(athanor_core::engine::EngineError::Engine(
+                "not supported".into(),
+            ))
+        }
+    }
+
     fn set_muted(&self, id: &str, muted: bool) -> EngineResult {
         #[cfg(windows)]
         return self
@@ -339,6 +382,35 @@ impl EngineBackend for DesktopEngine {
         #[cfg(not(windows))]
         {
             let _ = (id, command);
+            Ok(())
+        }
+    }
+
+    fn resolve_script_dialog(&self, id: &str, accept: bool, text: &str) -> EngineResult {
+        #[cfg(windows)]
+        {
+            let (tab, text) = (id.to_string(), text.to_string());
+            self.get(id)?
+                .with_webview(move |_| crate::win_ui::resolve_script_dialog(&tab, accept, &text))
+                .map_err(err)
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (id, accept, text);
+            Ok(())
+        }
+    }
+
+    fn resolve_permission(&self, id: &str, request: u32, allow: bool) -> EngineResult {
+        #[cfg(windows)]
+        {
+            self.get(id)?
+                .with_webview(move |_| crate::win_ui::resolve_permission(request, allow))
+                .map_err(err)
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (id, request, allow);
             Ok(())
         }
     }

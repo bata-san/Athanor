@@ -9,6 +9,7 @@ import { useAppStore } from '@/lib/store'
 import { assetUrl } from '@/lib/asset'
 import { arrangeBoardItems, fitBoardView, hitTestBoardItem, screenToWorld, zoomAround } from '@/lib/boardMath'
 import { AppIcon } from '@/components/Icons'
+import { askConfirm, askText } from '@/components/dialogs'
 import { Callout, IconTile } from '@/components/page'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -86,9 +87,9 @@ export default function BoardsPage({ standaloneId = null }: { standaloneId?: str
   const pasteImages = async () => { const items = await navigator.clipboard?.read?.(); if (!items) return; for (const clipboard of items) for (const type of clipboard.types.filter((entry) => entry.startsWith('image/'))) { const blob = await clipboard.getType(type); await addImageFile(new File([blob], 'pasted-image', { type })) } }
   const arrange = () => { if (board) updateItems((items) => arrangeBoardItems(items)) }
   const fitAll = () => { if (board) setBoard({ ...board, view: fitBoardView(board.items, fitSize) }) }
-  const createBoard = async () => { const name = window.prompt('Board name', 'Untitled board'); if (name?.trim()) { const created = await api.createBoard(name.trim()); await refreshList(); setBoard(created); setSelected([]) } }
-  const renameBoard = async (entry: BoardSummary) => { const name = window.prompt('Rename board', entry.name); if (name?.trim() && board?.id === entry.id) setBoard({ ...board, name: name.trim() }); else if (name?.trim()) { const loaded = await api.getBoard(entry.id); await api.saveBoard({ ...loaded, name: name.trim() }); void refreshList() } }
-  const deleteBoard = async (entry: BoardSummary) => { if (!window.confirm(`Delete “${entry.name}”?`)) return; await api.deleteBoard(entry.id); const list = await refreshList(); if (board?.id === entry.id) { const next = list[0]; setBoard(next ? await api.getBoard(next.id) : null) } }
+  const createBoard = async () => { const name = await askText({ title: 'New board', label: 'Name', initial: 'Untitled board', confirm: 'Create' }); if (name) { const created = await api.createBoard(name); await refreshList(); setBoard(created); setSelected([]) } }
+  const renameBoard = async (entry: BoardSummary) => { const name = await askText({ title: 'Rename board', label: 'Name', initial: entry.name, confirm: 'Rename' }); if (name && board?.id === entry.id) setBoard({ ...board, name }); else if (name) { const loaded = await api.getBoard(entry.id); await api.saveBoard({ ...loaded, name }); void refreshList() } }
+  const deleteBoard = async (entry: BoardSummary) => { if (!await askConfirm({ title: `Delete “${entry.name}”?`, description: 'The board and its items are removed.', confirm: 'Delete', destructive: true })) return; await api.deleteBoard(entry.id); const list = await refreshList(); if (board?.id === entry.id) { const next = list[0]; setBoard(next ? await api.getBoard(next.id) : null) } }
   const addUrl = async (url: string, x: number, y: number) => { if (!board) return; const world = screenToWorld({ x, y }, board.view); await api.boardAddFromUrl(board.id, url, world.x, world.y); await loadBoard(board.id) }
   const zoomBy = (factor: number) => setBoard((value) => value ? { ...value, view: zoomAround(value.view, { x: fitSize.w / 2, y: fitSize.h / 2 }, value.view.zoom * factor) } : value)
 

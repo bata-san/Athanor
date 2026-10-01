@@ -367,9 +367,23 @@ fn combo(vk: u32, ctrl: bool, shift: bool, alt: bool) -> Option<&'static str> {
         (0x42, true, false, false) => "Ctrl+B",
         (0x44, true, true, false) => "Ctrl+Shift+D",
         (0x52, true, false, false) | (0x74, false, false, false) => "F5",
+        (0x52, true, true, false) | (0x74, true, _, false) => "Ctrl+Shift+R",
         (0x7B, false, false, false) => "F12",
-        (0x09, true, false, false) => "Ctrl+Tab",
-        (0x09, true, true, false) => "Ctrl+Shift+Tab",
+        (0x7A, false, false, false) => "F11",
+        (0x09, true, false, false) | (0x22, true, false, false) => "Ctrl+Tab",
+        (0x09, true, true, false) | (0x21, true, false, false) => "Ctrl+Shift+Tab",
+        (0xDD, true, true, false) => "Ctrl+Tab",
+        (0xDB, true, true, false) => "Ctrl+Shift+Tab",
+        (0x46, true, false, false) => "Ctrl+F",
+        (0x47, true, false, false) | (0x72, false, false, false) => "Ctrl+G",
+        (0x47, true, true, false) | (0x72, false, true, false) => "Ctrl+Shift+G",
+        (0x44, true, false, false) => "Ctrl+D",
+        (0x50, true, false, false) => "Ctrl+P",
+        (0xBB, true, _, false) | (0x6B, true, _, false) => "Ctrl+=",
+        (0xBD, true, _, false) | (0x6D, true, _, false) => "Ctrl+-",
+        (0x30, true, false, false) | (0x60, true, false, false) => "Ctrl+0",
+        (0xBC, true, false, false) => "Ctrl+,",
+        (0xBF, true, false, false) => "Ctrl+/",
         (0x25, false, false, true) => "Alt+Left",
         (0x27, false, false, true) => "Alt+Right",
         (0xDC, true, false, false) => "Ctrl+\\",
@@ -404,6 +418,8 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
     if let Ok(settings) = core.Settings() {
         let _ = settings.SetIsWebMessageEnabled(true);
     }
+    // Athanor's own error page, dialogs, permission prompts, downloads and identity (no Edge look-alikes).
+    let ui = crate::win_ui::attach_ui(&core, &tab, &ctx.sink)?;
     let bootstrap =
         AddScriptToExecuteOnDocumentCreatedCompletedHandler::create(Box::new(|_, _| Ok(())));
     core.AddScriptToExecuteOnDocumentCreated(
@@ -588,11 +604,12 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
         )?;
     }
     {
-        let (sink, tab, filter, page_url) = (
+        let (sink, tab, filter, page_url, ui) = (
             ctx.sink.clone(),
             tab.clone(),
             ctx.filter.clone(),
             ctx.page_url.clone(),
+            ui.clone(),
         );
         core.add_NavigationCompleted(
             &NavigationCompletedEventHandler::create(Box::new(move |sender, args| {
@@ -600,8 +617,19 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
                     let mut ok = Default::default();
                     if args.IsSuccess(&mut ok).is_ok() && !ok.as_bool() {
                         let failed = page_url.lock().clone();
+                        let mut status = COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN;
+                        let _ = args.WebErrorStatus(&mut status);
                         if let Some(orig) = filter.upgrade_fallback(&failed) {
                             core.Navigate(&HSTRING::from(orig))?;
+                        } else if is_web(&failed)
+                            && status != COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED
+                            && !ui.download_just_started()
+                        {
+                            sink(EngineEvent::LoadFailed {
+                                tab: tab.clone(),
+                                url: failed.clone(),
+                            });
+                            let _ = crate::win_ui::show_error_page(core, &failed, status.0);
                         }
                     }
                 }
@@ -771,6 +799,25 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
                             audible: playing.as_bool(),
                         });
                     }
+                }
+                Ok(())
+            })),
+            &mut token,
+        )?;
+    }
+
+    // --- zoom (keyboard, Ctrl+wheel, pinch) ---
+    {
+        let (sink, tab) = (ctx.sink.clone(), tab.clone());
+        controller.add_ZoomFactorChanged(
+            &ZoomFactorChangedEventHandler::create(Box::new(move |sender, _| {
+                if let Some(controller) = sender {
+                    let mut factor = 1.0f64;
+                    controller.ZoomFactor(&mut factor)?;
+                    sink(EngineEvent::ZoomChanged {
+                        tab: tab.clone(),
+                        factor,
+                    });
                 }
                 Ok(())
             })),
@@ -957,6 +1004,60 @@ pub unsafe fn set_muted(
         .CoreWebView2()?
         .cast::<ICoreWebView2_8>()?
         .SetIsMuted(muted)
+}
+
+/// Run a script and give its JSON-encoded result to `reply` (from the UI thread).
+pub unsafe fn eval_json(
+    controller: &ICoreWebView2Controller,
+    script: &str,
+    reply: Box<dyn FnOnce(String) + Send>,
+) -> windows::core::Result<()> {
+    let slot = std::sync::Mutex::new(Some(reply));
+    controller.CoreWebView2()?.ExecuteScript(
+        &HSTRING::from(script),
+        &ExecuteScriptCompletedHandler::create(Box::new(move |error, result| {
+            if error.is_ok() {
+                if let Some(reply) = slot.lock().ok().and_then(|mut s| s.take()) {
+                    reply(result);
+                }
+            }
+            Ok(())
+        })),
+    )
+}
+
+/// Call a DevTools-protocol method (fire and forget).
+pub unsafe fn devtools_call(
+    controller: &ICoreWebView2Controller,
+    method: &str,
+    params: &str,
+) -> windows::core::Result<()> {
+    controller.CoreWebView2()?.CallDevToolsProtocolMethod(
+        &HSTRING::from(method),
+        &HSTRING::from(params),
+        &CallDevToolsProtocolMethodCompletedHandler::create(Box::new(|_, _| Ok(()))),
+    )
+}
+
+/// The shell must never zoom itself: zoom belongs to the page.
+pub unsafe fn lock_shell_zoom(controller: &ICoreWebView2Controller) -> windows::core::Result<()> {
+    let settings = controller.CoreWebView2()?.Settings()?;
+    settings.SetIsZoomControlEnabled(false)?;
+    // The shell is Athanor's own UI: no browser accelerators (reload, print, find...), dialogs, error page or autofill.
+    let _ = settings.SetAreDefaultScriptDialogsEnabled(false);
+    let _ = settings.SetIsBuiltInErrorPageEnabled(false);
+    let _ = settings.SetIsStatusBarEnabled(false);
+    if let Ok(settings3) = settings.cast::<ICoreWebView2Settings3>() {
+        let _ = settings3.SetAreBrowserAcceleratorKeysEnabled(false);
+    }
+    if let Ok(settings4) = settings.cast::<ICoreWebView2Settings4>() {
+        let _ = settings4.SetIsGeneralAutofillEnabled(false);
+        let _ = settings4.SetIsPasswordAutosaveEnabled(false);
+    }
+    if let Ok(settings5) = settings.cast::<ICoreWebView2Settings5>() {
+        settings5.SetIsPinchZoomEnabled(false)?;
+    }
+    Ok(())
 }
 
 /// Screenshot the visible area of the page (PNG, or JPEG for cheap freeze-frames). The result is delivered

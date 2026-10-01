@@ -23,6 +23,10 @@ import { StageBar, MobileBar } from './components/Toolbar'
 import { CommandBar, type BarMode } from './components/CommandBar'
 import { hostOf } from './components/UrlPill'
 import { startupUpdateCheck } from './lib/updates'
+import { FindBar } from './components/FindBar'
+import { NativeUi } from './components/NativeUi'
+import { ShortcutSheet } from './components/ShortcutSheet'
+import { canonicalShortcut, shortcutOwner } from './lib/shortcuts'
 import { TabSwitcher } from './components/TabSwitcher'
 import { NewTabPage } from './components/NewTabPage'
 import { SuspenseCard } from './components/SuspenseCard'
@@ -60,7 +64,13 @@ function useFreezeFrames(targets: () => { tab: string; rect: Rect }[]) {
       } catch { return null }
     })) : []
     if (!desired.current) { applied.current = false; return }
-    setFrames(shots.filter((shot): shot is Frame => shot !== null))
+    const usable = shots.filter((shot): shot is Frame => shot !== null)
+    // The still image must be decoded and on screen before the live page is hidden, or the gap flashes white.
+    await Promise.all(usable.map((shot) => { const image = new Image(); image.src = shot.src; return image.decode().catch(() => undefined) }))
+    if (!desired.current) { applied.current = false; return }
+    setFrames(usable)
+    if (usable.length) await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+    if (!desired.current) { applied.current = false; return }
     await api.setOverlayOpen(true)
   }, [])
   const thaw = useCallback(async () => {
@@ -68,7 +78,7 @@ function useFreezeFrames(targets: () => { tab: string; rect: Rect }[]) {
     if (!applied.current) return
     applied.current = false
     await api.setOverlayOpen(false)
-    window.setTimeout(() => { if (!desired.current) setFrames([]) }, 90)
+    window.setTimeout(() => { if (!desired.current) setFrames([]) }, 160)
   }, [])
   return { frames, freeze, thaw }
 }
@@ -163,12 +173,31 @@ export function App() {
 
   const activeTab = snapshot?.workspace.tabs.find((tab) => tab.id === snapshot.workspace.activeTab) ?? null
   useEffect(() => { if (standaloneBoard) return; if (activeTab?.url === 'athanor://settings') setScreen('settings'); else if (activeTab?.url === 'athanor://boards') setScreen('boards'); else if (activeTab?.url === 'athanor://extensions') setScreen('extensions'); else setScreen('browser') }, [activeTab?.url, standaloneBoard])
+  // Find in page and the shortcut sheet are shell UI; the page keeps running while the find strip is open.
+  const [findOpen, setFindOpen] = useState(false)
+  const [findSeed, setFindSeed] = useState(0)
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const findCommand = useRef<((action: 'next' | 'prev') => void) | null>(null)
+  const closeFind = useCallback(() => {
+    setFindOpen(false)
+    const current = useAppStore.getState().snapshot
+    if (current?.workspace.activeTab) void api.focusPage(current.workspace.activeTab)
+  }, [])
   const handleShortcut = useCallback((comboInput: string, fromNative = false) => {
-    const combo = normalizeShortcut(comboInput)
-    if (fromNative && !['Ctrl+L', 'Ctrl+K', 'Ctrl+T', 'Ctrl+B', 'Ctrl+Shift+D'].includes(combo)) return
+    const combo = canonicalShortcut(normalizeShortcut(comboInput))
+    const owner = shortcutOwner(combo)
+    // A key the native side already ran (page had focus) only needs to reach us when the shell owns it.
+    if (fromNative && owner !== 'shell') return
     const current = useAppStore.getState().snapshot
     const tab = current?.workspace.tabs.find((item) => item.id === current.workspace.activeTab)
-    if (combo === 'Ctrl+K') openBar('navigate', '')
+    // Backend-owned keys pressed while the shell has focus are forwarded (the page never saw them).
+    if (!fromNative && owner === 'backend') { void api.runShortcut(combo); return }
+    if (combo === 'Ctrl+F' && tab && !tab.url.startsWith('athanor://')) { setFindOpen(true); setFindSeed((value) => value + 1) }
+    else if ((combo === 'Ctrl+G' || combo === 'Ctrl+Shift+G') && tab) { if (findOpen) findCommand.current?.(combo === 'Ctrl+G' ? 'next' : 'prev'); else if (!tab.url.startsWith('athanor://')) { setFindOpen(true); setFindSeed((value) => value + 1) } }
+    else if (combo === 'Ctrl+D' && tab) { void api.setPinned(tab.id, !tab.pinned); toast(tab.pinned ? 'Unpinned' : 'Pinned to the top of the sidebar', { duration: 1800 }) }
+    else if (combo === 'Ctrl+,') openInternalPage('settings')
+    else if (combo === 'Ctrl+/') setSheetOpen((value) => !value)
+    else if (combo === 'Ctrl+K') openBar('navigate', '')
     else if (combo === 'Ctrl+T') { setScreen('browser'); openBar('new-tab', '') }
     else if (combo === 'Ctrl+W' && tab) void api.closeTab(tab.id)
     else if (combo === 'Ctrl+L') { const url = tab?.url ?? ''; openBar('navigate', url.startsWith('athanor://') ? '' : url) }
@@ -183,12 +212,13 @@ export function App() {
       const direction = combo === 'Ctrl+Tab' ? 1 : -1
       if (visible.length) void api.activateTab(visible[(index + direction + visible.length) % visible.length]!.id)
     }
-  }, [openBar])
+  }, [openBar, findOpen])
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       const combo = shortcutFromKeyboard(event)
       if (!combo) return
-      if (['Ctrl+K', 'Ctrl+T', 'Ctrl+W', 'Ctrl+L', 'Ctrl+B', 'Ctrl+Shift+D', 'Ctrl+\\', 'Ctrl+Tab', 'Ctrl+Shift+Tab', 'F12'].includes(combo) || /^Ctrl\+[1-9]$/.test(combo)) { event.preventDefault(); handleShortcut(combo) }
+      if (event.repeat && !['Ctrl+G', 'Ctrl+Shift+G', 'F3', 'Shift+F3', 'Ctrl+=', 'Ctrl+-', 'Ctrl+Tab', 'Ctrl+Shift+Tab'].includes(combo)) { if (shortcutOwner(canonicalShortcut(combo))) event.preventDefault(); return }
+      if (shortcutOwner(canonicalShortcut(combo))) { event.preventDefault(); handleShortcut(combo) }
     }
     document.addEventListener('keydown', keydown)
     const unlisten = listen('athanor://shortcut', ({ combo }) => handleShortcut(combo, true))
@@ -253,6 +283,7 @@ export function App() {
         {framed && <StageBar snapshot={snapshot} activeTab={activeTab} openBar={showBar} openPage={openInternalPage} toggleDev={() => setDevOpen((value) => !value)} windowControls={controlsInSidebar ? undefined : controls} />}
         {standaloneBoardWindow && !mobile && <StandaloneTitlebar />}
         {mobile && !standaloneBoardWindow && <MobileBar snapshot={snapshot} activeTab={activeTab} openBar={showBar} openSwitcher={() => setSwitcherOpen(true)} openMenu={() => openBar('navigate', '')} openPage={openInternalPage} />}
+        <AnimatePresence initial={false}>{findOpen && framed && shownTab && !internalPage && <FindBar key="find" tab={shownTab.id} url={shownTab.url} seed={findSeed} onClose={closeFind} commandRef={findCommand} />}</AnimatePresence>
         <section ref={contentRef} className={cn('content relative min-h-0 min-w-0 flex-1 overflow-hidden bg-background', mobile ? 'mobile-content' : standaloneBoardWindow ? '' : 'rounded-[var(--ath-stage-radius)] shadow-[var(--ath-stage-shadow)]')} data-part="content" data-split={String(splitActive)}>
           <div key={`${currentPage}|${panel?.id ?? ''}|${internalPage ? shownTab?.url : 'web'}`} className="absolute inset-0 animate-[ath-rise_220ms_var(--ease-spring)_both]">
           {currentPage === 'browser' && (panel
@@ -282,6 +313,8 @@ export function App() {
       <CommandBar open={bar.open} onOpenChange={setPaletteOpen} mode={bar.mode} seed={bar.seed} snapshot={snapshot} servers={servers} extensionCommands={extensionCommands} run={runPaletteCommand} />
       {mobile && !standaloneBoardWindow && <TabSwitcher open={switcherOpen} onClose={() => setSwitcherOpen(false)} snapshot={snapshot} />}
       <PageContextMenuView request={pageMenu?.request ?? null} anchor={pageMenu?.anchor ?? null} searchEngine={snapshot.settings.searchEngine} onClose={closePageMenu} />
+      <ShortcutSheet open={sheetOpen} onOpenChange={setSheetOpen} />
+      <NativeUi />
       <DialogHost />
       <AnimatePresence>{(!snapshot.settings.onboarded || tour) && <Welcome key="welcome" snapshot={snapshot} onDone={() => { setTour(false); void api.setSettings({ onboarded: true }) }} />}</AnimatePresence>
       <DragOverlay dropAnimation={null} zIndex={80}>{draggingId ? (() => { const tab = snapshot.workspace.tabs.find((entry) => entry.id === draggingId); return tab ? <DragGhost tab={tab} /> : null })() : null}</DragOverlay>

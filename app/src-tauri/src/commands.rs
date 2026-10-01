@@ -142,6 +142,102 @@ pub async fn duplicate_tab(b: B<'_>, tab: Id) -> R<Option<Id>> {
 }
 
 #[tauri::command]
+pub async fn zoom_page(b: B<'_>, tab: Id, dir: i32) -> R {
+    b.zoom_page(&tab, dir);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn find_in_page(b: B<'_>, tab: Id, action: String, query: String, match_case: bool) -> R {
+    b.find_in_page(&tab, &action, &query, match_case);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn hard_reload(b: B<'_>, tab: Id) -> R {
+    b.hard_reload(&tab);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn focus_shell(b: B<'_>) -> R {
+    b.focus_shell();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn focus_page(b: B<'_>, tab: Id) -> R {
+    b.focus_page(&tab);
+    Ok(())
+}
+
+/// Run a backend-owned shortcut for the shell (it received the key while the shell had focus).
+#[tauri::command]
+pub async fn run_shortcut(b: B<'_>, combo: String) -> R {
+    b.shortcut(&combo);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn resolve_script_dialog(b: B<'_>, tab: Id, accept: bool, text: String) -> R {
+    b.resolve_script_dialog(&tab, accept, &text);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn resolve_permission(
+    b: B<'_>,
+    tab: Id,
+    id: u32,
+    allow: bool,
+    remember: Option<bool>,
+    origin: Option<String>,
+    kind: Option<String>,
+) -> R {
+    let remember = match (remember.unwrap_or(false), origin, kind) {
+        (true, Some(origin), Some(kind)) => Some((origin, kind)),
+        _ => None,
+    };
+    b.resolve_permission(&tab, id, allow, remember);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn reset_site_permissions(b: B<'_>) -> R {
+    b.reset_site_permissions();
+    Ok(())
+}
+
+/// Show a downloaded file in its folder.
+#[tauri::command]
+pub async fn reveal_download(path: String) -> R {
+    #[cfg(windows)]
+    {
+        // Only files that exist; the path comes from a download Athanor itself started.
+        if std::path::Path::new(&path).exists() {
+            let _ = std::process::Command::new("explorer")
+                .arg(format!("/select,{path}"))
+                .spawn();
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = path;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn print_page(b: B<'_>, tab: Id) -> R {
+    b.print_page(&tab);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn toggle_fullscreen(b: B<'_>) -> R {
+    b.toggle_fullscreen();
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn reload(b: B<'_>, tab: Id) -> R {
     b.reload_stop(&tab, "reload");
     Ok(())
@@ -586,15 +682,12 @@ pub async fn import_run(b: B<'_>, request: serde_json::Value) -> R<serde_json::V
 pub async fn import_pick_file(app: AppHandle) -> R<Option<String>> {
     #[cfg(desktop)]
     {
-        use tauri_plugin_dialog::DialogExt;
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        app.dialog()
-            .file()
+        let _ = &app;
+        let picked = rfd::AsyncFileDialog::new()
             .add_filter("Bookmarks (HTML)", &["html", "htm"])
-            .pick_file(move |p| {
-                let _ = tx.send(p.map(|p| p.to_string()));
-            });
-        rx.await.map_err(e)
+            .pick_file()
+            .await;
+        Ok(picked.map(|file| file.path().to_string_lossy().into_owned()))
     }
     #[cfg(mobile)]
     {
@@ -765,12 +858,9 @@ pub async fn remove_extension(
 pub async fn pick_directory(app: AppHandle) -> R<Option<String>> {
     #[cfg(desktop)]
     {
-        use tauri_plugin_dialog::DialogExt;
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        app.dialog().file().pick_folder(move |p| {
-            let _ = tx.send(p.map(|p| p.to_string()));
-        });
-        rx.await.map_err(e)
+        let _ = &app;
+        let picked = rfd::AsyncFileDialog::new().pick_folder().await;
+        Ok(picked.map(|folder| folder.path().to_string_lossy().into_owned()))
     }
     // Android has no folder picker; extensions are installed from the desktop app.
     #[cfg(mobile)]

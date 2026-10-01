@@ -45,3 +45,24 @@ The shell is deliberately compact: the root font size is 15px, rows are 27px tal
 `components/welcome/Welcome.tsx` is a full-window overlay shown until `settings.onboarded` is set (also reachable as "Welcome tour and import" in the command bar). Five steps - Welcome, Import, Look, Privacy, Ready - with the step list on the left (inverted panel) and the step on the right. Everything chosen is applied live, so skipping is always safe.
 
 The Import step lists the browsers found on this machine (`import_detect`) and copies their bookmarks and history (`import_run`): Chrome, Edge, Brave, Vivaldi, Opera, Chromium and Firefox, or a Netscape-format HTML bookmarks file. The readers are the pure crate `crates/athanor-import` (they work on copies of the other browser's files; passwords, cookies and cards are never read). Athanor has no separate bookmark store: bookmarks become **archived tabs** in a dedicated space ("From Chrome"), one folder per bookmark folder (`Workspace::import_bookmarks`, capped at 5,000), and history is merged into the omnibox history (`History::import`, capped at 20,000). Windows only; other platforms report an empty list.
+
+## Everyday browser behaviour
+
+* **One list of shortcuts** (`app/src/lib/shortcuts.ts`, `SHORTCUTS`): it drives the key handlers, the cheat sheet (`Ctrl+/`, `ShortcutSheet`) and Settings -> Shortcuts. Each combo has an owner: `shell` (handled in React) or `backend` (handled in `Browser::shortcut`; when the shell has focus it forwards them with the `run_shortcut` command). When a page has focus, WebView2's accelerator hook in `win.rs` (`combo()`) catches the same keys first and sends the combo to the backend, which handles it or forwards shell-owned ones as `athanor://shortcut`. Alternative spellings fold onto one action (`Ctrl+R` = `F5`, `F3` = `Ctrl+G`, `Ctrl+PageDown` = `Ctrl+Tab`, `Ctrl+Shift+]` = next tab). Add a shortcut in the list, in `combo()` if pages should not see it, and in the matching handler.
+* **Find in page** (`Ctrl+F`, `Ctrl+G` / `Ctrl+Shift+G`, `FindBar`): a strip between the toolbar and the page, so the page stays live. The page-side script (`app/src-tauri/assets/find.js`) counts matches and paints them with the CSS Custom Highlight API (no DOM changes; all matches yellow, the current one orange); `find_in_page` returns the result through `athanor://find`. It closes when the page changes.
+* **Zoom** (`Ctrl+=`, `Ctrl+-`, `Ctrl+0`, Ctrl+wheel, pinch): remembered per site (`Settings.siteZoom`, keyed by host without `www.`), restored after every navigation, shown as a badge in the address pill (click to reset). The shell itself never zooms.
+* `Ctrl+D` pins or unpins the tab (Athanor has no separate bookmark list), `Ctrl+Shift+R` reloads without the cache, `Ctrl+P` prints, `F11` toggles full screen, `Ctrl+,` opens Settings.
+
+## No Edge look-alikes
+
+WebView2 is Microsoft Edge's engine, and left alone it shows Edge in several places. Athanor turns those off and draws its own (`app/src-tauri/src/win_ui.rs`, `brand.rs`, `errorpage.rs`; shell side `components/NativeUi.tsx`):
+
+* **Identity**: the user agent loses its `Edg/` token and the client-hint brands become Chromium + Athanor (`Emulation.setUserAgentOverride`).
+* **Error page**: `IsBuiltInErrorPageEnabled` is off; a failed load shows Athanor's page (light/dark, "Try again", retries when the network is back). The tab keeps the address that failed, so Reload retries it. Certificate errors are refused with the same page (no "continue anyway").
+* **JavaScript dialogs** (`alert`, `confirm`, `prompt`, leave-page): shadcn dialogs; the page waits until the user answers (`resolve_script_dialog`). The shell's own `window.prompt`/`confirm` calls use `askText` / `askConfirm`.
+* **Permission prompts** (camera, microphone, location, notifications, clipboard, sensors, ...): a dialog with "Remember for this site"; answers live in `Settings.sitePermissions` (Settings -> Privacy -> Reset), not in the WebView2 profile.
+* **Downloads**: no Edge bubble; progress and "Show in folder" are toasts (`athanor://download`). A typed address that turns out to be a file leaves the tab where it was.
+* **Link under the pointer**: the status bubble is off; the address pill shows the link while the pointer is on it.
+* **Autofill / password popups** are off in tabs and in the shell; the shell also has no browser accelerator keys of its own.
+
+Still the engine's own: the PDF viewer, the F12 inspector window, and the process names (`msedgewebview2.exe`) and profile folder (`EBWebView`) on disk.

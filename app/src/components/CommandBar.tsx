@@ -74,10 +74,9 @@ export function CommandBar({ open, onOpenChange, mode, seed, snapshot, servers, 
     const target = value.trim(); if (!target) return
     onOpenChange(false)
     const active = snapshot.workspace.tabs.find((tab) => tab.id === activeId)
-    if (mode === 'new-tab' || !active || active.url === 'athanor://newtab') {
-      if (active && active.url === 'athanor://newtab' && mode !== 'new-tab') void api.navigate(active.id, target)
-      else { const id = await api.openTab({}); void api.navigate(id, target) }
-    } else void api.navigate(active.id, target)
+    // A new tab is opened straight at the address: navigating a tab that is still being created gets lost.
+    if (mode === 'new-tab' || !active) void api.openTab({ url: target })
+    else void api.navigate(active.id, target)
   }
   const select = (value: string) => {
     if (value === 'go') { void go(text); return }

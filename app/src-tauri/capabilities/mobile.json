@@ -4,5 +4,5 @@
   "description": "Tauri commands available to the Athanor shell WebView on Android.",
   "windows": ["main"],
   "webviews": ["main"],
-  "permissions": ["core:default", "dialog:default"]
+  "permissions": ["core:default"]
 }

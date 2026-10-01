@@ -30,10 +30,10 @@ log = "0.4"
 ureq = "2"
 imagesize = "0.13"
 tokio = { version = "1", features = ["time", "sync", "net", "io-util", "rt", "macros"] }
-tauri-plugin-dialog = "2"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
+rfd = { version = "0.16", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 athanor-import = { path = "../../crates/athanor-import" }

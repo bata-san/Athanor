@@ -22,13 +22,19 @@ pub fn init(
     let size = window
         .inner_size()?
         .to_logical::<f64>(window.scale_factor()?);
-    window.add_child(
+    let shell = window.add_child(
         WebviewBuilder::new("shell", WebviewUrl::App("index.html".into()))
             .auto_resize()
             .devtools(true),
         LogicalPosition::new(0.0, 0.0),
         size,
     )?;
+    #[cfg(windows)]
+    let _ = shell.with_webview(|pw| unsafe {
+        let _ = crate::win::lock_shell_zoom(&pw.controller());
+    });
+    #[cfg(not(windows))]
+    let _ = shell;
     let engine = Arc::new(DesktopEngine::new(app.handle(), window, filter.clone()));
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     engine.set_sink(Arc::new(move |ev| {

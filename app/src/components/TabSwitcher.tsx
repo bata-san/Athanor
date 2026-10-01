@@ -6,6 +6,7 @@ import { groupSidebarTabs } from '@/lib/sidebarModel'
 import { api } from '@/lib/api'
 import { cssToken } from '@/lib/utils'
 import { AppIcon } from './Icons'
+import { askText } from './dialogs'
 import { Button } from './ui/button'
 import { Tip } from './ui/tooltip'
 
@@ -47,7 +48,7 @@ export function TabSwitcher({ open, onClose, snapshot }: { open: boolean; onClos
 
   return <section className="fixed inset-0 z-40 flex flex-col bg-background pt-[calc(env(safe-area-inset-top)+1rem)] text-foreground" role="dialog" aria-modal="true" aria-label="Open tabs" data-part="tab-switcher">
     <header className="flex shrink-0 items-center justify-between gap-3 px-4 pb-4"><div className="flex items-center gap-2"><h2 className="text-lg font-semibold">Tabs</h2><span className="rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground">{snapshot.workspace.tabs.filter((tab) => !tab.archived).length}</span></div><Tip label="Close tab switcher"><Button variant="ghost" size="touch" className="size-11 p-0" aria-label="Close tab switcher" onClick={onClose}><AppIcon name="X" /></Button></Tip></header>
-    <div className="flex shrink-0 gap-2 overflow-x-auto px-4 pb-4">{snapshot.workspace.spaces.map((space) => <Button key={space.id} variant={spaceId === space.id ? 'default' : 'outline'} size="touch" className="h-11 rounded-full px-4" data-active={String(spaceId === space.id)} onClick={() => { setSpaceId(space.id); void api.switchSpace(space.id) }}><AppIcon name={space.icon} />{space.name}</Button>)}<Button variant="outline" size="touch" className="h-11 rounded-full px-4" onClick={() => { const name = window.prompt('New space name'); if (name?.trim()) void api.addSpace(name.trim(), 'Sparkles', cssToken('--ath-space-default-color')).then(setSpaceId) }}><AppIcon name="Plus" />New space</Button></div>
+    <div className="flex shrink-0 gap-2 overflow-x-auto px-4 pb-4">{snapshot.workspace.spaces.map((space) => <Button key={space.id} variant={spaceId === space.id ? 'default' : 'outline'} size="touch" className="h-11 rounded-full px-4" data-active={String(spaceId === space.id)} onClick={() => { setSpaceId(space.id); void api.switchSpace(space.id) }}><AppIcon name={space.icon} />{space.name}</Button>)}<Button variant="outline" size="touch" className="h-11 rounded-full px-4" onClick={() => { void askText({ title: 'New space', label: 'Name', placeholder: 'Research', confirm: 'Create' }).then((name) => { if (name) void api.addSpace(name, 'Sparkles', cssToken('--ath-space-default-color')).then(setSpaceId) }) }}><AppIcon name="Plus" />New space</Button></div>
     <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 pb-6">
       {groups.pinned.length > 0 && <section>{heading('Pinned')}<div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">{groups.pinned.map(card)}</div></section>}
       {groups.folders.filter((entry) => entry.tabs.length).map(({ folder, tabs }) => <section key={folder.id}><h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{folder.name}{folder.auto && <span className="rounded-full border border-border px-1.5 py-0.5 text-[10px] font-normal normal-case">auto</span>}</h3><div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">{tabs.map(card)}</div></section>)}

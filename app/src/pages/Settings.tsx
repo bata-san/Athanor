@@ -16,7 +16,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card } from '@/components/ui/card'
-import { Kbd } from '@/components/ui/kbd'
+import { Kbd, KeyCap } from '@/components/ui/kbd'
+import { SHORTCUTS, comboKeys } from '@/lib/shortcuts'
 import { Tip } from '@/components/ui/tooltip'
 
 type SettingsSection = 'General' | 'Privacy' | 'Filing' | 'Appearance' | 'Extensions' | 'Shortcuts' | 'About'
@@ -29,7 +30,6 @@ const sections: { id: SettingsSection; icon: string }[] = [
   { id: 'Shortcuts', icon: 'Command' },
   { id: 'About', icon: 'CircleHelp' },
 ]
-const shortcuts = [['New tab', 'Ctrl+T'], ['Close tab', 'Ctrl+W'], ['Focus address bar', 'Ctrl+L'], ['Command palette', 'Ctrl+K'], ['Next tab', 'Ctrl+Tab'], ['Toggle sidebar', 'Ctrl+B'], ['Split with next tab', 'Ctrl+\\'], ['Developer panel', 'Ctrl+Shift+D'], ['Open devtools', 'F12']]
 const searchEngines = [
   ['https://www.google.com/search?q={q}', 'Google'],
   ['https://duckduckgo.com/?q={q}', 'DuckDuckGo'],
@@ -162,6 +162,9 @@ export default function SettingsPage() {
             <Row title="Turn off DRM" description="Tells sites that encrypted media (Widevine) is unavailable, so protected video will not play. Applies to pages you open next.">
               <TouchSwitch label="Turn off DRM" checked={settings.blockDrm} onCheckedChange={(blockDrm) => patch({ blockDrm })} />
             </Row>
+            <Row title="Site permissions" description={`Camera, microphone, location and similar answers Athanor remembers (${Object.keys(settings.sitePermissions ?? {}).length}).`}>
+              <Button variant="outline" size="sm" disabled={Object.keys(settings.sitePermissions ?? {}).length === 0} onClick={() => { void api.resetSitePermissions(); toast('Site permissions reset') }}>Reset</Button>
+            </Row>
             <Row title="Upgrade to HTTPS" description="Prefer encrypted connections when available.">
               <TouchSwitch label="Upgrade to HTTPS" checked={settings.httpsUpgrade} onCheckedChange={(httpsUpgrade) => patch({ httpsUpgrade })} />
             </Row>
@@ -227,8 +230,8 @@ export default function SettingsPage() {
 
         {section === 'Shortcuts' && <Section title="Keyboard shortcuts" description="Use these keys to move around Athanor more quickly.">
           <div className="grid grid-cols-2 gap-x-8 max-sm:grid-cols-1">
-            {shortcuts.map(([label, keys]) => <div key={label} className="flex min-h-12 items-center justify-between gap-4 border-b border-border py-2">
-              <span className="text-sm">{label}</span><span className="flex shrink-0 items-center gap-1">{keys.split('+').map((key, index) => <Kbd key={`${key}-${index}`}>{key}</Kbd>)}</span>
+            {SHORTCUTS.map((item) => <div key={item.combo} className="flex min-h-12 items-center justify-between gap-4 border-b border-border py-2">
+              <span className="text-sm">{item.label}</span><span className="flex shrink-0 items-center gap-1">{comboKeys(item.combo).map((key, index) => <KeyCap key={`${key}-${index}`} k={key} />)}</span>
             </div>)}
           </div>
         </Section>}
