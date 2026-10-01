@@ -22,11 +22,11 @@ pub fn parse_bookmarks_html(text: &str) -> Vec<BookmarkNode> {
     if matches!(tokens.get(index), Some(Token::Start { name, .. }) if name == "dl") {
         index += 1;
     }
-    let nodes = parse_list(&tokens, &mut index);
+    let nodes = parse_list(&tokens, &mut index, 0);
     prune_empty_folders(nodes)
 }
 
-fn parse_list(tokens: &[Token], index: &mut usize) -> Vec<BookmarkNode> {
+fn parse_list(tokens: &[Token], index: &mut usize, depth: usize) -> Vec<BookmarkNode> {
     let mut result = Vec::new();
     let mut pending_folder: Option<String> = None;
     while let Some(token) = tokens.get(*index) {
@@ -37,7 +37,12 @@ fn parse_list(tokens: &[Token], index: &mut usize) -> Vec<BookmarkNode> {
             }
             Token::Start { name, .. } if name == "dl" => {
                 *index += 1;
-                let children = parse_list(tokens, index);
+                if depth >= crate::util::MAX_FOLDER_DEPTH {
+                    // Too deep to be a real bookmarks file: stop instead of risking the stack.
+                    *index = tokens.len();
+                    break;
+                }
+                let children = parse_list(tokens, index, depth + 1);
                 if let Some(folder_name) = pending_folder.take() {
                     if !children.is_empty() {
                         result.push(BookmarkNode::Folder {

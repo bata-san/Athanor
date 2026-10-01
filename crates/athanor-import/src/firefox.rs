@@ -63,7 +63,8 @@ fn build_children(
     children_by_parent: &HashMap<i64, Vec<BookmarkRow>>,
     ancestors: &mut HashSet<i64>,
 ) -> Vec<BookmarkNode> {
-    if !ancestors.insert(parent) {
+    // The cycle check does not bound depth, and recursion on a hostile profile must not overflow the stack.
+    if ancestors.len() >= crate::util::MAX_FOLDER_DEPTH || !ancestors.insert(parent) {
         return Vec::new();
     }
     let mut result = Vec::new();

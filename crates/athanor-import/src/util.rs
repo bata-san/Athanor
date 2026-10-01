@@ -48,6 +48,11 @@ pub(crate) fn prune_empty_folders(nodes: Vec<BookmarkNode>) -> Vec<BookmarkNode>
         .collect()
 }
 
+/// Folders nested deeper than this are not real bookmark trees; parsers stop descending.
+pub(crate) const MAX_FOLDER_DEPTH: usize = 64;
+/// Largest bookmarks file read into memory.
+pub(crate) const MAX_IMPORT_FILE_BYTES: u64 = 64 * 1024 * 1024;
+
 #[cfg(test)]
 mod tests {
     use super::{history_title, link, MAX_TITLE_CHARS};

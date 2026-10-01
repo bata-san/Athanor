@@ -7,7 +7,13 @@ use std::fs;
 use std::path::Path;
 
 pub(crate) fn read_bookmarks(dir: &Path) -> Result<Vec<BookmarkNode>> {
-    let data = fs::read(dir.join("Bookmarks"))?;
+    let path = dir.join("Bookmarks");
+    if fs::metadata(&path)?.len() > crate::util::MAX_IMPORT_FILE_BYTES {
+        return Err(ImportError::Other(
+            "Chromium bookmarks file is too large".to_owned(),
+        ));
+    }
+    let data = fs::read(path)?;
     let document: Value = serde_json::from_slice(&data)?;
     let roots = document
         .get("roots")
