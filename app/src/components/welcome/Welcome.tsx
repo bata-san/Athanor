@@ -6,6 +6,7 @@ import type { DetectedBrowser, ImportReport, Snapshot } from '@/lib/types'
 import { api } from '@/lib/api'
 import { enter, snap } from '@/lib/motion'
 import { useOverlay } from '@/lib/overlay'
+import { SHORTCUTS } from '@/lib/shortcuts'
 import { cn } from '@/lib/utils'
 import { AthanorMark } from '../AthanorMark'
 import { Button } from '../ui/button'
@@ -57,7 +58,7 @@ export function Welcome({ snapshot, onDone }: { snapshot: Snapshot; onDone: () =
               {index === step && <m.span layoutId="welcome-rail" transition={snap} className="absolute inset-y-1 start-0 w-0.5 rounded-full bg-background" />}
               <span className="font-instr text-[0.7333rem] tabular-nums opacity-70">{String(index + 1).padStart(2, '0')}</span>
               <span className="text-[1.6rem] font-semibold leading-tight tracking-tight">{label}</span>
-              {index < step && <Check className="ms-auto size-4 self-center opacity-70" />}
+              {index < step && <Check aria-hidden="true" className="ms-auto size-4 self-center opacity-70" />}
             </button>
           </li>)}
         </ol>
@@ -72,8 +73,10 @@ export function Welcome({ snapshot, onDone }: { snapshot: Snapshot; onDone: () =
     <section className="relative flex min-w-0 flex-1 flex-col">
       <header className="flex h-14 shrink-0 items-center justify-between gap-4 px-6 md:px-10">
         <div className="min-w-0 flex-1 md:hidden"><StepScale steps={STEPS} step={step} onPick={(index) => index <= step && go(index)} /></div><span className="hidden flex-1 md:block" />
-        {!last && <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={onDone}>Skip setup<X /></Button>}
+        {!last && <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={onDone}>Skip setup</Button>}
       </header>
+      {/* The step swaps in place, so the change is announced for anyone not looking at the rail. */}
+      <p className="sr-only" aria-live="polite">{`Step ${step + 1} of ${STEPS.length}: ${name}`}</p>
       <div className="relative min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex min-h-full w-full max-w-[32rem] flex-col justify-center px-6 py-6 md:px-0">
           <AnimatePresence mode="wait" custom={direction} initial={false}>
@@ -90,8 +93,8 @@ export function Welcome({ snapshot, onDone }: { snapshot: Snapshot; onDone: () =
         </div>
       </div>
       <footer className="flex h-16 shrink-0 items-center justify-between gap-3 border-t border-border px-6 md:px-10">
-        <Button variant="ghost" className={cn('gap-1.5', step === 0 && 'invisible')} onClick={() => go(step - 1)}><ArrowLeft />Back</Button>
-        <Button className="min-w-32 gap-1.5 max-md:min-h-11" onClick={() => last ? onDone() : go(step + 1)} autoFocus>{last ? 'Open Athanor' : step === 0 ? 'Get started' : 'Continue'}{!last && <ArrowRight />}</Button>
+        <Button variant="ghost" className={cn('gap-1.5', step === 0 && 'invisible')} onClick={() => go(step - 1)}><ArrowLeft aria-hidden="true" />Back</Button>
+        <Button className="min-w-32 gap-1.5 max-md:min-h-11" onClick={() => last ? onDone() : go(step + 1)} autoFocus>{last ? 'Open Athanor' : step === 0 ? 'Get started' : 'Continue'}{!last && <ArrowRight aria-hidden="true" />}</Button>
       </footer>
     </section>
   </m.div>
@@ -126,6 +129,8 @@ function Title({ index, children, sub, jp }: { index: string; children: React.Re
 function Count({ value }: { value: number }) {
   const [shown, setShown] = useState(0)
   useEffect(() => {
+    // Counting up is a flourish, so Reduce Motion (ours or the system's) simply shows the number.
+    if (document.documentElement.dataset.reduceMotion === 'true') { setShown(value); return }
     const start = performance.now()
     let raf = 0
     const frame = (now: number) => { const t = Math.min(1, (now - start) / 900); setShown(Math.round(value * (1 - Math.pow(1 - t, 3)))); if (t < 1) raf = requestAnimationFrame(frame) }
@@ -138,13 +143,13 @@ function Count({ value }: { value: number }) {
 function Chip({ checked, onChange, children, disabled }: { checked: boolean; onChange: (value: boolean) => void; children: React.ReactNode; disabled?: boolean }) {
   return <button type="button" role="switch" aria-checked={checked} disabled={disabled} onClick={() => onChange(!checked)}
     className={cn('inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[0.8667rem] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50', checked ? 'border-foreground bg-foreground text-background' : 'border-border text-muted-foreground hover:bg-accent')}>
-    <Check className={cn('size-3.5 transition-opacity', checked ? 'opacity-100' : 'opacity-0')} />{children}
+    <Check aria-hidden="true" className={cn('size-3.5 transition-opacity', checked ? 'opacity-100' : 'opacity-0')} />{children}
   </button>
 }
 
 function ToggleRow({ icon, title, description, checked, onChange }: { icon: React.ReactNode; title: string; description: string; checked: boolean; onChange: (value: boolean) => void }) {
   return <div className="flex items-start gap-3 py-2.5">
-    <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-secondary text-foreground [&_svg]:size-4">{icon}</span>
+    <span aria-hidden="true" className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-secondary text-foreground [&_svg]:size-4">{icon}</span>
     <div className="min-w-0 flex-1"><div className="text-[0.9rem] font-medium leading-5">{title}</div><div className="text-xs leading-[1.45] text-muted-foreground">{description}</div></div>
     <Switch checked={checked} aria-label={title} onCheckedChange={onChange} className="mt-1" />
   </div>
@@ -212,7 +217,7 @@ function ImportStep({ imported, onImported }: { imported: ImportReport[]; onImpo
 
     <AnimatePresence mode="wait" initial={false}>
       {phase === 'running' && <m.div key="running" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="rounded-2xl border border-border bg-card p-6">
-        <div className="flex items-center gap-3 text-[0.9rem] font-medium"><Loader2 className="size-4 animate-spin" /><m.span key={status} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}>{status}</m.span></div>
+        <div className="flex items-center gap-3 text-[0.9rem] font-medium"><Loader2 aria-hidden="true" className="size-4 animate-spin" /><m.span aria-live="polite" key={status} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}>{status}</m.span></div>
         <div className="mt-5 flex h-4 items-end gap-[0.2rem]" aria-hidden="true">{Array.from({ length: 48 }, (_, i) => <span key={i} className="block w-px flex-1 rounded-full bg-foreground [animation:ath-tick_1.2s_ease-in-out_infinite]" style={{ height: i % 6 === 0 ? 16 : i % 2 === 0 ? 10 : 6, animationDelay: `${i * 22}ms` }} />)}</div>
       </m.div>}
 
@@ -220,22 +225,22 @@ function ImportStep({ imported, onImported }: { imported: ImportReport[]; onImpo
         <div className="grid grid-cols-3 gap-2">
           {([['Bookmarks', report.bookmarks], ['Folders', report.folders], ['History', report.history]] as const).map(([label, value]) => <div key={label} className="rounded-xl border border-border bg-card p-3.5"><div className="font-instr text-[0.7333rem] uppercase tracking-[0.18em] text-muted-foreground">{label}</div><div className="mt-1 font-instr text-2xl tabular-nums"><Count value={value} /></div></div>)}
         </div>
-        <p className="mt-3 text-[0.8333rem] leading-[1.5] text-muted-foreground">{report.bookmarks > 0 ? 'Bookmarks are waiting in their own space as archived tabs: click one to open it. ' : ''}{report.history > 0 ? 'Your history now powers the address suggestions.' : ''}{report.skipped > 0 ? ` ${report.skipped} duplicates were skipped.` : ''}</p>
+        <p className="mt-3 text-[0.8333rem] leading-[1.5] text-muted-foreground" role="status">{report.bookmarks > 0 ? 'Bookmarks are waiting in their own space as archived tabs: click one to open it. ' : ''}{report.history > 0 ? 'Your history now powers the address suggestions.' : ''}{report.skipped > 0 ? ` ${report.skipped} duplicates were skipped.` : ''}</p>
         {report.warnings.length > 0 && <p className="mt-2 text-xs text-muted-foreground">{report.warnings.join(' · ')}</p>}
         <div className="mt-4 flex gap-2"><Button variant="outline" size="sm" onClick={() => { setPhase('idle'); setReport(null) }}>Import another</Button></div>
       </m.div>}
 
       {(phase === 'idle' || phase === 'error') && <m.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-        {browsers === null && <div className="flex items-center gap-2 py-6 text-[0.8667rem] text-muted-foreground"><Loader2 className="size-4 animate-spin" />Looking for browsers…</div>}
+        {browsers === null && <div role="status" className="flex items-center gap-2 py-6 text-[0.8667rem] text-muted-foreground"><Loader2 aria-hidden="true" className="size-4 animate-spin" />Looking for browsers…</div>}
         {browsers !== null && browsers.length === 0 && <div className="rounded-xl border border-dashed border-border px-4 py-5 text-[0.8667rem] text-muted-foreground">No other browsers were found on this computer. You can still import a bookmarks file.</div>}
         {browsers !== null && browsers.length > 0 && <div role="radiogroup" aria-label="Browser to import from" className="flex flex-col gap-1.5">
           {browsers.map((browser) => {
             const selected = browser.id === browserId
             return <button key={browser.id} type="button" role="radio" aria-checked={selected} onClick={() => { setBrowserId(browser.id); setProfileId(browser.profiles[0]?.id ?? null) }}
               className={cn('flex items-center gap-3 rounded-xl border px-3.5 py-2.5 text-start outline-none transition-[border-color,background-color,box-shadow] focus-visible:ring-2 focus-visible:ring-ring/40', selected ? 'border-foreground bg-card shadow-sm' : 'border-border hover:bg-accent/60')}>
-              <span className={cn('grid size-8 shrink-0 place-items-center rounded-lg font-instr text-sm uppercase transition-colors', selected ? 'bg-foreground text-background' : 'bg-secondary')}>{browser.name[0]}</span>
+              <span aria-hidden="true" className={cn('grid size-8 shrink-0 place-items-center rounded-lg font-instr text-sm uppercase transition-colors', selected ? 'bg-foreground text-background' : 'bg-secondary')}>{browser.name[0]}</span>
               <span className="min-w-0 flex-1"><span className="block text-[0.9rem] font-medium">{browser.name}</span><span className="block text-xs text-muted-foreground">{browser.profiles.length === 1 ? browser.profiles[0]!.name : `${browser.profiles.length} profiles`}</span></span>
-              <span className={cn('grid size-4 place-items-center rounded-full border transition-colors', selected ? 'border-foreground bg-foreground text-background' : 'border-border')}>{selected && <Check className="size-3" />}</span>
+              <span aria-hidden="true" className={cn('grid size-4 place-items-center rounded-full border transition-colors', selected ? 'border-foreground bg-foreground text-background' : 'border-border')}>{selected && <Check className="size-3" />}</span>
             </button>
           })}
         </div>}
@@ -244,7 +249,7 @@ function ImportStep({ imported, onImported }: { imported: ImportReport[]; onImpo
           <Select value={profileId ?? undefined} onValueChange={setProfileId}><SelectTrigger className="w-60" aria-label="Profile"><SelectValue /></SelectTrigger><SelectContent>{current.profiles.map((entry) => <SelectItem key={entry.id} value={entry.id}>{entry.name}</SelectItem>)}</SelectContent></Select>
         </div>}
 
-        {current && <div className="mt-4 flex flex-wrap items-center gap-2"><span className="text-[0.8667rem] text-muted-foreground">Bring</span>
+        {current && <div role="group" aria-labelledby="welcome-bring" className="mt-4 flex flex-wrap items-center gap-2"><span id="welcome-bring" className="text-[0.8667rem] text-muted-foreground">Bring</span>
           <Chip checked={bookmarks && !!profile?.hasBookmarks} disabled={!profile?.hasBookmarks} onChange={setBookmarks}>Bookmarks</Chip>
           <Chip checked={history && !!profile?.hasHistory} disabled={!profile?.hasHistory} onChange={setHistory}>History</Chip>
         </div>}
@@ -252,8 +257,8 @@ function ImportStep({ imported, onImported }: { imported: ImportReport[]; onImpo
         {phase === 'error' && <div role="alert" className="mt-4 rounded-xl border border-destructive/40 bg-destructive/5 px-3.5 py-2.5 text-[0.8333rem] leading-[1.5] text-destructive">{error || 'The import failed.'}{current && /lock|use|access/i.test(error) ? ' Close the other browser and try again.' : ''}</div>}
 
         <div className="mt-5 flex flex-wrap items-center gap-2">
-          {current && profile && <Button className="gap-1.5" disabled={!(bookmarks && profile.hasBookmarks) && !(history && profile.hasHistory)} onClick={() => void run({ source: { kind: 'browser', browser: current.id, profile: profile.id }, bookmarks: bookmarks && profile.hasBookmarks, history: history && profile.hasHistory }, current.name)}><Download />Import from {current.name}</Button>}
-          <Button variant="outline" className="gap-1.5" onClick={() => void importFile()}><FileText />Bookmarks file…</Button>
+          {current && profile && <Button className="gap-1.5" disabled={!(bookmarks && profile.hasBookmarks) && !(history && profile.hasHistory)} onClick={() => void run({ source: { kind: 'browser', browser: current.id, profile: profile.id }, bookmarks: bookmarks && profile.hasBookmarks, history: history && profile.hasHistory }, current.name)}><Download aria-hidden="true" />Import from {current.name}</Button>}
+          <Button variant="outline" className="gap-1.5" onClick={() => void importFile()}><FileText aria-hidden="true" />Bookmarks file…</Button>
         </div>
         <p className="mt-4 text-[0.7667rem] leading-[1.5] text-muted-foreground/80">Passwords, cookies and saved cards are never imported. {imported.length > 0 ? 'You can import more than once.' : 'You can also do this later from the command bar.'}</p>
       </m.div>}
@@ -280,7 +285,7 @@ function MiniShell({ dark, side }: { dark: boolean; side: 'left' | 'right' }) {
 function Segmented<T extends string>({ value, onChange, options, label }: { value: T; onChange: (value: T) => void; options: { value: T; label: string; icon?: React.ReactNode }[]; label: string }) {
   return <div role="radiogroup" aria-label={label} className="inline-flex gap-0.5 rounded-lg bg-muted p-0.5">
     {options.map((option) => <button key={option.value} type="button" role="radio" aria-checked={value === option.value} onClick={() => onChange(option.value)}
-      className={cn('inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-[0.8667rem] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/40 [&_svg]:size-3.5', value === option.value ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>{option.icon}{option.label}</button>)}
+      className={cn('inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-[0.8667rem] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/40 [&_svg]:size-3.5', value === option.value ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>{option.icon && <span aria-hidden="true" className="flex items-center">{option.icon}</span>}{option.label}</button>)}
   </div>
 }
 
@@ -298,14 +303,14 @@ function LookStep({ snapshot }: { snapshot: Snapshot }) {
         const selected = dark === isDark
         return <button key={id} type="button" role="radio" aria-checked={selected} onClick={() => pick(id, isDark)} className={cn('rounded-xl border p-2 text-start outline-none transition-[border-color,box-shadow] focus-visible:ring-2 focus-visible:ring-ring/40', selected ? 'border-foreground shadow-sm' : 'border-border hover:border-muted-foreground/50')}>
           <MiniShell dark={isDark} side={settings.sidebarSide} />
-          <div className="mt-2 flex items-center justify-between px-1 pb-0.5"><span className="text-[0.8667rem] font-medium">{name}</span>{selected && <Check className="size-3.5" />}</div>
+          <div className="mt-2 flex items-center justify-between px-1 pb-0.5"><span className="text-[0.8667rem] font-medium">{name}</span>{selected && <Check aria-hidden="true" className="size-3.5" />}</div>
         </button>
       })}
     </div>
     <div className="mt-6 flex flex-col gap-3.5">
       <div className="flex items-center justify-between gap-4"><span className="text-[0.9rem] font-medium">Sidebar</span><Segmented label="Sidebar side" value={settings.sidebarSide} onChange={(side) => void api.setSettings({ sidebarSide: side })} options={[{ value: 'left', label: 'Left', icon: <PanelLeft /> }, { value: 'right', label: 'Right', icon: <PanelRight /> }]} /></div>
-      <div className="flex items-center justify-between gap-4"><span className="text-[0.9rem] font-medium">Density</span><Segmented label="Density" value={densityValue} onChange={(value) => { setDensityValue(value); setDensity(value) }} options={[{ value: 'comfortable', label: 'Comfortable' }, { value: 'compact', label: 'Compact' }]} /></div>
-      <div className="flex items-center justify-between gap-4"><span className="text-[0.9rem] font-medium">Collapse to icons</span><Switch checked={settings.sidebarCompact} aria-label="Collapse the sidebar to icons" onCheckedChange={(sidebarCompact) => void api.setSettings({ sidebarCompact })} /></div>
+      <div className="flex items-center justify-between gap-4"><span className="text-[0.9rem] font-medium">Workspace density</span><Segmented label="Workspace density" value={densityValue} onChange={(value) => { setDensityValue(value); setDensity(value) }} options={[{ value: 'comfortable', label: 'Comfortable' }, { value: 'compact', label: 'Compact' }]} /></div>
+      <div className="flex items-center justify-between gap-4"><span className="text-[0.9rem] font-medium">Compact sidebar</span><Switch checked={settings.sidebarCompact} aria-label="Compact sidebar" onCheckedChange={(sidebarCompact) => void api.setSettings({ sidebarCompact })} /></div>
     </div>
   </div>
 }
@@ -320,41 +325,45 @@ function PrivacyStep({ snapshot }: { snapshot: Snapshot }) {
   return <div>
     <Title index="Privacy" sub="Shield is on from the first page. Search defaults to Google; change anything below." jp="広告・トラッカーのブロックは最初から有効です。">Quiet by default.</Title>
     <div className="divide-y divide-border">
-      <ToggleRow icon={<ShieldCheck />} title="Block ads and trackers" description="Brave’s engine with EasyList and friends, plus cosmetic filtering." checked={settings.adblockEnabled} onChange={(on) => { void api.setAdblockEnabled(on); patch({ adblockEnabled: on }) }} />
+      <ToggleRow icon={<ShieldCheck />} title="Block ads and trackers" description="Block requests with the filter lists, and hide cosmetic ads." checked={settings.adblockEnabled} onChange={(on) => { void api.setAdblockEnabled(on); patch({ adblockEnabled: on }) }} />
       <ToggleRow icon={<SquareTerminal />} title="Skip YouTube ads" description="Strips ad data, hides ad slots and fast-forwards any ad that still plays." checked={settings.youtubeAdSkip} onChange={(on) => patch({ youtubeAdSkip: on })} />
       <ToggleRow icon={<Layers3 />} title="Upgrade to HTTPS" description="Prefer encrypted connections, falling back if a site can’t." checked={settings.httpsUpgrade} onChange={(on) => patch({ httpsUpgrade: on })} />
-      <ToggleRow icon={<Sparkles />} title="Clean tracking from links" description="Removes utm_*, fbclid, gclid and similar parameters." checked={settings.stripTracking} onChange={(on) => patch({ stripTracking: on })} />
+      <ToggleRow icon={<Sparkles />} title="Strip tracking parameters" description="Removes utm_*, fbclid, gclid and similar parameters." checked={settings.stripTracking} onChange={(on) => patch({ stripTracking: on })} />
       <ToggleRow icon={<X />} title="Turn off DRM" description="Tells sites encrypted media is unavailable, so protected video won’t play." checked={settings.blockDrm} onChange={(on) => patch({ blockDrm: on })} />
     </div>
     <div className="mt-4 grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-      <label className="flex flex-col gap-1.5 text-[0.8333rem] text-muted-foreground"><span className="flex items-center gap-1.5"><Search className="size-3.5" />Search engine</span>
-        <Select value={ENGINES.some(([value]) => value === settings.searchEngine) ? settings.searchEngine : 'custom'} onValueChange={(value) => value !== 'custom' && patch({ searchEngine: value })}><SelectTrigger aria-label="Search engine"><SelectValue /></SelectTrigger><SelectContent>{ENGINES.map(([value, name]) => <SelectItem key={value} value={value}>{name}</SelectItem>)}{!ENGINES.some(([value]) => value === settings.searchEngine) && <SelectItem value="custom">Custom</SelectItem>}</SelectContent></Select></label>
-      <label className="flex flex-col gap-1.5 text-[0.8333rem] text-muted-foreground"><span className="flex items-center gap-1.5"><AthanorMark className="size-3" />New tab opens</span>
-        <Select value={settings.homepage === 'athanor://newtab' ? 'athanor' : 'google'} onValueChange={(value) => patch({ homepage: value === 'athanor' ? 'athanor://newtab' : 'https://www.google.com/' })}><SelectTrigger aria-label="New tab opens"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="google">Google</SelectItem><SelectItem value="athanor">Athanor start page</SelectItem></SelectContent></Select></label>
+      <div className="flex flex-col gap-1.5 text-[0.8333rem] text-muted-foreground"><span className="flex items-center gap-1.5"><Search aria-hidden="true" className="size-3.5" />Search engine</span>
+        <Select value={ENGINES.some(([value]) => value === settings.searchEngine) ? settings.searchEngine : 'custom'} onValueChange={(value) => value !== 'custom' && patch({ searchEngine: value })}><SelectTrigger aria-label="Search engine"><SelectValue /></SelectTrigger><SelectContent>{ENGINES.map(([value, name]) => <SelectItem key={value} value={value}>{name}</SelectItem>)}{!ENGINES.some(([value]) => value === settings.searchEngine) && <SelectItem value="custom">Custom</SelectItem>}</SelectContent></Select></div>
+      <div className="flex flex-col gap-1.5 text-[0.8333rem] text-muted-foreground"><span className="flex items-center gap-1.5"><AthanorMark className="size-3" />New tab opens</span>
+        <Select value={settings.homepage === 'athanor://newtab' ? 'athanor' : 'google'} onValueChange={(value) => patch({ homepage: value === 'athanor' ? 'athanor://newtab' : 'https://www.google.com/' })}><SelectTrigger aria-label="New tab opens"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="google">Google</SelectItem><SelectItem value="athanor">Athanor start page</SelectItem></SelectContent></Select></div>
     </div>
   </div>
 }
 
 /* ----------------------------------------------------------------------------- 05 ready */
 
-const SHORTCUTS: [string, string][] = [['Ctrl+K', 'Command bar'], ['Ctrl+T', 'New tab'], ['Ctrl+L', 'Address'], ['Ctrl+B', 'Sidebar'], ['Ctrl+\\', 'Split view'], ['Ctrl+Shift+D', 'Developer panel']]
+/** The handful worth remembering on a first run, named exactly as Settings and the cheat sheet name them. */
+const REMEMBER = ['Ctrl+K', 'Ctrl+T', 'Ctrl+L', 'Ctrl+B', 'Ctrl+\\', 'Ctrl+Shift+D']
+  .map((combo) => SHORTCUTS.find((item) => item.combo === combo))
+  .filter((item): item is (typeof SHORTCUTS)[number] => Boolean(item))
+const count = (value: number, one: string, many = `${one}s`) => `${value.toLocaleString()} ${value === 1 ? one : many}`
 
 function ReadyStep({ snapshot, imported }: { snapshot: Snapshot; imported: ImportReport[] }) {
   const { settings } = snapshot
   const totals = imported.reduce((sum, report) => ({ bookmarks: sum.bookmarks + report.bookmarks, history: sum.history + report.history }), { bookmarks: 0, history: 0 })
   const lines = [
-    totals.bookmarks + totals.history > 0 ? `Imported ${totals.bookmarks.toLocaleString()} bookmarks and ${totals.history.toLocaleString()} history entries` : 'Nothing imported (you can do it later)',
-    `${['monolith', 'ember', 'midnight', 'terminal'].includes(settings.theme) ? 'Dark' : 'Light'} theme, sidebar on the ${settings.sidebarSide}`,
-    `Shield ${settings.adblockEnabled ? 'on' : 'off'}${settings.youtubeAdSkip ? ', YouTube ads skipped' : ''}${settings.blockDrm ? ', DRM off' : ''}`,
-    `${ENGINES.find(([value]) => value === settings.searchEngine)?.[1] ?? 'Custom search'} for search, ${settings.homepage === 'athanor://newtab' ? 'Athanor’s start page' : 'Google'} for new tabs`,
+    totals.bookmarks + totals.history > 0 ? `Imported ${count(totals.bookmarks, 'bookmark')} and ${count(totals.history, 'history entry', 'history entries')}.` : 'Nothing imported. You can do this from the command bar.',
+    `${['monolith', 'ember', 'midnight', 'terminal'].includes(settings.theme) ? 'Dark' : 'Light'} theme, sidebar on the ${settings.sidebarSide}.`,
+    `Shield ${settings.adblockEnabled ? 'is on' : 'is off'}${settings.youtubeAdSkip ? ', YouTube ads are skipped' : ''}${settings.blockDrm ? ', DRM is off' : ''}.`,
+    `${ENGINES.find(([value]) => value === settings.searchEngine)?.[1] ?? 'Custom search'} for search, ${settings.homepage === 'athanor://newtab' ? 'Athanor’s start page' : 'Google'} for new tabs.`,
   ]
   return <div>
     <Title index="Ready" sub="Here is what you chose, and the few shortcuts worth knowing." jp="準備ができました。">You’re all set.</Title>
     <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-      {lines.map((line, index) => <m.li key={line} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ ...enter, delay: 0.06 * index }} className="flex items-start gap-2.5 text-[0.9rem] leading-5"><span className="mt-0.5 grid size-4 shrink-0 place-items-center rounded-full bg-foreground text-background"><Check className="size-3" /></span>{line}</m.li>)}
+      {lines.map((line, index) => <m.li key={line} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ ...enter, delay: 0.06 * index }} className="flex items-start gap-2.5 text-[0.9rem] leading-5"><span aria-hidden="true" className="mt-0.5 grid size-4 shrink-0 place-items-center rounded-full bg-foreground text-background"><Check className="size-3" /></span>{line}</m.li>)}
     </ul>
     <div className="mt-6 grid grid-cols-2 gap-2 max-sm:grid-cols-1">
-      {SHORTCUTS.map(([keys, name]) => <div key={keys} className="flex items-center justify-between rounded-lg border border-border px-3 py-2"><span className="text-[0.8667rem]">{name}</span><span className="flex gap-1">{keys.split('+').map((key) => <Kbd key={key} className="font-instr">{key}</Kbd>)}</span></div>)}
+      {REMEMBER.map((item) => <div key={item.combo} className="flex items-center justify-between rounded-lg border border-border px-3 py-2"><span className="text-[0.8667rem]">{item.label}</span><span className="flex gap-1">{item.combo.split('+').map((key) => <Kbd key={key} className="font-instr">{key}</Kbd>)}</span></div>)}
     </div>
   </div>
 }

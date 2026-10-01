@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { groupSidebarTabs } from './sidebarModel'
+import { groupSidebarTabs, tabNumbers } from './sidebarModel'
 import type { Folder, Tab } from './types'
 
 const tabs: Tab[] = [
@@ -17,5 +17,22 @@ describe('groupSidebarTabs', () => {
     expect(groups.folders[0]!.tabs.map((tab) => tab.id)).toEqual(['filed'])
     expect(groups.root.map((tab) => tab.id)).toEqual(['root'])
     expect(groups.archived.map((tab) => tab.id)).toEqual(['archived'])
+  })
+})
+describe('tabNumbers (Ctrl+1..9)', () => {
+  const ids = (map: Map<string, number>) => [...map.entries()].sort((a, b) => a[1] - b[1]).map(([id, n]) => `${n}:${id}`)
+  it('counts pinned tabs first, then the sidebar from the top, and skips archived and other spaces', () => {
+    expect(ids(tabNumbers(groupSidebarTabs(tabs, folders, 's1')))).toEqual(['1:pinned', '2:filed', '3:root'])
+  })
+  it('does not count tabs hidden inside a collapsed folder', () => {
+    expect(ids(tabNumbers(groupSidebarTabs(tabs, [{ ...folders[0]!, collapsed: true }], 's1')))).toEqual(['1:pinned', '2:root'])
+  })
+  it('gives Ctrl+9 to the last tab when there are more than eight', () => {
+    const many: Tab[] = Array.from({ length: 11 }, (_, i) => ({ ...tabs[0]!, id: `t${i}` }))
+    const numbered = tabNumbers(groupSidebarTabs(many, [], 's1'))
+    expect(numbered.get('t0')).toBe(1)
+    expect(numbered.get('t7')).toBe(8)
+    expect(numbered.has('t8')).toBe(false)
+    expect(numbered.get('t10')).toBe(9)
   })
 })

@@ -7,7 +7,8 @@ import {
   Archive, ArrowDownToLine, AudioLines, ChevronRight, Columns2, Copy, Folder as FolderIcon, FolderInput, FolderPlus, Globe, LayoutPanelTop, Link2, Loader2, Lock, PanelLeft, PanelLeftClose, Palette, Pencil, Pin, PinOff, Plus, Puzzle, RotateCcw, Settings, Smile, Trash2, Volume2, VolumeX, WandSparkles, X, XCircle, ZapOff
 } from 'lucide-react'
 import type { PanelInfo, Snapshot, Tab } from '@/lib/types'
-import { groupSidebarTabs } from '@/lib/sidebarModel'
+import { groupSidebarTabs, tabNumbers } from '@/lib/sidebarModel'
+import { useCtrlHeld } from '@/lib/modifiers'
 import { api } from '@/lib/api'
 import { cn, cssToken } from '@/lib/utils'
 import { enter, fold, snap } from '@/lib/motion'
@@ -74,7 +75,9 @@ export function Sidebar({ snapshot, panels, openPage, openPanel, windowControls 
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
   }
-  const rowProps = (tab: Tab) => ({ tab, compact, active: tab.id === activeId, runtime: snapshot.runtime[tab.id], snapshot, activeTab, spaceFolders })
+  const numbers = useMemo(() => tabNumbers(groups), [groups])
+  const ctrlHeld = useCtrlHeld((state) => state.held)
+  const rowProps = (tab: Tab) => ({ tab, compact, active: tab.id === activeId, runtime: snapshot.runtime[tab.id], snapshot, activeTab, spaceFolders, number: ctrlHeld ? numbers.get(tab.id) : undefined })
 
   return <aside className="group/sidebar relative flex w-[var(--ath-sidebar-width)] min-w-[var(--ath-sidebar-min)] max-w-[var(--ath-sidebar-max)] shrink-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground data-[collapsed=true]:w-[var(--ath-rail-width)] data-[collapsed=true]:min-w-[var(--ath-rail-width)] data-[collapsed=true]:max-w-[var(--ath-rail-width)]"
     data-part="sidebar" data-collapsed={String(compact)} data-side={settings.sidebarSide} style={{ '--ath-sidebar-width': `calc(${settings.sidebarWidth}px * var(--ath-ui-scale, 1))` } as React.CSSProperties}>
@@ -100,7 +103,7 @@ export function Sidebar({ snapshot, panels, openPage, openPanel, windowControls 
               </Block>
 
               <Block data-part="tab-flow">
-                {groups.folders.map(({ folder, tabs }) => <FolderGroup key={folder.id} folder={folder} count={tabs.length} compact={compact}>
+                {groups.folders.map(({ folder, tabs }) => <FolderGroup key={folder.id} folder={folder} tabs={tabs} activeId={activeId} compact={compact}>
                   <Collapse open={!folder.collapsed}><div className="ms-3 flex flex-col border-s border-border ps-1 rail:ms-0 rail:border-s-0 rail:ps-0"><AnimatePresence initial={false} mode="popLayout">{tabs.map((tab) => <Item key={tab.id}><TabRow {...rowProps(tab)} /></Item>)}</AnimatePresence></div></Collapse>
                 </FolderGroup>)}
                 <div className="relative flex flex-col"><AnimatePresence initial={false} mode="popLayout">{groups.root.map((tab) => <Item key={tab.id}><TabRow {...rowProps(tab)} /></Item>)}</AnimatePresence>
@@ -244,7 +247,12 @@ function TabMenu({ tab, snapshot, activeTab, spaceFolders }: TabMenuCtx) {
   </ContextMenuContent>
 }
 
-type RowProps = TabMenuCtx & { compact: boolean; active: boolean; runtime: Snapshot['runtime'][string] | undefined }
+type RowProps = TabMenuCtx & { compact: boolean; active: boolean; runtime: Snapshot['runtime'][string] | undefined; /** The Ctrl+number this tab answers to, shown while Ctrl is held. */ number?: number }
+
+/** The little numeral that appears on a tab while Ctrl is held: it is the key that opens it. */
+function NumberBadge({ value, className }: { value: number; className?: string }) {
+  return <span className={cn('grid h-[1.1rem] min-w-[1.1rem] place-items-center rounded-[0.3rem] bg-foreground px-1 font-instr text-[0.7333rem] font-medium tabular-nums text-background', className)} data-part="tab-number" aria-label={`Ctrl+${value}`}>{value}</span>
+}
 
 function Favicon({ tab, runtime, className }: { tab: Tab; runtime?: Snapshot['runtime'][string]; className?: string }) {
   return <span className={cn('grid size-[1rem] shrink-0 place-items-center text-muted-foreground [&_svg]:size-[1rem]', className)} data-part="tab-favicon" data-loading={String(runtime?.loading ?? false)}>
@@ -264,7 +272,7 @@ function idleLabel(lastActive: number) {
 const tabAction = `grid size-[1.4667rem] place-items-center rounded text-muted-foreground hover:bg-foreground/10 hover:text-foreground rail:hidden [&_svg]:size-3.5`
 
 function TabRow(props: RowProps) {
-  const { tab, active, runtime, compact } = props
+  const { tab, active, runtime, compact, number } = props
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `tab:${tab.id}` })
   const { setNodeRef: setDropRef } = useDroppable({ id: dropId.tab(tab.id), disabled: isDragging })
   const close = () => void api.closeTab(tab.id)
@@ -275,21 +283,22 @@ function TabRow(props: RowProps) {
     style={{ opacity: isDragging ? 0.35 : undefined }}>
     {active && <ActivePill />}
     <DropLine tab={tab} />
-    <button type="button" {...attributes} {...listeners} className={`flex h-full min-w-0 flex-1 items-center gap-1.5 rounded text-start outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rail:justify-center rail:gap-0`} onClick={() => void api.activateTab(tab.id)} onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); close() } }} title={compact ? undefined : tab.url}>
+    <button type="button" {...attributes} {...listeners} className={`flex h-full min-w-0 flex-1 items-center gap-1.5 rounded text-start outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rail:justify-center rail:gap-0`} aria-current={active ? 'page' : undefined} onClick={() => void api.activateTab(tab.id)} onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); close() } }} title={compact ? undefined : tab.url}>
       <Favicon tab={tab} runtime={runtime} className={`rail:size-[1.2rem]`} />
       <span className="sb-label min-w-0 flex-1 truncate" data-part="tab-title">{tab.title}</span>
     </button>
     {tab.softwareRendering && <Tip label="Hardware acceleration is off" side="right"><span className="grid size-[1.4667rem] place-items-center text-muted-foreground rail:hidden" role="img" aria-label="Hardware acceleration is off"><ZapOff className="size-3" /></span></Tip>}
     {runtime?.audible && !tab.muted && <button type="button" className={tabAction} aria-label="Mute audible tab" title="Mute tab" onPointerDown={(event) => event.stopPropagation()} onClick={() => void api.setMuted(tab.id, true)}><AudioLines /></button>}
     {tab.muted && <button type="button" className={tabAction} aria-label="Unmute tab" title="Tab muted" onPointerDown={(event) => event.stopPropagation()} onClick={() => void api.setMuted(tab.id, false)}><VolumeX /></button>}
-    {idle && <span className="me-1 font-instr text-[0.7333rem] uppercase tabular-nums text-muted-foreground/80 group-hover/tab:hidden rail:hidden" title={`Last used ${idle} ago`}>{idle}</span>}
-    <button type="button" className={`${tabAction} hidden group-hover/tab:grid group-data-[active=true]/tab:grid focus-visible:grid`} data-part="tab-close" aria-label={`Close ${tab.title}`} onPointerDown={(event) => event.stopPropagation()} onClick={close}><X /></button>
+    {number !== undefined && <NumberBadge value={number} className="me-1 rail:absolute rail:end-0.5 rail:top-0.5" />}
+    {number === undefined && idle && <span className="me-1 font-instr text-[0.7333rem] uppercase tabular-nums text-muted-foreground/80 group-hover/tab:hidden rail:hidden" title={`Last used ${idle} ago`}>{idle}</span>}
+    <button type="button" className={`${tabAction} hidden ${number === undefined ? 'group-hover/tab:grid group-data-[active=true]/tab:grid' : ''} focus-visible:grid`} data-part="tab-close" aria-label={`Close ${tab.title}`} onPointerDown={(event) => event.stopPropagation()} onClick={close}><X /></button>
   </div>
   return <OverlayContextMenu><ContextMenuTrigger asChild><div onContextMenu={ownContextMenu}><Tip label={tab.title} side="right" disabled={!compact}>{row}</Tip></div></ContextMenuTrigger><TabMenu {...props} /></OverlayContextMenu>
 }
 
 function PinnedTile(props: RowProps) {
-  const { tab, active, runtime } = props
+  const { tab, active, runtime, number } = props
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `tab:${tab.id}` })
   const { setNodeRef: setDropRef } = useDroppable({ id: dropId.tab(tab.id), disabled: isDragging })
   const tile = <button ref={(element) => { setNodeRef(element); setDropRef(element) }} type="button" {...attributes} {...listeners} onClick={() => void api.activateTab(tab.id)}
@@ -298,6 +307,7 @@ function PinnedTile(props: RowProps) {
     {active && <ActivePill />}
     <DropLine tab={tab} vertical />
     <Favicon tab={tab} runtime={runtime} className="size-[1.2rem]" />
+    {number !== undefined && <NumberBadge value={number} className="absolute -end-1 -top-1" />}
   </button>
   return <OverlayContextMenu><ContextMenuTrigger asChild><div onContextMenu={ownContextMenu}><Tip label={tab.title} side="right">{tile}</Tip></div></ContextMenuTrigger><TabMenu {...props} /></OverlayContextMenu>
 }
@@ -307,7 +317,9 @@ function ArchivedRow({ tab, compact, snapshot, activeTab, spaceFolders }: TabMen
   return <OverlayContextMenu><ContextMenuTrigger asChild><div onContextMenu={ownContextMenu}><Tip label={tab.title} side="right" disabled={!compact}>{button}</Tip></div></ContextMenuTrigger><TabMenu tab={tab} snapshot={snapshot} activeTab={activeTab} spaceFolders={spaceFolders} /></OverlayContextMenu>
 }
 
-function FolderGroup({ folder, count, compact, children }: { folder: Snapshot['workspace']['folders'][number]; count: number; compact: boolean; children?: React.ReactNode }) {
+function FolderGroup({ folder, tabs, activeId, compact, children }: { folder: Snapshot['workspace']['folders'][number]; tabs: Tab[]; activeId: string | null; compact: boolean; children?: React.ReactNode }) {
+  const count = tabs.length
+  const holdsActive = folder.collapsed && tabs.some((tab) => tab.id === activeId)
   const { setNodeRef } = useDroppable({ id: dropId.folder(folder.id) })
   const over = useDragState((state) => state.hint?.kind === 'folder' && state.hint.folder === folder.id)
   const rename = async () => { const name = await askText({ title: 'Rename folder', label: 'Name', initial: folder.name }); if (name) void api.renameFolder(folder.id, name) }
@@ -316,11 +328,13 @@ function FolderGroup({ folder, count, compact, children }: { folder: Snapshot['w
     if (ok) void api.deleteFolder(folder.id, closeTabs)
   }
   const header = <button type="button" onClick={() => void api.toggleFolder(folder.id)}
-    className={cn(rowBase, 'font-medium hover:bg-tab-hover data-[collapsed=true]:text-muted-foreground')}
-    data-part="folder-header" data-collapsed={String(folder.collapsed)} aria-label={folder.name}>
+    className={cn(rowBase, 'font-medium hover:bg-tab-hover data-[folded=true]:text-muted-foreground')}
+    data-part="folder-header" data-folded={String(folder.collapsed)} aria-label={folder.name} aria-expanded={!folder.collapsed}>
     <ChevronRight className={cn('size-3 text-muted-foreground transition-transform duration-200', 'rail:hidden', !folder.collapsed && 'rotate-90')} />
     <FolderIcon className="text-muted-foreground" style={folder.color ? { color: folder.color } : undefined} />
-    <span className="sb-label min-w-0 flex-1 truncate">{folder.name}</span>
+    <span className={cn('sb-label min-w-0 flex-1 truncate', holdsActive && 'font-semibold')}>{folder.name}</span>
+    {folder.collapsed && count > 0 && <span className="flex shrink-0 items-center -space-x-0.5 rail:hidden" aria-hidden="true" data-part="folder-preview">{tabs.slice(0, 3).map((tab) => tab.favicon ? <img key={tab.id} src={tab.favicon} alt="" className="size-[0.9rem] rounded-[0.2rem] bg-sidebar object-contain ring-1 ring-sidebar" /> : <span key={tab.id} className="grid size-[0.9rem] place-items-center rounded-[0.2rem] bg-sidebar-accent ring-1 ring-sidebar"><Globe className="!size-2.5 text-muted-foreground" /></span>)}</span>}
+    {holdsActive && <span className="size-1.5 shrink-0 rounded-full bg-foreground rail:hidden" role="img" aria-label="Contains the current tab" />}
     {folder.auto && <Tip label="Filed automatically" side="top"><WandSparkles className={`!size-3 text-muted-foreground/70 rail:hidden`} /></Tip>}
     <span className={`font-mono text-[0.7333rem] font-normal tabular-nums text-muted-foreground rail:hidden`}>{count}</span>
   </button>

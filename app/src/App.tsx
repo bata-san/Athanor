@@ -23,6 +23,7 @@ import { StageBar, MobileBar } from './components/Toolbar'
 import { CommandBar, type BarMode } from './components/CommandBar'
 import { hostOf } from './components/UrlPill'
 import { startupUpdateCheck } from './lib/updates'
+import { useCtrlHeld } from './lib/modifiers'
 import { FindBar } from './components/FindBar'
 import { NativeUi } from './components/NativeUi'
 import { ShortcutSheet } from './components/ShortcutSheet'
@@ -205,14 +206,6 @@ export function App() {
     else if (combo === 'Ctrl+B' && current) void api.setSettings({ sidebarCompact: !current.settings.sidebarCompact })
     else if (combo === 'Ctrl+Shift+D' || combo === 'F12') setDevOpen((value) => !value)
     else if (combo === 'Ctrl+\\' && tab) { const next = current?.workspace.tabs.find((item) => item.space === current.workspace.activeSpace && !item.archived && item.id !== tab.id); if (next) void api.splitWith({ tab: next.id, dir: 'row' }) }
-    else if (/^Ctrl\+[1-9]$/.test(combo) && current) { const ix = Number(combo.slice(-1)) - 1; const visible = current.workspace.tabs.filter((item) => item.space === current.workspace.activeSpace && !item.archived); if (visible[ix]) void api.activateTab(visible[ix]!.id) }
-    else if (combo === 'Ctrl+Tab' || combo === 'Ctrl+Shift+Tab') {
-      if (!current) return
-      const visible = current.workspace.tabs.filter((item) => item.space === current.workspace.activeSpace && !item.archived)
-      const index = visible.findIndex((item) => item.id === current.workspace.activeTab)
-      const direction = combo === 'Ctrl+Tab' ? 1 : -1
-      if (visible.length) void api.activateTab(visible[(index + direction + visible.length) % visible.length]!.id)
-    }
   }, [openBar, findOpen])
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
@@ -225,6 +218,15 @@ export function App() {
     const unlisten = listen('athanor://shortcut', ({ combo }) => handleShortcut(combo, true))
     return () => { document.removeEventListener('keydown', keydown); void unlisten.then((off) => off()) }
   }, [handleShortcut])
+  // While Ctrl is held the sidebar shows which number opens which tab.
+  useEffect(() => {
+    const set = useCtrlHeld.getState().set
+    // Every key and pointer event says whether Ctrl is down, so a missed key-up (focus moved to a page) cannot leave it stuck.
+    const sync = (event: KeyboardEvent | MouseEvent) => set(event.ctrlKey)
+    const release = () => set(false)
+    window.addEventListener('keydown', sync); window.addEventListener('keyup', sync); window.addEventListener('mousemove', sync, { passive: true }); window.addEventListener('blur', release)
+    return () => { window.removeEventListener('keydown', sync); window.removeEventListener('keyup', sync); window.removeEventListener('mousemove', sync); window.removeEventListener('blur', release) }
+  }, [])
   // Updates: look once shortly after start-up (desktop; the setting can turn it off).
   const autoUpdate = snapshot?.settings.autoUpdate ?? false
   useEffect(() => {

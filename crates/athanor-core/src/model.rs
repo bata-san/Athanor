@@ -160,6 +160,59 @@ impl Workspace {
             .collect()
     }
 
+    /// The tabs of `space` in the order the sidebar lists them: pinned tabs first, then each folder's tabs (folders in
+    /// the order they appear), then the loose tabs. Archived tabs are not listed. This is the order Ctrl+Tab walks.
+    pub fn sidebar_order(&self, space: &str) -> Vec<&Tab> {
+        let listed = |t: &&Tab| t.space == space && !t.archived;
+        let folder_ids: Vec<&str> = self
+            .folders
+            .iter()
+            .filter(|f| f.space == space)
+            .map(|f| f.id.as_str())
+            .collect();
+        let mut out: Vec<&Tab> = self
+            .tabs
+            .iter()
+            .filter(listed)
+            .filter(|t| t.pinned)
+            .collect();
+        for folder in self.folders.iter().filter(|f| f.space == space) {
+            out.extend(
+                self.tabs
+                    .iter()
+                    .filter(listed)
+                    .filter(|t| !t.pinned && t.folder.as_deref() == Some(folder.id.as_str())),
+            );
+        }
+        out.extend(self.tabs.iter().filter(listed).filter(|t| {
+            !t.pinned
+                && t.folder
+                    .as_deref()
+                    .is_none_or(|folder| !folder_ids.contains(&folder))
+        }));
+        out
+    }
+
+    /// What Ctrl+1..9 count: [`Workspace::sidebar_order`] without the tabs hidden inside collapsed folders, so the
+    /// numbers match the rows you can see.
+    pub fn numbered_tabs(&self, space: &str) -> Vec<&Tab> {
+        let collapsed: Vec<&str> = self
+            .folders
+            .iter()
+            .filter(|f| f.space == space && f.collapsed)
+            .map(|f| f.id.as_str())
+            .collect();
+        self.sidebar_order(space)
+            .into_iter()
+            .filter(|t| {
+                t.pinned
+                    || t.folder
+                        .as_deref()
+                        .is_none_or(|folder| !collapsed.contains(&folder))
+            })
+            .collect()
+    }
+
     pub fn open_tab(&mut self, url: &str, opts: OpenOptions, now: Millis) -> Id {
         let parent = opts.parent.as_deref().and_then(|p| self.tab(p)).cloned();
         let space = opts
@@ -589,6 +642,50 @@ mod tests {
 
     fn ws() -> Workspace {
         Workspace::default()
+    }
+
+    #[test]
+    fn sidebar_order_is_pinned_then_folders_then_loose_tabs() {
+        let mut w = ws();
+        let space = w.active_space.clone();
+        let a = w.open_tab("https://a.test/", Default::default(), 1);
+        let b = w.open_tab("https://b.test/", Default::default(), 2);
+        let c = w.open_tab("https://c.test/", Default::default(), 3);
+        let d = w.open_tab("https://d.test/", Default::default(), 4);
+        let f = w.create_folder(&space, "Work", false);
+        w.move_tab(
+            &c,
+            MoveDest {
+                folder: Some(f.clone()),
+                ..Default::default()
+            },
+        );
+        w.move_tab(
+            &d,
+            MoveDest {
+                pinned: Some(true),
+                ..Default::default()
+            },
+        );
+        let urls = |tabs: Vec<&Tab>| tabs.iter().map(|t| t.url.clone()).collect::<Vec<_>>();
+        // pinned d, folder Work {c}, loose a, b (their creation order)
+        assert_eq!(
+            urls(w.sidebar_order(&space)),
+            [
+                "https://d.test/",
+                "https://c.test/",
+                "https://a.test/",
+                "https://b.test/"
+            ]
+        );
+        // a collapsed folder's tabs are still walked by Ctrl+Tab but not counted by the numbers
+        w.toggle_folder(&f);
+        assert_eq!(urls(w.sidebar_order(&space)).len(), 4);
+        assert_eq!(
+            urls(w.numbered_tabs(&space)),
+            ["https://d.test/", "https://a.test/", "https://b.test/"]
+        );
+        let _ = (a, b);
     }
 
     #[test]

@@ -697,7 +697,8 @@ impl Browser {
                 let n = (c.as_bytes()[5] - b'0') as usize;
                 let target = {
                     let g = self.inner.lock();
-                    let list = g.ws.visible_tabs(&g.ws.active_space);
+                    // Pinned tabs first, then down the sidebar; Ctrl+9 is the last one.
+                    let list = g.ws.numbered_tabs(&g.ws.active_space);
                     if n == 9 {
                         list.last().map(|t| t.id.clone())
                     } else {
@@ -720,7 +721,7 @@ impl Browser {
     fn cycle(self: &Arc<Self>, delta: i32) {
         let target = {
             let g = self.inner.lock();
-            let list = g.ws.visible_tabs(&g.ws.active_space);
+            let list = g.ws.sidebar_order(&g.ws.active_space);
             if list.is_empty() {
                 return;
             }
