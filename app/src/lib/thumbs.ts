@@ -37,13 +37,26 @@ export function useThumbnailCapture(enabled: boolean) {
   const activeTab = useAppStore((state) => state.snapshot?.workspace.activeTab ?? null)
   const loading = useAppStore((state) => (activeTab ? state.snapshot?.runtime[activeTab]?.loading ?? false : false))
   const url = useAppStore((state) => state.snapshot?.workspace.tabs.find((tab) => tab.id === state.snapshot?.workspace.activeTab)?.url ?? '')
+  // Pictures of tabs that no longer exist are dropped, and so is the picture of a tab that moved to an Athanor page.
+  const liveIds = useAppStore((state) => state.snapshot?.workspace.tabs.filter((tab) => !tab.url.startsWith('athanor://')).map((tab) => tab.id).join(',') ?? '')
+  useEffect(() => {
+    const live = new Set(liveIds.split(',').filter(Boolean))
+    for (const id of Object.keys(useThumbs.getState().images)) if (!live.has(id)) useThumbs.getState().drop(id)
+  }, [liveIds])
   useEffect(() => {
     if (!enabled || !activeTab || loading || !url || url.startsWith('athanor://')) return
     let cancelled = false
+    let busy = false
+    const current = () => { const snapshot = useAppStore.getState().snapshot; return snapshot?.workspace.activeTab === activeTab && snapshot.workspace.tabs.find((tab) => tab.id === activeTab)?.url === url }
     const shoot = async () => {
-      // Popups hide the page behind a still picture: nothing to capture then.
-      if (cancelled || document.hidden || useOverlayStore.getState().open.size > 0) return
-      try { const picture = await shrink(await api.captureFrame(activeTab)); if (!cancelled) useThumbs.getState().put(activeTab, picture) } catch { /* the page is not ready; the next round tries again */ }
+      // Popups hide the page behind a still picture, a hidden window shows nothing, and captures never overlap.
+      if (cancelled || busy || document.hidden || useOverlayStore.getState().open.size > 0) return
+      busy = true
+      try {
+        const picture = await shrink(await api.captureFrame(activeTab))
+        // The person may have moved on while the picture was being made.
+        if (!cancelled && current() && useOverlayStore.getState().open.size === 0) useThumbs.getState().put(activeTab, picture)
+      } catch { /* the page is not ready; the next round tries again */ } finally { busy = false }
     }
     const first = window.setTimeout(() => void shoot(), 1200)
     const every = window.setInterval(() => void shoot(), 20000)
