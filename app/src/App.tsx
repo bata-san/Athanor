@@ -22,6 +22,7 @@ import { useDragState, useTabDnd } from './lib/tabDnd'
 import { StageBar, MobileBar } from './components/Toolbar'
 import { CommandBar, type BarMode } from './components/CommandBar'
 import { hostOf } from './components/UrlPill'
+import { startupUpdateCheck } from './lib/updates'
 import { TabSwitcher } from './components/TabSwitcher'
 import { NewTabPage } from './components/NewTabPage'
 import { SuspenseCard } from './components/SuspenseCard'
@@ -193,6 +194,13 @@ export function App() {
     const unlisten = listen('athanor://shortcut', ({ combo }) => handleShortcut(combo, true))
     return () => { document.removeEventListener('keydown', keydown); void unlisten.then((off) => off()) }
   }, [handleShortcut])
+  // Updates: look once shortly after start-up (desktop; the setting can turn it off).
+  const autoUpdate = snapshot?.settings.autoUpdate ?? false
+  useEffect(() => {
+    if (!autoUpdate || mobile || isMock) return
+    const timer = window.setTimeout(() => void startupUpdateCheck(), 8000)
+    return () => window.clearTimeout(timer)
+  }, [autoUpdate, mobile])
   useEffect(() => {
     const unlisten = listen('athanor://toast', ({ level, message }) => toast[level](message))
     return () => { void unlisten.then((off) => off()) }
@@ -240,9 +248,9 @@ export function App() {
   const showBar = () => openBar('navigate', urlSeed)
   return <TooltipProvider><DndContext {...dnd}>
     <div className={cn('app-shell ath-chrome flex h-dvh w-full min-h-0 text-foreground', mobile && 'mobile-shell flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]', !mobile && sidebarRight && 'flex-row-reverse', standaloneBoardWindow && 'standalone-board-shell')} data-part="shell" data-side={snapshot.settings.sidebarSide} data-density={density}>
-      {framed && <Sidebar snapshot={snapshot} panels={panels} openPage={openInternalPage} openPanel={(selected) => { setPanel(selected); setScreen('browser') }} openBar={showBar} windowControls={controlsInSidebar ? controls : undefined} />}
+      {framed && <Sidebar snapshot={snapshot} panels={panels} openPage={openInternalPage} openPanel={(selected) => { setPanel(selected); setScreen('browser') }} windowControls={controlsInSidebar ? controls : undefined} />}
       <main className={cn('main-column relative flex min-h-0 min-w-0 flex-1 flex-col', framed && (sidebarRight ? 'ps-2 pb-2' : 'pe-2 pb-2'))}>
-        {framed && <StageBar snapshot={snapshot} activeTab={activeTab} openBar={() => openBar('navigate', '')} openPage={openInternalPage} toggleDev={() => setDevOpen((value) => !value)} windowControls={controlsInSidebar ? undefined : controls} />}
+        {framed && <StageBar snapshot={snapshot} activeTab={activeTab} openBar={showBar} openPage={openInternalPage} toggleDev={() => setDevOpen((value) => !value)} windowControls={controlsInSidebar ? undefined : controls} />}
         {standaloneBoardWindow && !mobile && <StandaloneTitlebar />}
         {mobile && !standaloneBoardWindow && <MobileBar snapshot={snapshot} activeTab={activeTab} openBar={showBar} openSwitcher={() => setSwitcherOpen(true)} openMenu={() => openBar('navigate', '')} openPage={openInternalPage} />}
         <section ref={contentRef} className={cn('content relative min-h-0 min-w-0 flex-1 overflow-hidden bg-background', mobile ? 'mobile-content' : standaloneBoardWindow ? '' : 'rounded-[var(--ath-stage-radius)] shadow-[var(--ath-stage-shadow)]')} data-part="content" data-split={String(splitActive)}>

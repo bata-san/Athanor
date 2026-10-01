@@ -41,6 +41,10 @@ pub struct Settings {
     pub block_drm: bool,
     /// Set once the first-run welcome has been completed or skipped.
     pub onboarded: bool,
+    /// Use IBM Plex Sans JP as the default font of web pages (Windows; applies from the next start).
+    pub web_font: bool,
+    /// Look for updates at start-up and download them in the background.
+    pub auto_update: bool,
 }
 
 impl Default for Settings {
@@ -61,6 +65,8 @@ impl Default for Settings {
             youtube_ad_skip: true,
             block_drm: false,
             onboarded: false,
+            web_font: true,
+            auto_update: true,
         }
     }
 }
@@ -84,6 +90,8 @@ pub struct SettingsPatch {
     pub youtube_ad_skip: Option<bool>,
     pub block_drm: Option<bool>,
     pub onboarded: Option<bool>,
+    pub web_font: Option<bool>,
+    pub auto_update: Option<bool>,
 }
 
 impl Settings {
@@ -106,7 +114,9 @@ impl Settings {
             homepage,
             youtube_ad_skip,
             block_drm,
-            onboarded
+            onboarded,
+            web_font,
+            auto_update
         );
         self.sanitize();
     }
@@ -246,6 +256,7 @@ mod tests {
         assert!(s.search_engine.starts_with("https://www.google.com/search"));
         assert_eq!(s.new_tab_url(), "https://www.google.com/");
         assert!(!s.onboarded && s.youtube_ad_skip && !s.block_drm);
+        assert!(s.web_font && s.auto_update);
     }
 
     #[test]

@@ -33,16 +33,11 @@ export function NavCluster({ snapshot, activeTab, className }: { snapshot: Snaps
  */
 export function StageBar({ snapshot, activeTab, openBar, openPage, toggleDev, windowControls }: { snapshot: Snapshot; activeTab: Tab | null; openBar: () => void; openPage: (page: Page) => void; toggleDev: () => void; windowControls?: React.ReactNode }) {
   const split = () => { const next = snapshot.workspace.tabs.find((tab) => tab.id !== activeTab?.id && tab.space === snapshot.workspace.activeSpace && !tab.archived); if (snapshot.workspace.split) void api.unsplit(); else if (next) void api.splitWith({ tab: next.id, dir: 'row' }) }
-  const space = snapshot.workspace.spaces.find((entry) => entry.id === snapshot.workspace.activeSpace)
-  const folder = snapshot.workspace.folders.find((entry) => entry.id === activeTab?.folder)
   return <div className="flex h-9 shrink-0 items-center gap-1 ps-1.5" data-part="toolbar" onPointerDown={dragWindow} onDoubleClick={toggleWindow}>
     <NavCluster snapshot={snapshot} activeTab={activeTab} className="shrink-0" />
-    <nav className="ms-1 flex min-w-0 flex-1 items-center gap-1.5 text-[12px] text-muted-foreground" data-part="page-title" aria-label="Location">
-      <span className="shrink-0">{space?.name}</span>
-      {folder && <><span className="opacity-50">/</span><span className="shrink-0">{folder.name}</span></>}
-      <span className="opacity-50">/</span>
-      <span className="min-w-0 truncate font-medium text-foreground/80">{activeTab?.title ?? ''}</span>
-    </nav>
+    <div className="flex min-w-0 flex-1 justify-center px-1" data-no-drag>
+      <UrlPill snapshot={snapshot} activeTab={activeTab} onOpen={openBar} onSettings={() => openPage('settings')} className="w-full max-w-[44rem]" />
+    </div>
     <div className="flex items-center" data-no-drag>
       <NavButton label={snapshot.workspace.split ? 'Close split view' : 'Split view'} shortcut={'Ctrl+\\'} active={Boolean(snapshot.workspace.split)} onClick={split}><Columns2 /></NavButton>
       <NavButton label="Developer panel" shortcut="Ctrl+Shift+D" onClick={toggleDev}><SquareTerminal /></NavButton>

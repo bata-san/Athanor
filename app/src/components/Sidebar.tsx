@@ -21,10 +21,9 @@ import { DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui
 import { TabRuler } from './Instrument'
 import { askConfirm, askText } from './dialogs'
 import { dragWindow, toggleWindow } from './WindowControls'
-import { UrlPill } from './UrlPill'
 
 type Page = 'settings' | 'boards' | 'extensions'
-type Props = { snapshot: Snapshot; panels: PanelInfo[]; openPage: (page: Page) => void; openPanel: (panel: PanelInfo) => void; openBar: () => void; windowControls?: React.ReactNode }
+type Props = { snapshot: Snapshot; panels: PanelInfo[]; openPage: (page: Page) => void; openPanel: (panel: PanelInfo) => void; windowControls?: React.ReactNode }
 
 const SWATCHES: { name: string; value: string | null }[] = [
   { name: 'Default', value: null }, { name: 'Gray', value: '#71717a' }, { name: 'Red', value: '#ef4444' }, { name: 'Orange', value: '#f97316' }, { name: 'Amber', value: '#eab308' },
@@ -35,7 +34,19 @@ const SPACE_ICONS = ['Briefcase', 'Sparkles', 'BookOpen', 'Home', 'Terminal', 'Z
 /* `rail:` styles apply while the sidebar is collapsed to its icon rail (custom variant in tokens.css; CSS-driven so the collapse can animate). */
 const rowBase = `flex h-[var(--ath-tab-height)] w-full items-center gap-2 rounded-md px-1.5 text-start text-[12.5px] outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rail:h-9 rail:justify-center rail:gap-0 rail:px-0 [&_svg]:size-[15px] [&_svg]:shrink-0`
 
-export function Sidebar({ snapshot, panels, openPage, openPanel, openBar, windowControls }: Props) {
+/** Where you are: space / folder / page. Sits in the sidebar header; the address itself lives above the page. */
+function Location({ snapshot, activeTab, className }: { snapshot: Snapshot; activeTab: Tab | null; className?: string }) {
+  const space = snapshot.workspace.spaces.find((entry) => entry.id === snapshot.workspace.activeSpace)
+  const folder = snapshot.workspace.folders.find((entry) => entry.id === activeTab?.folder)
+  return <nav className={cn('ms-1 flex min-w-0 flex-1 items-center gap-1.5 text-[12px] text-muted-foreground', className)} data-part="page-title" aria-label="Location">
+    <span className="shrink-0">{space?.name}</span>
+    {folder && <><span className="opacity-50">/</span><span className="shrink-0">{folder.name}</span></>}
+    <span className="opacity-50">/</span>
+    <span className="min-w-0 truncate font-medium text-foreground/80">{activeTab?.title ?? ''}</span>
+  </nav>
+}
+
+export function Sidebar({ snapshot, panels, openPage, openPanel, windowControls }: Props) {
   const [archiveOpen, setArchiveOpen] = useState(false)
   const dragging = useDragState((state) => state.dragging !== null)
   const { setNodeRef: setListRef } = useDroppable({ id: dropId.unfile })
@@ -72,7 +83,7 @@ export function Sidebar({ snapshot, panels, openPage, openPanel, openBar, window
         <Tip label={compact ? 'Expand sidebar' : 'Collapse sidebar'} shortcut="Ctrl+B" side="right"><Button variant="ghost" size="icon" className="size-7 shrink-0 rounded-md text-muted-foreground" aria-label={compact ? 'Expand sidebar' : 'Collapse sidebar'} onClick={() => void api.setSettings({ sidebarCompact: !compact })}>{compact ? <PanelLeft /> : <PanelLeftClose />}</Button></Tip>
         {windowControls}
       </div>
-      <UrlPill snapshot={snapshot} activeTab={activeTab ?? null} compact={compact} onOpen={openBar} onSettings={() => openPage('settings')} className="min-w-0 flex-1 rail:size-9 rail:w-9 rail:flex-none rail:rounded-lg" />
+      <Location snapshot={snapshot} activeTab={activeTab ?? null} className="rail:hidden" />
     </div>
 
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -159,7 +170,7 @@ function Collapse({ open, children }: { open: boolean; children: React.ReactNode
 
 /** The highlight behind the active row: one shared element that glides from row to row. */
 function ActivePill() {
-  return <m.span layoutId="active-pill" transition={snap} aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 rounded-[inherit] border border-border/70 bg-tab-active shadow-[0_1px_2px_oklch(0_0_0/0.07)] before:absolute before:inset-y-1.5 before:start-0 before:w-[2px] before:rounded-full before:bg-foreground before:content-[''] rail:before:hidden" />
+  return <m.span layoutId="active-pill" transition={snap} aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 rounded-[inherit] border border-border/70 bg-tab-active shadow-[0_1px_2px_oklch(0_0_0/0.07)]" />
 }
 
 /** One group in the sidebar flow. In the icon rail groups are told apart by a hairline instead of whitespace. */

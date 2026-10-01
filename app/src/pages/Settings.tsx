@@ -6,6 +6,7 @@ import { countFilterLines, ignoredLineSummary, lineCountLabel, lineSelectionRang
 import { useAppStore } from '@/lib/store'
 import { AppIcon } from '@/components/Icons'
 import { AthanorMark } from '@/components/AthanorMark'
+import { UpdateRow } from '@/components/UpdateRow'
 import { Page, Section, Row, IconTile, Stat, Callout } from '@/components/page'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -195,6 +196,11 @@ export default function SettingsPage() {
         </>}
 
         {section === 'Appearance' && <>
+          <Section title="Web pages" description="Pages that name their own font are not changed.">
+            <Row title="IBM Plex Sans JP as the default font" description="Used by pages that do not pick a font themselves. Applies the next time Athanor starts.">
+              <TouchSwitch label="IBM Plex Sans JP as the default font" checked={settings.webFont} onCheckedChange={(webFont) => patch({ webFont })} />
+            </Row>
+          </Section>
           <Section title="Theme" description="Choose the colors used across Athanor.">
             <div className="grid grid-cols-2 gap-3 py-2 max-sm:grid-cols-1">
               {themes.map((theme) => <button type="button" key={theme.id} data-selected={String(settings.theme === theme.id)} aria-pressed={settings.theme === theme.id} aria-label={`Use ${theme.name} theme`} className="rounded-xl border border-border bg-card p-3 text-left outline-none transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring/40 data-[selected=true]:border-primary data-[selected=true]:ring-1 data-[selected=true]:ring-primary max-md:min-h-11" onClick={() => { document.documentElement.dataset.themeDark = String(theme.dark); patch({ theme: theme.id }); void api.setTheme(theme.id) }}>
@@ -231,6 +237,7 @@ export default function SettingsPage() {
           <div className="mx-auto mb-4 grid size-16 place-items-center rounded-2xl bg-primary text-primary-foreground"><AthanorMark className="size-8" /></div>
           <h2 className="m-0 text-lg font-semibold">Athanor</h2>
           <p className="mb-1 mt-1 text-[13px] text-muted-foreground">Version {snapshot?.version ?? '—'}</p>
+          <UpdateRow autoUpdate={settings.autoUpdate} onAuto={(autoUpdate) => patch({ autoUpdate })} />
           <p className="mx-auto mb-6 mt-2 max-w-sm text-[13px] text-muted-foreground">A lightweight browser shell made for focus, research, and developer work.</p>
           <div className="grid grid-cols-3 gap-3 text-left max-sm:grid-cols-1">
             <Stat label="Platform" value={snapshot?.platform ?? '—'} className="p-3" />

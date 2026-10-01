@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Athanor",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "dev.athanor.browser",
   "build": {
     "frontendDist": "../dist",
@@ -16,8 +16,16 @@
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http: athanor-asset: http://athanor-asset.localhost; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost athanor-asset: http://athanor-asset.localhost; frame-src athanor-ext: http://athanor-ext.localhost; object-src 'none'; base-uri 'self'; form-action 'none'"
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM3RjY5MzAwRkEzNDRGMEYKUldRUFR6VDZBSlAyTiswSXlvazVMOU1wYnFnekNuNVlDR1Z1ZVFJT3hMemJLMXVSb3kyWHovTmQK",
+      "endpoints": ["https://github.com/bata-san/Athanor/releases/download/updater/latest.json"],
+      "windows": { "installMode": "passive" }
+    }
+  },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": ["nsis"],
     "category": "Productivity",
     "shortDescription": "A lightweight Chromium-based browser",

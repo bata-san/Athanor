@@ -22,6 +22,10 @@ mod platform;
 mod platform;
 mod shield;
 mod state;
+#[cfg(desktop)]
+mod updater;
+#[cfg(windows)]
+mod webfont;
 #[cfg(windows)]
 mod win;
 
@@ -62,6 +66,10 @@ pub fn run() {
     let builder = tauri::Builder::default();
     #[cfg(target_os = "android")]
     let builder = builder.plugin(engine_mobile::plugin());
+    #[cfg(desktop)]
+    let builder = builder
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updater::Pending::default());
     let app = builder
         .plugin(tauri_plugin_dialog::init())
         .register_uri_scheme_protocol("athanor-ext", |ctx, req| {
@@ -96,6 +104,12 @@ pub fn run() {
             };
             std::fs::create_dir_all(&data)?;
             let paths = Paths { root: data };
+            // Default web font: must be in place before the first WebView2 starts.
+            #[cfg(windows)]
+            webfont::prepare(
+                &app.path().app_local_data_dir()?,
+                webfont::enabled_in(&paths.file("settings.json")),
+            );
             let filter = Arc::new(Filter::new(paths.adblock()));
             let ext_host = ExtHost::new(paths.clone());
             {
@@ -229,15 +243,24 @@ pub fn run() {
             commands::window_close,
             commands::window_start_drag,
             commands::window_is_maximized,
+            #[cfg(desktop)]
+            updater::check_update,
+            #[cfg(desktop)]
+            updater::download_update,
+            #[cfg(desktop)]
+            updater::install_update,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Athanor");
 
-    app.run(|handle, event| {
-        if let RunEvent::ExitRequested { .. } = event {
+    app.run(|handle, event| match event {
+        RunEvent::ExitRequested { .. } => {
             if let Some(b) = handle.try_state::<Arc<Browser>>() {
                 b.save();
             }
         }
+        #[cfg(windows)]
+        RunEvent::Exit => webfont::release(),
+        _ => {}
     });
 }
