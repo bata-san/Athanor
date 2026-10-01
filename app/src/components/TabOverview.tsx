@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type * as React from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { Globe, Loader2, Volume2, VolumeX, X, ZapOff } from 'lucide-react'
@@ -13,9 +13,8 @@ import { Dialog, DialogDescription, DialogTitle } from './ui/dialog'
 import { AthanorMark } from './AthanorMark'
 
 const NAV_KEYS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End']
-/** The cards are born at the middle of the window and settle where they belong; the same curve runs backwards on the way out. */
+/** The cards are born at the middle of the window and settle where they belong. */
 const EASE_OUT = 'cubic-bezier(0.16, 1, 0.3, 1)'
-const EASE_IN = 'cubic-bezier(0.4, 0, 1, 1)'
 
 const reducedMotion = () => document.documentElement.dataset.reduceMotion === 'true' || window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
@@ -39,6 +38,7 @@ export function TabOverview({ open, onClose, snapshot }: { open: boolean; onClos
   const root = useRef<HTMLDivElement>(null)
   const columns = useRef(1)
   const leaving = useRef(false)
+  const [closing, setClosing] = useState(false)
   const images = useThumbs((state) => state.images)
   // Native page views draw above the shell, so they are hidden while the overview is up.
   useOverlay(open, 'tab-overview')
@@ -69,25 +69,14 @@ export function TabOverview({ open, onClose, snapshot }: { open: boolean; onClos
     // Only the cards that exist when it opens are staged; later ones (a closed tab sliding away) just appear in place.
   }, [open, cards])
 
-  // Leaving: the cards run back into the middle, quicker than they came, and only then is the overview really closed.
-  const leave = useCallback((then?: () => void) => {
+  // Leaving: the cards are simply gone at once (a chosen tab is already current); only the blur lets go, quickly.
+  const leave = useCallback(() => {
     if (leaving.current) return
     leaving.current = true
-    const done = () => { onClose(); then?.() }
-    if (reducedMotion()) { done(); return }
-    const middle = centre()
-    const nodes = cards()
-    if (!nodes.length) { done(); return }
-    let remaining = nodes.length
-    nodes.forEach((node) => {
-      const box = node.getBoundingClientRect()
-      const run = node.animate(
-        [{ transform: 'translate(0, 0) scale(1)', opacity: 1 }, { transform: `translate(${middle.x - (box.left + box.width / 2)}px, ${middle.y - (box.top + box.height / 2)}px) scale(0.22)`, opacity: 0 }],
-        { duration: 140, easing: EASE_IN, fill: 'forwards' },
-      )
-      run.onfinish = () => { remaining -= 1; if (remaining === 0) done() }
-    })
-  }, [cards, onClose])
+    if (reducedMotion()) { onClose(); return }
+    setClosing(true)
+    window.setTimeout(() => { onClose(); setClosing(false) }, 130)
+  }, [onClose])
 
   // A row is however many cards `auto-fill` decided fit: ask the DOM rather than guess from the window width.
   const measureColumns = useCallback(() => {
@@ -135,13 +124,13 @@ export function TabOverview({ open, onClose, snapshot }: { open: boolean; onClos
   return <Dialog open={open} onOpenChange={(next) => { if (!next) leave() }}>
     {open && <DialogPrimitive.Portal>
       {/* Only a blur: no tint, no surface. It deepens as the cards arrive. */}
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 animate-[ath-blur-in_420ms_var(--ease-snap)_both]" />
+      <DialogPrimitive.Overlay className={cn('fixed inset-0 z-50', closing ? 'animate-[ath-blur-out_130ms_ease-out_both]' : 'animate-[ath-blur-in_420ms_var(--ease-snap)_both]')} />
       <DialogPrimitive.Content
         data-part="tab-overview"
         onOpenAutoFocus={onOpenAutoFocus}
         onEscapeKeyDown={(event) => { event.preventDefault(); leave() }}
         aria-describedby={undefined}
-        className="fixed inset-0 z-50 text-foreground outline-none"
+        className={cn('fixed inset-0 z-50 text-foreground outline-none', closing && 'invisible')}
       >
         <DialogTitle className="sr-only">All Tabs</DialogTitle>
         <DialogDescription className="sr-only">Every open tab as a picture. Arrow keys move, Enter opens, Delete closes, Escape leaves.</DialogDescription>
