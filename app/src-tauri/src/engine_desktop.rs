@@ -169,7 +169,28 @@ impl EngineBackend for DesktopEngine {
         {
             let _ = &sink;
             let _ = &tab;
-            builder = builder.on_new_window(|_, _| NewWindowResponse::Deny);
+            // A page that opens a sized window (Google / Apple / Microsoft sign-in, payment pages) needs a real popup
+            // that keeps its link to the opener, or it reports "blocked" and the sign-in never completes. Everything
+            // else becomes a tab (see `win.rs`).
+            let app = tauri::Manager::app_handle(&self.window).clone();
+            builder = builder.on_new_window(move |url, features| {
+                if features.size().is_none() && features.position().is_none() {
+                    return NewWindowResponse::Deny;
+                }
+                static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+                let label = format!(
+                    "popup-{}",
+                    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                );
+                match tauri::WebviewWindowBuilder::new(&app, label, WebviewUrl::External(url))
+                    .window_features(features)
+                    .title("Athanor")
+                    .build()
+                {
+                    Ok(window) => NewWindowResponse::Create { window },
+                    Err(_) => NewWindowResponse::Deny,
+                }
+            });
         }
 
         // Tests give the software browser its own debugging port; the shared environment variable would otherwise

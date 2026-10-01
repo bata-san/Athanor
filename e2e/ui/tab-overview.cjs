@@ -57,14 +57,8 @@ const out = process.argv[2] || process.env.TEMP || '.';
   await sleep(150);
   check('arrow keys move focus across the grid', await shell.evaluate((tab) => document.activeElement?.dataset?.tab === tab, id.d));
 
-  await shell.fill('input[aria-label="Search tabs"]', 'Page b');
-  await sleep(400);
-  check('search filters the cards', (await shell.$$('[data-part="tab-card"]')).length === 1);
-  await shell.fill('input[aria-label="Search tabs"]', 'zzz-nothing');
-  await sleep(400);
-  check('no match leaves no cards', (await shell.$$('[data-part="tab-card"]')).length === 0);
-  await shell.fill('input[aria-label="Search tabs"]', '');
-  await sleep(400);
+  check('the name is written on the picture', (await shell.$eval(`[data-part="tab-card"][data-tab="${id.c}"]`, (el) => el.textContent)).includes('Page c'));
+  check('there is no search field, no window, no controls', (await shell.$('input')) === null && (await shell.$$('[data-part="tab-overview"] button:not([data-part^="tab-card"])')).length === 0);
 
   await shell.click(`[data-part="tab-card"][data-tab="${id.b}"]`);
   await sleep(600);

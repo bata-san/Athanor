@@ -716,6 +716,15 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
         core.add_NewWindowRequested(
             &NewWindowRequestedEventHandler::create(Box::new(move |_, args| {
                 let Some(args) = args else { return Ok(()) };
+                // Sized popups were already given a real window by the engine adapter: leave them alone.
+                if let Ok(features) = args.WindowFeatures() {
+                    let (mut size, mut position) = (Default::default(), Default::default());
+                    let sized = features.HasSize(&mut size).is_ok() && size.as_bool();
+                    let placed = features.HasPosition(&mut position).is_ok() && position.as_bool();
+                    if sized || placed {
+                        return Ok(());
+                    }
+                }
                 let uri = pw(|p| args.Uri(p))?;
                 args.SetHandled(true)?;
                 if !filter.enabled() {
