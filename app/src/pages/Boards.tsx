@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type * as React from 'react'
+import { toast } from 'sonner'
 import { ClipboardPaste, Palette } from 'lucide-react'
 import type { Board, BoardItem, BoardSummary } from '@/lib/types'
 import { api } from '@/lib/api'
@@ -82,29 +83,33 @@ export default function BoardsPage({ standaloneId = null }: { standaloneId?: str
   const onPointerUp = () => { gestureRef.current = null; setMarquee(null) }
   const onWheel = (event: React.WheelEvent) => { if (!board) return; event.preventDefault(); const rect = canvasRef.current!.getBoundingClientRect(), screen = { x: event.clientX - rect.left, y: event.clientY - rect.top }; if (event.ctrlKey || event.metaKey) setBoard({ ...board, view: zoomAround(board.view, screen, board.view.zoom * Math.exp(-event.deltaY * 0.002)) }); else setBoard({ ...board, view: { ...board.view, x: board.view.x - event.deltaX, y: board.view.y - event.deltaY } }) }
   const addText = () => { if (!board) return; const id = crypto.randomUUID(); const item = { ...newText, id, x: screenToWorld({ x: fitSize.w / 2, y: fitSize.h / 2 }, board.view).x, y: screenToWorld({ x: fitSize.w / 2, y: fitSize.h / 2 }, board.view).y, z: Math.max(0, ...board.items.map((value) => value.z)) + 1 }; setBoard({ ...board, items: [...board.items, item] }); setSelected([id]) }
-  const addImageFile = async (file: File, x?: number, y?: number) => { if (!board || !file.type.startsWith('image/')) return; const data = await fileToBase64(file); const hash = await api.boardPutAsset(data, file.type); const rect = canvasRef.current?.getBoundingClientRect(); const center = screenToWorld({ x: x ?? (rect?.width ?? 0) / 2, y: y ?? (rect?.height ?? 0) / 2 }, board.view); const img = new Image(); img.onload = () => { const maxSize = Number(cssToken('--ath-board-image-max-px')); const ratio = Math.min(1, maxSize / Math.max(img.width, img.height)); const item: BoardItem = { id: crypto.randomUUID(), kind: 'image', asset: hash, mime: file.type, x: center.x, y: center.y, w: img.width * ratio, h: img.height * ratio, rotation: 0, opacity: 1, flipX: false, grayscale: false, locked: false, z: Math.max(0, ...board.items.map((v) => v.z)) + 1 }; setBoard((value) => value ? { ...value, items: [...value.items, item] } : value); setSelected([item.id]) }; img.src = URL.createObjectURL(file) }
+  const addImageFile = async (file: File, x?: number, y?: number) => { if (!board || !file.type.startsWith('image/')) return; const data = await fileToBase64(file).catch((error) => { toast.error(why(error)); return null }); if (!data) return; const hash = await api.boardPutAsset(data, file.type).catch((error) => { toast.error(why(error)); return null }); if (!hash) return; const rect = canvasRef.current?.getBoundingClientRect(); const center = screenToWorld({ x: x ?? (rect?.width ?? 0) / 2, y: y ?? (rect?.height ?? 0) / 2 }, board.view); const img = new Image(); img.onload = () => { const maxSize = Number(cssToken('--ath-board-image-max-px')); const ratio = Math.min(1, maxSize / Math.max(img.width, img.height)); const item: BoardItem = { id: crypto.randomUUID(), kind: 'image', asset: hash, mime: file.type, x: center.x, y: center.y, w: img.width * ratio, h: img.height * ratio, rotation: 0, opacity: 1, flipX: false, grayscale: false, locked: false, z: Math.max(0, ...board.items.map((v) => v.z)) + 1 }; setBoard((value) => value ? { ...value, items: [...value.items, item] } : value); setSelected([item.id]) }; img.src = URL.createObjectURL(file) }
   const addImageFiles = async (files: FileList | null) => { if (!files) return; for (const file of [...files]) await addImageFile(file) }
-  const pasteImages = async () => { const items = await navigator.clipboard?.read?.(); if (!items) return; for (const clipboard of items) for (const type of clipboard.types.filter((entry) => entry.startsWith('image/'))) { const blob = await clipboard.getType(type); await addImageFile(new File([blob], 'pasted-image', { type })) } }
+  // Pasting is silent until something lands, so a clipboard that cannot be read says so instead of doing nothing.
+  const pasteImages = async () => { try { const items = await navigator.clipboard?.read?.(); if (!items) return; for (const clipboard of items) for (const type of clipboard.types.filter((entry) => entry.startsWith('image/'))) { const blob = await clipboard.getType(type); await addImageFile(new File([blob], 'pasted-image', { type })) } } catch (error) { toast.error(why(error)) } }
   const arrange = () => { if (board) updateItems((items) => arrangeBoardItems(items)) }
   const fitAll = () => { if (board) setBoard({ ...board, view: fitBoardView(board.items, fitSize) }) }
-  const createBoard = async () => { const name = await askText({ title: 'New board', label: 'Name', initial: 'Untitled board', confirm: 'Create' }); if (name) { const created = await api.createBoard(name); await refreshList(); setBoard(created); setSelected([]) } }
-  const renameBoard = async (entry: BoardSummary) => { const name = await askText({ title: 'Rename board', label: 'Name', initial: entry.name, confirm: 'Rename' }); if (name && board?.id === entry.id) setBoard({ ...board, name }); else if (name) { const loaded = await api.getBoard(entry.id); await api.saveBoard({ ...loaded, name }); void refreshList() } }
-  const deleteBoard = async (entry: BoardSummary) => { if (!await askConfirm({ title: `Delete “${entry.name}”?`, description: 'The board and its items are removed.', confirm: 'Delete', destructive: true })) return; await api.deleteBoard(entry.id); const list = await refreshList(); if (board?.id === entry.id) { const next = list[0]; setBoard(next ? await api.getBoard(next.id) : null) } }
-  const addUrl = async (url: string, x: number, y: number) => { if (!board) return; const world = screenToWorld({ x, y }, board.view); await api.boardAddFromUrl(board.id, url, world.x, world.y); await loadBoard(board.id) }
+  const createBoard = async () => { const name = await askText({ title: 'New board', label: 'Name', initial: 'Untitled board', confirm: 'Create' }); if (!name) return; try { const created = await api.createBoard(name); await refreshList(); setBoard(created); setSelected([]) } catch (error) { toast.error(why(error)) } }
+  const renameBoard = async (entry: BoardSummary) => { const name = await askText({ title: 'Rename board', label: 'Name', initial: entry.name, confirm: 'Rename' }); if (!name) return; try { if (board?.id === entry.id) setBoard({ ...board, name }); else { const loaded = await api.getBoard(entry.id); await api.saveBoard({ ...loaded, name }); void refreshList() } } catch (error) { toast.error(why(error)) } }
+  const deleteBoard = async (entry: BoardSummary) => { if (!await askConfirm({ title: `Delete “${entry.name}”?`, description: 'The board and its items are removed.', confirm: 'Delete', destructive: true })) return; try { await api.deleteBoard(entry.id); const list = await refreshList(); if (board?.id === entry.id) { const next = list[0]; setBoard(next ? await api.getBoard(next.id) : null) } } catch (error) { toast.error(why(error)) } }
+  const addUrl = async (url: string, x: number, y: number) => { if (!board) return; const world = screenToWorld({ x, y }, board.view); try { await api.boardAddFromUrl(board.id, url, world.x, world.y); await loadBoard(board.id) } catch (error) { toast.error(why(error)) } }
+  const capturePage = async () => { if (!activeTab || !board) return; try { await api.sendPageImageToBoard(activeTab.id, board.id); toast.success('Page captured') } catch (error) { toast.error(why(error)) } }
+  const openWindow = async () => { if (!board) return; try { await api.openBoardWindow(board.id) } catch (error) { toast.error(why(error)) } }
+  const setAlwaysOnTop = (on: boolean) => { if (!board) return; setBoard({ ...board, alwaysOnTop: on }); void api.setBoardAlwaysOnTop(board.id, on).catch((error) => { setBoard((value) => value ? { ...value, alwaysOnTop: !on } : value); toast.error(why(error)) }) }
   const zoomBy = (factor: number) => setBoard((value) => value ? { ...value, view: zoomAround(value.view, { x: fitSize.w / 2, y: fitSize.h / 2 }, value.view.zoom * factor) } : value)
 
   return <div data-part="board" className="flex h-full min-h-0 w-full">
     {!standaloneId && <aside aria-label="Boards" className="flex w-[var(--ath-board-list-mobile)] shrink-0 flex-col overflow-y-auto border-e border-border bg-sidebar p-2 min-[700px]:w-[var(--ath-board-list-width)]">
       <div className="mb-1 flex h-8 shrink-0 items-center justify-between gap-2 px-1">
         <span className="text-xs font-semibold text-muted-foreground">Boards</span>
-        <Tip label="New board"><Button variant="ghost" size="icon-sm" aria-label="Create board" onClick={() => void createBoard()}><AppIcon name="Plus" /></Button></Tip>
+        <Tip label="Create board"><Button variant="ghost" size="icon-sm" aria-label="Create board" onClick={() => void createBoard()}><AppIcon name="Plus" /></Button></Tip>
       </div>
       <div className="flex flex-col gap-0.5">
         {summaries.map((entry) => <div key={entry.id} className="group flex items-center gap-0.5">
-          <button data-active={String(board?.id === entry.id)} onClick={() => void loadBoard(entry.id)} className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg px-2 text-start text-sm text-muted-foreground transition-colors outline-none hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 data-[active=true]:bg-sidebar-accent data-[active=true]:text-foreground max-md:min-h-11">
+          <button data-active={String(board?.id === entry.id)} aria-current={board?.id === entry.id ? 'true' : undefined} onClick={() => void loadBoard(entry.id)} className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg px-2 text-start text-sm text-muted-foreground transition-colors outline-none hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 data-[active=true]:bg-sidebar-accent data-[active=true]:text-foreground max-md:min-h-11">
             <AppIcon name="PanelsTopLeft" className="size-4 shrink-0" />
             <span className="truncate">{entry.name}</span>
-            <Badge variant="outline" className="ms-auto shrink-0 tabular-nums">{entry.itemCount}</Badge>
+            <Badge variant="outline" className="ms-auto shrink-0 tabular-nums">{entry.itemCount}<span className="sr-only"> {entry.itemCount === 1 ? 'item' : 'items'}</span></Badge>
           </button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -127,7 +132,7 @@ export default function BoardsPage({ standaloneId = null }: { standaloneId?: str
             <h2 className="m-0 text-sm font-semibold">No board selected</h2>
             <p className="m-0 mt-1 text-[0.8667rem] text-muted-foreground">Create a board to collect references, notes and page captures.</p>
           </div>
-          <Button onClick={() => void createBoard()}><AppIcon name="Plus" />New board</Button>
+          <Button onClick={() => void createBoard()}><AppIcon name="Plus" />New Board</Button>
         </div>
       </div> : <>
         <div data-part="board-toolbar" className="absolute left-1/2 top-3 z-10 flex w-max max-w-[calc(100%-1.5rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1 rounded-xl border border-border bg-popover/95 p-1 shadow-menu backdrop-blur-md">
@@ -135,9 +140,9 @@ export default function BoardsPage({ standaloneId = null }: { standaloneId?: str
           <Separator orientation="vertical" className="mx-0.5 h-5" />
           <Tip label="Add image"><Button size="icon-sm" variant="ghost" aria-label="Add image" onClick={() => fileRef.current?.click()}><AppIcon name="ImagePlus" /></Button></Tip>
           <Tip label="Add text note"><Button size="icon-sm" variant="ghost" aria-label="Add text note" onClick={addText}><AppIcon name="NotebookPen" /></Button></Tip>
-          <Tip label="Paste image"><Button size="icon-sm" variant="ghost" aria-label="Paste image" onClick={() => void pasteImages()}><ClipboardPaste /></Button></Tip>
-          {activeTab && <Tip label="Capture current page"><Button size="icon-sm" variant="ghost" aria-label="Capture current page" onClick={() => void api.sendPageImageToBoard(activeTab.id, board.id)}><AppIcon name="AppWindow" /></Button></Tip>}
-          {platform !== 'android' && <Tip label="Open standalone board window"><Button size="icon-sm" variant="ghost" aria-label="Open standalone board window" onClick={() => void api.openBoardWindow(board.id)}><AppIcon name="SquareArrowOutUpRight" /></Button></Tip>}
+          <Tip label="Paste image"><Button size="icon-sm" variant="ghost" aria-label="Paste image" onClick={() => void pasteImages()}><ClipboardPaste aria-hidden="true" /></Button></Tip>
+          {activeTab && <Tip label="Capture current page"><Button size="icon-sm" variant="ghost" aria-label="Capture current page" onClick={() => void capturePage()}><AppIcon name="AppWindow" /></Button></Tip>}
+          {platform !== 'android' && <Tip label="Open standalone board window"><Button size="icon-sm" variant="ghost" aria-label="Open standalone board window" onClick={() => void openWindow()}><AppIcon name="SquareArrowOutUpRight" /></Button></Tip>}
           <Separator orientation="vertical" className="mx-0.5 h-5" />
           <Tip label="Arrange items"><Button size="icon-sm" variant="ghost" aria-label="Arrange items" onClick={arrange}><AppIcon name="LayoutDashboard" /></Button></Tip>
           <Tip label="Fit all items"><Button size="icon-sm" variant="ghost" aria-label="Fit all items" onClick={fitAll}><AppIcon name="Maximize2" /></Button></Tip>
@@ -149,7 +154,7 @@ export default function BoardsPage({ standaloneId = null }: { standaloneId?: str
           <Tip label="Send backward"><Button size="icon-sm" variant="ghost" aria-label="Send backward" disabled={!activeItem} onClick={() => updateItems((items) => items.map((item) => item.id === selected[0] ? { ...item, z: Math.min(...items.map((value) => value.z)) - 1 } : item))}><AppIcon name="ArrowDown" /></Button></Tip>
           <Tip label="Delete selected"><Button size="icon-sm" variant="ghost" aria-label="Delete selected" disabled={!selected.length} onClick={() => { updateItems((items) => items.filter((item) => !selected.includes(item.id))); setSelected([]) }}><AppIcon name="Trash2" /></Button></Tip>
           <Separator orientation="vertical" className="mx-0.5 h-5" />
-          <Tip label="Always on top"><Button size="icon-sm" variant={board.alwaysOnTop ? 'secondary' : 'ghost'} aria-label="Always on top" aria-pressed={board.alwaysOnTop} onClick={() => { setBoard({ ...board, alwaysOnTop: !board.alwaysOnTop }); void api.setBoardAlwaysOnTop(board.id, !board.alwaysOnTop) }}><AppIcon name="Layers3" /></Button></Tip>
+          <Tip label="Always on top"><Button size="icon-sm" variant={board.alwaysOnTop ? 'secondary' : 'ghost'} aria-label="Always on top" aria-pressed={board.alwaysOnTop} onClick={() => setAlwaysOnTop(!board.alwaysOnTop)}><AppIcon name="Layers3" /></Button></Tip>
         </div>
         <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" aria-label="Add image files" onChange={(event) => { void addImageFiles(event.target.files); event.target.value = '' }} />
         <div ref={canvasRef} data-part="board-canvas" className="board-canvas absolute inset-0 touch-none overflow-hidden" style={{ background: board.background || 'var(--ath-board-default)' }} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} onWheel={onWheel} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const rect = canvasRef.current!.getBoundingClientRect(), x = event.clientX - rect.left, y = event.clientY - rect.top; const files = [...event.dataTransfer.files]; for (const file of files) void addImageFile(file, x, y); const uri = (event.dataTransfer.getData('text/uri-list') || event.dataTransfer.getData('text/plain')).trim().split(/\r?\n/).find((line) => line && !line.startsWith('#')); if (uri && /^https?:\/\//i.test(uri)) void addUrl(uri, x, y) }}>
@@ -162,10 +167,10 @@ export default function BoardsPage({ standaloneId = null }: { standaloneId?: str
           </div>
           <div className={`${floatCard} right-3 bottom-3 gap-2 p-1.5`}>
             <span className="text-xs text-muted-foreground">Opacity</span>
-            <Slider aria-label="Selected item opacity" min={0.1} max={1} step={0.05} value={[activeItem?.opacity ?? 0]} disabled={!activeItem} onValueChange={([opacity]) => updateItems((items) => items.map((item) => item.id === selected[0] ? { ...item, opacity } : item))} className="w-20" />
+            <Slider aria-label="Selected item opacity" aria-valuetext={activeItem ? `${Math.round(activeItem.opacity * 100)}%` : 'No item selected'} min={0.1} max={1} step={0.05} value={[activeItem?.opacity ?? 0]} disabled={!activeItem} onValueChange={([opacity]) => updateItems((items) => items.map((item) => item.id === selected[0] ? { ...item, opacity } : item))} className="w-20" />
             <span className="w-8 text-right text-xs tabular-nums text-muted-foreground">{activeItem ? `${Math.round(activeItem.opacity * 100)}%` : '—'}</span>
             <Separator orientation="vertical" className="mx-0.5 h-6" />
-            <Tip label="Canvas background" side="top"><label className="flex size-8 cursor-pointer items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground max-md:size-11"><Palette /><input type="color" aria-label="Board background color" value={board.background.startsWith('#') ? board.background : cssToken('--ath-board-default')} onChange={(event) => setBoard({ ...board, background: event.target.value })} className="size-4 cursor-pointer rounded border-0 bg-transparent p-0" /></label></Tip>
+            <Tip label="Canvas background" side="top"><label className="flex size-8 cursor-pointer items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground max-md:size-11"><Palette aria-hidden="true" /><input type="color" aria-label="Board background color" value={board.background.startsWith('#') ? board.background : cssToken('--ath-board-default')} onChange={(event) => setBoard({ ...board, background: event.target.value })} className="size-4 cursor-pointer rounded border-0 bg-transparent p-0" /></label></Tip>
           </div>
         </div>
         <div className="pointer-events-none absolute inset-x-0 bottom-4 z-[6] flex justify-center px-4 max-[1500px]:hidden">
@@ -187,3 +192,5 @@ function BoardItemView({ item, selected, platform, onText, onResizeStart, onRota
   </div>
 }
 function fileToBase64(file: File): Promise<string> { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => { const data = String(reader.result); resolve(data.split(',')[1] ?? '') }; reader.onerror = () => reject(reader.error); reader.readAsDataURL(file) }) }
+/** The reason the backend gave, in the words Settings shows. */
+function why(error: unknown) { return error instanceof Error ? error.message : String(error) }
