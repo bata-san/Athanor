@@ -15,3 +15,6 @@ app/.testshell
 release/
 
 .briefs/
+
+# PP Fraktion Mono is not redistributable: drop the web fonts here locally (never commit them)
+public/fonts/

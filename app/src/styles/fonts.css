@@ -1267,3 +1267,9 @@
   font-weight: 500;
   src: url(../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2) format('woff2');
 }
+
+/* PP Fraktion Mono (Pangram Pangram) is not redistributable, so it is not bundled. It is picked up when installed
+   on the system, or from app/public/fonts/ (git-ignored) when you drop the web fonts there; otherwise the
+   instrument labels fall back to IBM Plex Mono via --font-instr. */
+@font-face { font-family: 'PP Fraktion Mono'; font-style: normal; font-weight: 400; font-display: swap; src: local('PP Fraktion Mono'), local('PPFraktionMono-Regular'), local('PP Fraktion Mono Regular'), url('/fonts/PPFraktionMono-Regular.woff2') format('woff2'); }
+@font-face { font-family: 'PP Fraktion Mono'; font-style: normal; font-weight: 700; font-display: swap; src: local('PP Fraktion Mono Bold'), local('PPFraktionMono-Bold'), url('/fonts/PPFraktionMono-Bold.woff2') format('woff2'); }

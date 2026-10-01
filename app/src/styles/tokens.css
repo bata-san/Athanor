@@ -14,7 +14,8 @@
   --border: #e4e4e7; --input: #e4e4e7; --ring: #a1a1aa; --radius: 0.5rem;
   --sidebar: #f5f5f6; --sidebar-foreground: #18181b; --sidebar-primary: #0f0f10; --sidebar-primary-foreground: #fafafa; --sidebar-accent: #ebebed; --sidebar-accent-foreground: #18181b; --sidebar-border: #e6e6e9; --sidebar-ring: #a1a1aa;
   --ath-tab-height: 1.8rem; --ath-sidebar-width: 15.5rem; --ath-tab-active: #ffffff; --ath-tab-hover: #ececee; --ath-space-accent: #0f0f10; --ath-blur: 0px;
-  --font-ui: 'IBM Plex Sans JP', 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', 'Yu Gothic UI', 'Hiragino Sans', sans-serif; --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
+  --font-ui: 'IBM Plex Sans JP', 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', 'Yu Gothic UI', 'Hiragino Sans', sans-serif; --font-instr: 'PP Fraktion Mono', 'IBM Plex Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
   --ath-font-size: 0.875rem; --ath-font-body: 0.875rem; --ath-font-small: 0.75rem; --ath-font-tiny: 0.6875rem; --ath-font-heading: 1.25rem; --ath-font-title: 1.5rem;
   --ath-space-default-color: #71717a; --ath-board-default: #f4f4f5; --ath-dialog-dim: oklch(0 0 0 / 0.32); --ath-board-text-size: 24; --ath-board-note-width-px: 280; --ath-board-note-height-px: 120; --ath-board-min-width-px: 80; --ath-board-min-height-px: 60;
   --ath-s0: 0.125rem; --ath-s1: 0.25rem; --ath-s2: 0.375rem; --ath-s3: 0.5rem; --ath-s4: 0.75rem; --ath-s5: 1rem; --ath-s6: 1.25rem; --ath-s7: 1.5rem; --ath-s8: 2rem; --ath-s9: 2.5rem; --ath-s10: 3rem; --ath-s11: 4rem;
@@ -56,7 +57,7 @@
   --color-border: var(--border); --color-input: var(--input); --color-ring: var(--ring);
   --color-sidebar: var(--sidebar); --color-sidebar-foreground: var(--sidebar-foreground); --color-sidebar-accent: var(--sidebar-accent); --color-sidebar-accent-foreground: var(--sidebar-accent-foreground); --color-sidebar-border: var(--sidebar-border);
   --color-tab-active: var(--ath-tab-active); --color-tab-hover: var(--ath-tab-hover);
-  --font-sans: var(--font-ui); --font-mono: var(--font-mono);
+  --font-sans: var(--font-ui); --font-mono: var(--font-mono); --font-instr: var(--font-instr);
   --radius-sm: calc(var(--radius) - 0.25rem); --radius-md: calc(var(--radius) - 0.125rem); --radius-lg: var(--radius); --radius-xl: calc(var(--radius) + 0.25rem); --radius-2xl: calc(var(--radius) + 0.5rem);
   --shadow-menu: var(--ath-shadow-menu);
   --animate-in: ath-in 190ms var(--ease-spring) both; --animate-out: ath-out 90ms cubic-bezier(0.4, 0, 1, 1) both;

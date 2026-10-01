@@ -18,6 +18,7 @@ import { Tip } from './ui/tooltip'
 import { ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuShortcut, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger } from './ui/context-menu'
 import { OverlayContextMenu, OverlayDropdownMenu, ownContextMenu } from './overlay-menus'
 import { DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu'
+import { TabRuler } from './Instrument'
 import { askConfirm, askText } from './dialogs'
 import { dragWindow, toggleWindow } from './WindowControls'
 import { UrlPill } from './UrlPill'
@@ -116,8 +117,9 @@ export function Sidebar({ snapshot, panels, openPage, openPanel, openBar, window
       </ContextMenuContent>
     </OverlayContextMenu>
 
-    <div className="shrink-0 truncate border-t border-sidebar-border px-3 pt-1.5 font-mono text-[10.5px] tabular-nums text-muted-foreground rail:hidden" data-part="status">
-      {workspace.spaces.find((space) => space.id === workspace.activeSpace)?.name} · {workspace.tabs.filter((tab) => tab.space === workspace.activeSpace && !tab.archived).length} tabs · {snapshot.blockedTotal.toLocaleString()} blocked
+    <div className="shrink-0 border-t border-sidebar-border pt-2 rail:hidden"><TabRuler snapshot={snapshot} /></div>
+    <div className="shrink-0 truncate px-3 pt-1.5 font-instr text-[9.5px] uppercase tracking-[0.08em] tabular-nums text-muted-foreground" data-part="status">
+      {workspace.spaces.find((space) => space.id === workspace.activeSpace)?.name} · {workspace.tabs.filter((tab) => tab.space === workspace.activeSpace && !tab.archived).length} tabs · {snapshot.blockedTotal.toLocaleString()} blk
     </div>
     <footer className="flex shrink-0 items-center gap-1 px-2 pt-1 pb-2 rail:flex-col rail:gap-1.5 rail:border-t rail:border-sidebar-border rail:py-2" data-part="space-switcher">
       <div className="flex min-w-0 flex-1 items-center gap-0.5 rail:flex-none rail:flex-col rail:gap-1">
@@ -241,7 +243,7 @@ function TabRow(props: RowProps) {
     </button>
     {runtime?.audible && !tab.muted && <button type="button" className={tabAction} aria-label="Mute audible tab" title="Mute tab" onPointerDown={(event) => event.stopPropagation()} onClick={() => void api.setMuted(tab.id, true)}><AudioLines /></button>}
     {tab.muted && <button type="button" className={tabAction} aria-label="Unmute tab" title="Tab muted" onPointerDown={(event) => event.stopPropagation()} onClick={() => void api.setMuted(tab.id, false)}><VolumeX /></button>}
-    {idle && <span className="me-1 font-mono text-[10px] tabular-nums text-muted-foreground/80 group-hover/tab:hidden rail:hidden" title={`Last used ${idle} ago`}>{idle}</span>}
+    {idle && <span className="me-1 font-instr text-[9.5px] uppercase tabular-nums text-muted-foreground/80 group-hover/tab:hidden rail:hidden" title={`Last used ${idle} ago`}>{idle}</span>}
     <button type="button" className={`${tabAction} hidden group-hover/tab:grid group-data-[active=true]/tab:grid focus-visible:grid`} data-part="tab-close" aria-label={`Close ${tab.title}`} onPointerDown={(event) => event.stopPropagation()} onClick={close}><X /></button>
   </div>
   return <OverlayContextMenu><ContextMenuTrigger asChild><div><Tip label={tab.title} side="right" disabled={!compact}>{row}</Tip></div></ContextMenuTrigger><TabMenu {...props} /></OverlayContextMenu>
