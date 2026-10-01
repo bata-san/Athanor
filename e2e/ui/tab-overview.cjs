@@ -87,7 +87,7 @@ const out = process.argv[2] || process.env.TEMP || '.';
   await shell.keyboard.press('Control+Space');
   await shell.waitForSelector(overview, { timeout: 4000 });
   await shell.hover(`[data-part="tab-card"][data-tab="${id.e}"]`);
-  await shell.click(`[data-part="tab-card"][data-tab="${id.e}"] [data-part="tab-card-close"]`);
+  await shell.click(`.group:has([data-part="tab-card"][data-tab="${id.e}"]) [data-part="tab-card-close"]`);
   await sleep(800);
   snap = await snapshot();
   check('the card close button closes that tab only', !snap.workspace.tabs.some((t) => t.id === id.e) && snap.workspace.tabs.length === 4);

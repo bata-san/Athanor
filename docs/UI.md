@@ -69,3 +69,7 @@ WebView2 is Microsoft Edge's engine, and left alone it shows Edge in several pla
 Still the engine's own: the PDF viewer, the F12 inspector window, and the process names (`msedgewebview2.exe`) and profile folder (`EBWebView`) on disk.
 
 The design rules behind motion, menus, feedback and accessibility (with what each one became in code) are in [HIG.md](HIG.md).
+
+## Tab overview (Ctrl+Space)
+
+`Ctrl+Space` (or `Ctrl+Shift+\`, or the grid button in the toolbar) blurs the page and floats every open tab above it as a card: a picture of the page, the title and the host, in sidebar order (pinned, folders, loose tabs), with a Search field and a This Space / All Spaces switch. Click, or Enter, goes to the tab; the X, middle-click or Delete closes it (with the usual Undo); arrows move in two dimensions; Esc or `Ctrl+Space` leaves. No window or panel: only the cards (`components/TabOverview.tsx`, grid maths in `lib/gridNav.ts`). The pictures come from `lib/thumbs.ts`: the page in front is captured after it loads and every 20 s, downscaled, kept in memory only, and dropped when the tab closes or moves to an Athanor page. `e2e/ui/tab-overview.cjs` drives it.

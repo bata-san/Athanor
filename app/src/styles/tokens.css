@@ -65,6 +65,8 @@
 /* Popups grow out of the point they were opened from (Radix exposes it as --radix-popper-transform-origin). */
 @keyframes ath-in { from { opacity: 0; transform: scale(0.975); } to { opacity: 1; transform: none; } }
 @keyframes ath-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(0.96); } }
+/* A card that floats up out of the blurred page (tab overview). */
+@keyframes ath-float { from { opacity: 0; transform: translateY(14px) scale(0.965); } to { opacity: 1; transform: none; } }
 @keyframes ath-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ath-rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @keyframes ath-sheet { from { transform: translateY(100%); } to { transform: none; } }

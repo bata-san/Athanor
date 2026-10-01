@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/athanor-core", "crates/athanor-adblock", "crates/athanor-ext", "crates/athanor-import", "app/src-tauri"]
 
 [workspace.package]
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/bata-san/Athanor"

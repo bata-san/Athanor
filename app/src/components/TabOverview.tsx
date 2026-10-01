@@ -93,7 +93,11 @@ export function TabOverview({ open, onClose, snapshot }: { open: boolean; onClos
     if (!content) return
     const measure = () => {
       const box = content.getBoundingClientRect()
-      setPanel({ left: box.left, top: box.top, width: box.width, height: box.height })
+      // A card that floats over the page, not a second page: inset from the page edges, never wider than ~76rem.
+      const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 15
+      const pad = 1.5 * rem
+      const width = Math.min(box.width - 2 * pad, 76 * rem)
+      setPanel({ left: box.left + (box.width - width) / 2, top: box.top + pad, width, height: box.height - 2 * pad })
     }
     measure()
     const observer = new ResizeObserver(measure)
@@ -179,37 +183,37 @@ export function TabOverview({ open, onClose, snapshot }: { open: boolean; onClos
 
   return <Dialog open={open} onOpenChange={(next) => { if (!next) onClose() }}>
     {open && <DialogPrimitive.Portal>
-      <m.div aria-hidden="true" className="fixed inset-0 z-50 bg-[var(--ath-dialog-dim)] backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.12 }} />
+      <m.div aria-hidden="true" className="fixed inset-0 z-50 backdrop-blur-2xl" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.22, ease: [0.2, 0.9, 0.25, 1] }} />
       <DialogPrimitive.Content
         data-part="tab-overview"
         style={panel ?? { inset: '0.5rem' }}
         onOpenAutoFocus={onOpenAutoFocus}
-        className="fixed z-50 flex flex-col overflow-hidden rounded-[var(--ath-stage-radius)] border border-border bg-popover/92 text-popover-foreground shadow-menu outline-none backdrop-blur-xl"
+        className="fixed z-50 flex animate-[ath-float_260ms_var(--ease-snap)_both] flex-col text-foreground outline-none"
       >
         <DialogTitle className="sr-only">All Tabs</DialogTitle>
         <DialogDescription className="sr-only">Every open tab as a picture. Type to search, use the arrow keys to move, Enter to open, Delete to close.</DialogDescription>
 
-        <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border p-3">
+        <header className="flex shrink-0 flex-wrap items-center gap-2 px-6 pb-3 pt-1">
           <div className="relative min-w-[11rem] flex-1">
             <Search aria-hidden="true" className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input ref={field} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search Tabs" aria-label="Search tabs" spellCheck={false} autoComplete="off" className="ps-8" />
+            <Input ref={field} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search Tabs" aria-label="Search tabs" spellCheck={false} autoComplete="off" className="bg-popover/85 ps-8 shadow-sm backdrop-blur-xl" />
           </div>
-          <span aria-live="polite" className="shrink-0 font-instr text-[0.7333rem] tabular-nums text-muted-foreground">{tabs.length === total ? `${total}` : `${tabs.length} of ${total}`}</span>
-          {snapshot.workspace.spaces.length > 1 && <div role="radiogroup" aria-label="Tab scope" className="flex shrink-0 gap-0.5 rounded-lg bg-muted p-0.5">
+          <span aria-live="polite" className="shrink-0 rounded-full bg-popover/85 px-2.5 py-1 font-instr text-[0.7333rem] tabular-nums text-muted-foreground shadow-sm backdrop-blur-xl">{tabs.length === total ? `${total}` : `${tabs.length} of ${total}`}</span>
+          {snapshot.workspace.spaces.length > 1 && <div role="radiogroup" aria-label="Tab scope" className="flex shrink-0 gap-0.5 rounded-lg bg-popover/85 p-0.5 shadow-sm backdrop-blur-xl">
             {([['space', 'This Space'], ['all', 'All Spaces']] as const).map(([value, label]) => <button key={value} type="button" role="radio" aria-checked={scope === value}
               className={cn('h-7 rounded-md px-2.5 text-[0.8667rem] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/40', scope === value ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
               onClick={() => setScope(value)}>{label}</button>)}
           </div>}
-          <Tip label="Close" shortcut="Esc"><Button variant="ghost" size="icon-sm" aria-label="Close tab overview" className="shrink-0" onClick={onClose}><X /></Button></Tip>
+          <Tip label="Close" shortcut="Esc"><Button variant="ghost" size="icon-sm" aria-label="Close tab overview" className="shrink-0 rounded-full bg-popover/85 shadow-sm backdrop-blur-xl" onClick={onClose}><X /></Button></Tip>
         </header>
 
-        <div ref={root} onKeyDown={onKeyDown} className="min-h-0 flex-1 overflow-y-auto outline-none">
+        <div ref={root} onKeyDown={onKeyDown} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden outline-none [mask-image:linear-gradient(to_bottom,transparent,black_1rem,black_calc(100%_-_1.5rem),transparent)]">
           <div className="mx-auto flex w-full max-w-[80rem] flex-col gap-3 p-6">
-            {!tabs.length && <p className="m-0 px-1 py-8 text-center text-[0.8667rem] text-muted-foreground">{words.length ? `No tabs match “${query.trim()}”.` : scope === 'all' ? 'No open tabs.' : 'No open tabs in this space.'}</p>}
+            {!tabs.length && <p className="m-0 mx-auto rounded-full bg-popover/85 px-4 py-2 text-center text-[0.8667rem] text-muted-foreground shadow-sm backdrop-blur-xl">{words.length ? `No tabs match “${query.trim()}”.` : scope === 'all' ? 'No open tabs.' : 'No open tabs in this space.'}</p>}
             <div data-part="tab-overview-grid" className="relative grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-4">
               <AnimatePresence mode="popLayout">
                 {items.map((item) => item.kind === 'header'
-                  ? <m.h3 key={item.key} layout transition={enter} className="col-span-full flex items-center gap-2 px-1 text-[0.7333rem] font-semibold uppercase tracking-wide text-muted-foreground">{item.label}<span aria-hidden="true" className="h-px flex-1 bg-border" /></m.h3>
+                  ? <m.h3 key={item.key} layout transition={enter} className="col-span-full m-0 w-fit rounded-full bg-popover/85 px-2.5 py-1 text-[0.7333rem] font-semibold uppercase tracking-wide text-muted-foreground shadow-sm backdrop-blur-xl">{item.label}</m.h3>
                   : <m.div
                     key={item.key}
                     layout
@@ -234,7 +238,7 @@ export function TabOverview({ open, onClose, snapshot }: { open: boolean; onClos
                   type="button"
                   data-part="tab-card-new"
                   onClick={newTab}
-                  className="flex aspect-[16/10] w-full min-w-0 flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-foreground/30 text-muted-foreground outline-none transition-colors hover:border-foreground/50 hover:bg-accent/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
+                  className="flex aspect-[16/10] w-full min-w-0 flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-foreground/30 bg-popover/60 text-muted-foreground shadow-sm outline-none backdrop-blur-xl transition-colors hover:border-foreground/50 hover:bg-accent/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
                 >
                   <Plus aria-hidden="true" className="size-6" />
                   <span className="text-[0.8667rem] font-medium">New Tab</span>
@@ -279,7 +283,7 @@ function TabCard({ tab, image, runtime, active, onActivate, onClose }: {
       // so watch the pointer instead.
       onPointerDown={(event) => { if (event.button === 1) { event.preventDefault(); onClose(tab) } }}
       className={cn(
-        'flex w-full min-w-0 flex-col overflow-hidden rounded-xl border bg-card text-start outline-none transition-[border-color,box-shadow] focus-visible:ring-2 focus-visible:ring-ring/40',
+        'flex w-full min-w-0 flex-col overflow-hidden rounded-xl border bg-card text-start shadow-md outline-none transition-[border-color,box-shadow] focus-visible:ring-2 focus-visible:ring-ring/40',
         active ? 'border-primary shadow-[inset_0_0_0_1px_var(--primary)]' : 'border-border hover:border-foreground/25',
       )}
     >

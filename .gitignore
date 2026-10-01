@@ -21,3 +21,5 @@ public/fonts/
 
 # scratch target dirs used by delegated agents
 /target-import/
+/target-e2e/
+e2e/ui/.run-*.cjs
