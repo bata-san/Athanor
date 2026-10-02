@@ -85,3 +85,7 @@ Press and hold Back or Forward (or right-click, or ArrowDown on the focused butt
 ## PureRef import
 
 Boards can import PureRef 2.x scenes (`.pur`): the "Import from PureRef" button, or drop a `.pur` file on the Boards page. The `athanor-pur` crate reads the file; each image keeps its place, size, rotation, flip, opacity and grey filter, and notes become text. The result is a new board named after the file (`board_pick_pureref`, `board_import_pureref`; Windows only).
+
+## CAPTCHA and sign-in frames
+
+Frames of reCAPTCHA, hCaptcha, Turnstile, Arkose and accounts.google.com are never cancelled and replayed for ad-block scripting (`is_challenge_frame` in `win.rs`); doing so left an empty box. `e2e/ui/captcha.cjs` loads Google's reCAPTCHA demo and checks the checkbox frame renders.

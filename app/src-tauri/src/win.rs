@@ -308,6 +308,22 @@ unsafe fn register_frame_message_handler(
     }
 }
 
+/// CAPTCHA and sign-in widgets live in frames that must load exactly as the site asked (referrer, ancestors,
+/// first navigation); cancelling and replaying them leaves a blank box, and they have nothing to hide anyway.
+fn is_challenge_frame(url: &str) -> bool {
+    let rest = url.split("://").nth(1).unwrap_or("");
+    let (host, path) = rest.split_once('/').unwrap_or((rest, ""));
+    let host = host.split(['?', '#', ':']).next().unwrap_or("");
+    let is = |domain: &str| host == domain || host.ends_with(&format!(".{domain}"));
+    (is("google.com") && path.starts_with("recaptcha"))
+        || is("recaptcha.net")
+        || is("hcaptcha.com")
+        || is("challenges.cloudflare.com")
+        || is("arkoselabs.com")
+        || is("funcaptcha.com")
+        || host == "accounts.google.com"
+}
+
 unsafe fn register_frame_document_start(
     core: ICoreWebView2,
     frame: ICoreWebView2Frame,
@@ -315,7 +331,7 @@ unsafe fn register_frame_document_start(
     url: String,
     armed: Arc<Mutex<HashSet<(usize, String)>>>,
 ) -> windows::core::Result<bool> {
-    if !filter.enabled() || !is_web(&url) {
+    if !filter.enabled() || !is_web(&url) || is_challenge_frame(&url) {
         return Ok(false);
     }
     let Some(script) = document_start_payload(&filter, &url) else {
