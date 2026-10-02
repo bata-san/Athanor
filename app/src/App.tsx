@@ -54,12 +54,10 @@ function useFreezeFrames(targets: () => { tab: string; rect: Rect }[]) {
   const [frames, setFrames] = useState<Frame[]>([])
   const desired = useRef(false)
   const applied = useRef(false)
+  const busy = useRef(false)
   const targetsRef = useRef(targets)
   targetsRef.current = targets
-  const freeze = useCallback(async (capture = true) => {
-    desired.current = true
-    if (applied.current) return
-    applied.current = true
+  const run = useCallback(async (capture: boolean) => {
     const shots = capture ? await Promise.all(targetsRef.current().map(async (target) => {
       try {
         const src = await Promise.race([api.captureFrame(target.tab), new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 1600))])
@@ -76,6 +74,13 @@ function useFreezeFrames(targets: () => { tab: string; rect: Rect }[]) {
     if (!desired.current) { applied.current = false; return }
     await api.setOverlayOpen(true)
   }, [])
+  const freeze = useCallback(async (capture = true) => {
+    desired.current = true
+    if (applied.current) return
+    applied.current = true
+    busy.current = true
+    try { await run(capture) } finally { busy.current = false }
+  }, [run])
   const thaw = useCallback(async () => {
     desired.current = false
     if (!applied.current) return
@@ -83,7 +88,17 @@ function useFreezeFrames(targets: () => { tab: string; rect: Rect }[]) {
     await api.setOverlayOpen(false)
     window.setTimeout(() => { if (!desired.current) setFrames([]) }, 160)
   }, [])
-  return { frames, freeze, thaw }
+  // Safety net: when nothing is open any more, the page must be live and unpictured, whatever happened on the way
+  // (a menu that never came up, a capture that stalled). Never while a freeze is still being set up.
+  const settle = useCallback(() => {
+    if (busy.current) return
+    const stuck = applied.current
+    desired.current = false
+    applied.current = false
+    if (stuck) void api.setOverlayOpen(false)
+    setFrames((current) => (current.length ? [] : current))
+  }, [])
+  return { frames, freeze, thaw, settle }
 }
 
 export function App() {
@@ -125,7 +140,7 @@ export function App() {
     if (!active || active.url.startsWith('athanor://')) return []
     return [{ tab: active.id, rect: { x: 0, y: 0, w: content.width, h: content.height } }]
   }, [])
-  const { frames, freeze, thaw } = useFreezeFrames(freezeTargets)
+  const { frames, freeze, thaw, settle } = useFreezeFrames(freezeTargets)
 
   useEffect(() => { void bootStore() }, [])
   useEffect(() => {
@@ -141,6 +156,7 @@ export function App() {
   const overlayOpen = anyOverlay
   const frameWanted = overlayOpen && !mobile && !(panel !== null && !paletteOpen && !devOpen)
   useEffect(() => { if (overlayOpen) void freeze(frameWanted); else void thaw() }, [overlayOpen, frameWanted, freeze, thaw])
+  useEffect(() => { if (overlayOpen || pageMenu) return; const id = window.setTimeout(settle, 700); return () => window.clearTimeout(id) }, [overlayOpen, pageMenu, snapshot?.workspace.activeTab, settle])
   useEffect(() => { const update = (event: Event) => { const next = (event as CustomEvent<'compact' | 'comfortable'>).detail; if (next === 'compact' || next === 'comfortable') setDensity(next) }; window.addEventListener('athanor-density', update); return () => window.removeEventListener('athanor-density', update) }, [])
   useEffect(() => { if (!snapshot?.workspace.split) { setSplitRects(null); return }; void api.getSplitRects().then(setSplitRects) }, [snapshot?.workspace.split])
   useEffect(() => { const unlisten = listen('athanor://split-rects', setSplitRects); return () => { void unlisten.then((off) => off()) } }, [])

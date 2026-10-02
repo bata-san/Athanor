@@ -101,3 +101,7 @@ The command bar gives the keyboard back to the shell before focusing its field, 
 ## Bot-check pages
 
 A Cloudflare challenge answers with HTTP 403 and replays navigations; Athanor shows the page the site sent instead of its own error page, ignores the late failure of a navigation that was replaced, and never cancels and replays challenge navigations (`__cf_chl`, `/cdn-cgi/`). `e2e/ui/cloudflare.cjs` loads one.
+
+## Overlays and controlled menus
+
+`OverlayDropdownMenu` follows the menu's real open state when its owner controls it (the Back/Forward buttons open only on a long press). Counting the primitive's refused "open" requests as an overlay froze and hid the page after every plain click on Back, so pages opened afterwards never showed. App also settles a frozen page 700 ms after nothing is open any more, as a safety net. `e2e/ui/note-back.cjs` clicks an article on note.com, clicks Back, then opens other pages.

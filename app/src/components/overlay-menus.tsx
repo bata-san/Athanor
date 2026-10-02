@@ -12,7 +12,10 @@ export function OverlayContextMenu({ children }: { children: React.ReactNode }) 
 }
 
 export function OverlayDropdownMenu({ children, onOpenChange, ...props }: React.ComponentProps<typeof DropdownMenu>) {
-  const [open, setOpen] = useState(false)
+  const [asked, setOpen] = useState(false)
+  // A menu that is controlled (the Back button opens only on a long press) is open when its owner says so, not
+  // whenever the primitive asks to be: counting a refused request would hide the page for good.
+  const open = props.open ?? asked
   useOverlay(open, 'dropdown')
   return <DropdownMenu {...props} onOpenChange={(next) => { setOpen(next); onOpenChange?.(next) }}>{children}</DropdownMenu>
 }
