@@ -4,6 +4,7 @@
 //! embedded and locally linked images, and plain text extracted from HTML notes.
 //! Cropped images are returned uncropped with a warning. Vector drawings are
 //! skipped with a warning.
+#![allow(unknown_lints, clippy::chunks_exact_to_as_chunks)]
 
 use rusqlite::{types::ValueRef, Connection, OpenFlags, Row};
 use std::collections::{HashMap, HashSet};
