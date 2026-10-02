@@ -105,3 +105,7 @@ A Cloudflare challenge answers with HTTP 403 and replays navigations; Athanor sh
 ## Overlays and controlled menus
 
 `OverlayDropdownMenu` follows the menu's real open state when its owner controls it (the Back/Forward buttons open only on a long press). Counting the primitive's refused "open" requests as an overlay froze and hid the page after every plain click on Back, so pages opened afterwards never showed. App also settles a frozen page 700 ms after nothing is open any more, as a safety net. `e2e/ui/note-back.cjs` clicks an article on note.com, clicks Back, then opens other pages.
+
+## Aborted navigations
+
+A navigation that turns into a download, or is replaced by another one, ends "aborted" without any response. Athanor shows no error page for that (the page stays as it was), like other browsers; before, every download from a site such as GitHub releases ended in "The connection was interrupted", and Try again downloaded the file once more. Real failures (reset, timeout, offline, certificate) still get the page. `e2e/ui/ghdownload.cjs` (needs `DL_URL`) and `e2e/ui/sites.cjs` check this against live sites.

@@ -669,6 +669,10 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
                             core.Navigate(&HSTRING::from(orig))?;
                         } else if is_web(&failed)
                             && status != COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED
+                            // A navigation that turns into a download, or is replaced by another, ends "aborted" with
+                            // no response at all. Browsers show nothing for that; an error page here made every
+                            // download look broken and "Try again" downloaded the file once more.
+                            && status != COREWEBVIEW2_WEB_ERROR_STATUS_CONNECTION_ABORTED
                             && !ui.download_just_started()
                         {
                             sink(EngineEvent::LoadFailed {
