@@ -262,6 +262,140 @@ pub fn add_from_url(
     save_unlocked(paths, &board)
 }
 
+/// What a PureRef import made.
+#[cfg(windows)]
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PureRefImport {
+    pub board: Board,
+    pub images: usize,
+    pub notes: usize,
+    pub warnings: Vec<String>,
+}
+
+/// Turn a PureRef 2.x scene (`.pur`) into a board of its own: every image keeps its place, size, rotation, flip,
+/// opacity and grey filter; notes become text. PureRef's world is centred on (0, 0) with y down, like a board's.
+#[cfg(windows)]
+pub fn import_pureref(paths: &Paths, file: &std::path::Path) -> Result<PureRefImport, String> {
+    use athanor_core::board::{Item, ItemKind};
+    let bytes = std::fs::read(file).map_err(|e| format!("could not read the file: {e}"))?;
+    let scene = athanor_pur::parse(&bytes).map_err(|e| e.to_string())?;
+    let name = file
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or("PureRef board");
+    let mut board = create(paths, name)?;
+    let store = assets(paths);
+    let mut warnings = scene.warnings;
+    let (mut images, mut notes) = (0usize, 0usize);
+    for (index, item) in scene.items.into_iter().enumerate() {
+        let z = i32::try_from(index).unwrap_or(i32::MAX);
+        match item {
+            athanor_pur::PurItem::Image {
+                data,
+                mime,
+                x,
+                y,
+                w,
+                h,
+                rotation,
+                opacity,
+                flip_x,
+                grayscale,
+                locked,
+                ..
+            } => {
+                if data.len() as u64 > MAX_IMAGE_BYTES {
+                    warnings.push("An image over 40 MB was skipped.".into());
+                    continue;
+                }
+                if !(w.is_finite() && h.is_finite() && x.is_finite() && y.is_finite())
+                    || w <= 0.0
+                    || h <= 0.0
+                {
+                    continue;
+                }
+                let mime = if mime.starts_with("image/") {
+                    mime
+                } else {
+                    "application/octet-stream".into()
+                };
+                let hash = store.put(&data, &mime).map_err(|e| e.to_string())?;
+                board.items.push(Item {
+                    id: athanor_core::new_id(),
+                    kind: ItemKind::Image {
+                        asset: hash,
+                        mime,
+                        source_url: None,
+                    },
+                    x: x - w / 2.0,
+                    y: y - h / 2.0,
+                    w,
+                    h,
+                    rotation,
+                    opacity: opacity.clamp(0.0, 1.0),
+                    flip_x,
+                    grayscale,
+                    locked,
+                    z,
+                });
+                images += 1;
+            }
+            athanor_pur::PurItem::Text {
+                text,
+                x,
+                y,
+                size,
+                color,
+                ..
+            } => {
+                let size = if size.is_finite() && size > 0.0 {
+                    size
+                } else {
+                    24.0
+                };
+                let lines = text.lines().count().max(1) as f64;
+                let longest = text
+                    .lines()
+                    .map(|l| l.chars().count())
+                    .max()
+                    .unwrap_or(1)
+                    .max(1) as f64;
+                let (w, h) = ((longest * size * 0.6).max(size * 2.0), lines * size * 1.4);
+                board.items.push(Item {
+                    id: athanor_core::new_id(),
+                    kind: ItemKind::Text { text, size, color },
+                    x: x - w / 2.0,
+                    y: y - h / 2.0,
+                    w,
+                    h,
+                    rotation: 0.0,
+                    opacity: 1.0,
+                    flip_x: false,
+                    grayscale: false,
+                    locked: false,
+                    z,
+                });
+                notes += 1;
+            }
+        }
+    }
+    if board.items.is_empty() {
+        return Err("The file has no images or notes Athanor can use.".into());
+    }
+    {
+        let _guard = BOARD_LOCK.lock();
+        save_unlocked(paths, &board)?;
+    }
+    Ok(PureRefImport {
+        board,
+        images,
+        notes,
+        warnings,
+    })
+}
+
 /// Id of the catch-all "Inbox" board, created on first use.
 pub fn inbox_id(paths: &Paths) -> Result<String, String> {
     if let Some(b) = list(paths).into_iter().find(|b| b.name == "Inbox") {

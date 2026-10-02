@@ -117,6 +117,7 @@ dependencies = [
  "athanor-core",
  "athanor-ext",
  "athanor-import",
+ "athanor-pur",
  "base64 0.22.1",
  "flate2",
  "imagesize",
@@ -189,6 +190,14 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "athanor-pur"
+version = "0.1.7"
+dependencies = [
+ "rusqlite",
  "thiserror 2.0.21",
 ]
 

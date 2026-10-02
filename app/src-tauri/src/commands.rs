@@ -232,6 +232,18 @@ pub async fn reveal_download(path: String) -> R {
 }
 
 #[tauri::command]
+pub async fn nav_history(b: B<'_>, tab: Id) -> R {
+    b.nav_history(&tab);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn nav_history_go(b: B<'_>, tab: Id, entry: i64) -> R {
+    b.nav_history_go(&tab, entry);
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn print_page(b: B<'_>, tab: Id) -> R {
     b.print_page(&tab);
     Ok(())
@@ -705,6 +717,44 @@ pub async fn import_pick_file(app: AppHandle) -> R<Option<String>> {
     {
         let _ = app;
         Ok(None)
+    }
+}
+
+/// Choose a PureRef scene to import.
+#[tauri::command]
+pub async fn board_pick_pureref(app: AppHandle) -> R<Option<String>> {
+    #[cfg(windows)]
+    {
+        let _ = &app;
+        let picked = rfd::AsyncFileDialog::new()
+            .add_filter("PureRef scene", &["pur"])
+            .pick_file()
+            .await;
+        Ok(picked.map(|file| file.path().to_string_lossy().into_owned()))
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        Ok(None)
+    }
+}
+
+/// Import a PureRef 2.x scene as a new board.
+#[tauri::command]
+pub async fn board_import_pureref(b: B<'_>, path: String) -> R<crate::boards::PureRefImport> {
+    #[cfg(windows)]
+    {
+        let paths = b.paths.clone();
+        tokio::task::spawn_blocking(move || {
+            crate::boards::import_pureref(&paths, std::path::Path::new(&path))
+        })
+        .await
+        .map_err(e)?
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (b, path);
+        Err("importing PureRef boards is only available on Windows".into())
     }
 }
 

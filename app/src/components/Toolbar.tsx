@@ -1,6 +1,8 @@
+import { useEffect, useRef, useState } from 'react'
 import type * as React from 'react'
 import { LayoutGrid, ArrowLeft, ArrowRight, Columns2, Command, LayoutPanelTop, MoreHorizontal, PanelLeft, PanelsTopLeft, Puzzle, RotateCw, Settings, SquareTerminal, X } from 'lucide-react'
-import type { Snapshot, Tab } from '@/lib/types'
+import type { NavHistory, Snapshot, Tab } from '@/lib/types'
+import { listen } from '@/lib/events'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -18,14 +20,67 @@ export function NavButton({ label, shortcut, hint, disabled, active, side = 'bot
   return <Tip label={disabled && hint ? `${label} — ${hint}` : label} shortcut={shortcut} side={side}><span className="inline-flex"><Button variant="ghost" size="icon" className={cn('size-7 rounded-md [&_svg]:size-[1rem]', active && 'bg-foreground/[0.07] text-foreground', className)} data-part="nav-button" data-active={active === undefined ? undefined : String(active)} aria-label={label} aria-keyshortcuts={shortcut} disabled={disabled} onClick={onClick}>{children}</Button></span></Tip>
 }
 
+/**
+ * Back or Forward that also answers a press-and-hold (or a right-click) with the list of pages behind / ahead,
+ * like the arrows of every desktop browser. A plain click still just goes one step.
+ */
+function HistoryButton({ direction, tab, disabled }: { direction: 'back' | 'forward'; tab: Tab | null; disabled: boolean }) {
+  const [open, setOpen] = useState(false)
+  const [entries, setEntries] = useState<NavHistory['entries']>([])
+  const timer = useRef<number | null>(null)
+  const held = useRef(false)
+  const back = direction === 'back'
+  useEffect(() => {
+    const off = listen('athanor://nav-history', (history) => {
+      if (history.tab !== tab?.id) return
+      // Pages in the direction asked for, nearest first; error pages and blanks are not places.
+      const shown = (back ? history.entries.slice(0, history.current).reverse() : history.entries.slice(history.current + 1))
+        .filter((entry) => entry.url && entry.url !== 'about:blank' && !entry.url.startsWith('data:'))
+        .slice(0, 14)
+      setEntries(shown)
+      if (shown.length) setOpen(true)
+    })
+    return () => { void off.then((fn) => fn()) }
+  }, [tab?.id, back])
+  const cancel = () => { if (timer.current !== null) { window.clearTimeout(timer.current); timer.current = null } }
+  const ask = () => { if (tab && !disabled) void api.navHistory(tab.id) }
+  const label = back ? 'Back' : 'Forward'
+  return <OverlayDropdownMenu open={open} onOpenChange={(next) => { if (!next) setOpen(false) }}>
+    <Tip label={label} shortcut={back ? 'Alt+Left' : 'Alt+Right'} side="bottom">
+      <span className="inline-flex" onContextMenu={(event) => { event.preventDefault(); ask() }}>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="size-7 rounded-md [&_svg]:size-[1.0rem]" data-part="nav-button" aria-label={label} aria-haspopup="menu" disabled={disabled}
+            onPointerDown={(event) => { if (event.button !== 0) return; held.current = false; cancel(); timer.current = window.setTimeout(() => { held.current = true; ask() }, 450) }}
+            onPointerUp={cancel} onPointerLeave={cancel}
+            onClick={(event) => {
+              // The press that opened the list must not also navigate; Radix would toggle the menu on click, so keep it ours.
+              event.preventDefault()
+              if (held.current) { held.current = false; return }
+              if (tab) void (back ? api.goBack(tab.id) : api.goForward(tab.id))
+            }}
+            onKeyDown={(event) => { if (event.key === 'ArrowDown') { event.preventDefault(); ask() } }}
+          >{back ? <ArrowLeft /> : <ArrowRight />}</Button>
+        </DropdownMenuTrigger>
+      </span>
+    </Tip>
+    <DropdownMenuContent align="start" className="w-72" aria-label={back ? 'Pages behind' : 'Pages ahead'}>
+      {entries.map((entry) => <DropdownMenuItem key={entry.id} onSelect={() => { if (tab) void api.navHistoryGo(tab.id, entry.id) }}>
+        <span className="min-w-0 flex-1"><span className="block truncate">{entry.title || hostOfUrl(entry.url)}</span><span className="block truncate font-mono text-[0.7333rem] text-muted-foreground">{hostOfUrl(entry.url)}</span></span>
+      </DropdownMenuItem>)}
+    </DropdownMenuContent>
+  </OverlayDropdownMenu>
+}
+
+const hostOfUrl = (url: string) => { try { return new URL(url).host || url } catch { return url } }
+
 /** Back / forward / reload for the active tab. */
 export function NavCluster({ snapshot, activeTab, className }: { snapshot: Snapshot; activeTab: Tab | null; className?: string }) {
   const runtime = activeTab ? snapshot.runtime[activeTab.id] : undefined
   const loading = runtime?.loading ?? false
   return <div className={cn('flex items-center', className)} data-no-drag>
-    <NavButton label="Back" shortcut="Alt+Left" disabled={!activeTab || !runtime?.canGoBack} hint={!activeTab ? 'no page is open' : 'nothing to go back to'} onClick={() => activeTab && void api.goBack(activeTab.id)}><ArrowLeft aria-hidden="true" /></NavButton>
-    <NavButton label="Forward" shortcut="Alt+Right" disabled={!activeTab || !runtime?.canGoForward} hint={!activeTab ? 'no page is open' : 'nothing to go forward to'} onClick={() => activeTab && void api.goForward(activeTab.id)}><ArrowRight aria-hidden="true" /></NavButton>
-    <NavButton label={loading ? 'Stop loading' : 'Reload'} shortcut="Ctrl+R" disabled={!activeTab} hint="no page is open" onClick={() => activeTab && void (loading ? api.stop(activeTab.id) : api.reload(activeTab.id))}>{loading ? <X aria-hidden="true" /> : <RotateCw aria-hidden="true" />}</NavButton>
+    <HistoryButton direction="back" tab={activeTab} disabled={!activeTab || !runtime?.canGoBack} />
+    <HistoryButton direction="forward" tab={activeTab} disabled={!activeTab || !runtime?.canGoForward} />
+    <NavButton label={loading ? 'Stop loading' : 'Reload'} shortcut="Ctrl+R" disabled={!activeTab} onClick={() => activeTab && void (loading ? api.stop(activeTab.id) : api.reload(activeTab.id))}>{loading ? <X /> : <RotateCw />}</NavButton>
   </div>
 }
 

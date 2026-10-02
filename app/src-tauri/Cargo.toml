@@ -37,6 +37,7 @@ rfd = { version = "0.16", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 athanor-import = { path = "../../crates/athanor-import" }
+athanor-pur = { path = "../../crates/athanor-pur" }
 flate2 = "1"
 webview2-com = "0.39"
 windows = { version = "0.62", features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_System_Com", "Win32_UI_Shell", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging"] }

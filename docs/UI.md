@@ -77,3 +77,11 @@ The design rules behind motion, menus, feedback and accessibility (with what eac
 ## Sign-in popups
 
 A page that opens a sized window (`window.open(url, name, 'width=...')`: Google, Apple and Microsoft sign-in, payment pages) gets a real popup window that keeps its opener, so the sign-in can report back (`engine_desktop.rs`, `on_new_window`). Plain links and size-less `window.open` calls still become tabs (`win.rs`). `e2e/ui/popup.cjs` checks both.
+
+## Back / Forward history
+
+Press and hold Back or Forward (or right-click, or ArrowDown on the focused button) to list up to 14 pages behind or ahead, nearest first. Choosing one jumps straight there (`nav_history` asks the page via CDP `Page.getNavigationHistory`, answered by the `athanor://nav-history` event; `nav_history_go` runs `Page.navigateToHistoryEntry`). A plain click still goes one step. Checked by `e2e/ui/pureref-history.cjs`.
+
+## PureRef import
+
+Boards can import PureRef 2.x scenes (`.pur`): the "Import from PureRef" button, or drop a `.pur` file on the Boards page. The `athanor-pur` crate reads the file; each image keeps its place, size, rotation, flip, opacity and grey filter, and notes become text. The result is a new board named after the file (`board_pick_pureref`, `board_import_pureref`; Windows only).

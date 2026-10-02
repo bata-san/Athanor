@@ -1345,6 +1345,49 @@ impl Browser {
         self.changed();
     }
 
+    /// Ask the page for its session history; the answer goes to the shell as `athanor://nav-history`.
+    pub fn nav_history(&self, tab: &str) {
+        let (app, tab_id) = (self.app.clone(), tab.to_string());
+        let reply: Box<dyn FnOnce(String) + Send> = Box::new(move |json| {
+            let value: serde_json::Value = serde_json::from_str(&json).unwrap_or_default();
+            let current = value
+                .get("currentIndex")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(-1);
+            let entries: Vec<serde_json::Value> = value
+                .get("entries")
+                .and_then(|v| v.as_array())
+                .map(|list| {
+                    list.iter()
+                        .map(|entry| {
+                            serde_json::json!({
+                                "id": entry.get("id").and_then(|v| v.as_i64()).unwrap_or(0),
+                                "url": entry.get("url").and_then(|v| v.as_str()).unwrap_or(""),
+                                "title": entry.get("title").and_then(|v| v.as_str()).unwrap_or(""),
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            let _ = app.emit(
+                "athanor://nav-history",
+                serde_json::json!({ "tab": tab_id, "current": current, "entries": entries }),
+            );
+        });
+        let _ = self
+            .engine
+            .devtools_json(tab, "Page.getNavigationHistory", "{}", reply);
+    }
+
+    /// Jump to one entry of the session history (see [`Browser::nav_history`]).
+    pub fn nav_history_go(&self, tab: &str, entry_id: i64) {
+        let _ = self.engine.devtools_call(
+            tab,
+            "Page.navigateToHistoryEntry",
+            &serde_json::json!({ "entryId": entry_id }).to_string(),
+        );
+    }
+
     pub fn print_page(&self, tab: &str) {
         let _ = self.engine.eval(tab, "window.print()");
     }

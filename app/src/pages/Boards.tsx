@@ -4,6 +4,8 @@ import { toast } from 'sonner'
 import { ClipboardPaste, Palette } from 'lucide-react'
 import type { Board, BoardItem, BoardSummary } from '@/lib/types'
 import { api } from '@/lib/api'
+import { isMockMode } from '@/lib/mock/backend'
+import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { listen } from '@/lib/events'
 import { cssToken } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
@@ -90,6 +92,26 @@ export default function BoardsPage({ standaloneId = null }: { standaloneId?: str
   const arrange = () => { if (board) updateItems((items) => arrangeBoardItems(items)) }
   const fitAll = () => { if (board) setBoard({ ...board, view: fitBoardView(board.items, fitSize) }) }
   const createBoard = async () => { const name = await askText({ title: 'New board', label: 'Name', initial: 'Untitled board', confirm: 'Create' }); if (!name) return; try { const created = await api.createBoard(name); await refreshList(); setBoard(created); setSelected([]) } catch (error) { toast.error(why(error)) } }
+  // PureRef scenes (.pur): chosen from a dialog or dropped onto the window; they become a board of their own.
+  const importPureRef = async (path?: string | null) => {
+    try {
+      const file = path ?? await api.boardPickPureref()
+      if (!file) return
+      const made = await toast.promise(api.boardImportPureref(file), { loading: 'Importing from PureRef…', success: (done) => `Imported “${done.board.name}”: ${done.images} ${done.images === 1 ? 'image' : 'images'}${done.notes ? `, ${done.notes} ${done.notes === 1 ? 'note' : 'notes'}` : ''}`, error: (error) => `Could not import: ${why(error)}` }).unwrap()
+      await refreshList(); setBoard(made.board); setSelected([])
+      if (made.warnings.length) toast(`${made.warnings.length} ${made.warnings.length === 1 ? 'thing' : 'things'} could not be carried over`, { description: made.warnings.slice(0, 3).join(' · '), duration: 9000 })
+    } catch { /* the toast already said why */ }
+  }
+  useEffect(() => {
+    if (isMockMode()) return
+    const off = getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type !== 'drop') return
+      const pur = event.payload.paths.find((entry) => /\.pur$/i.test(entry))
+      if (pur) void importPureRef(pur)
+    })
+    return () => { void off.then((fn) => fn()) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const renameBoard = async (entry: BoardSummary) => { const name = await askText({ title: 'Rename board', label: 'Name', initial: entry.name, confirm: 'Rename' }); if (!name) return; try { if (board?.id === entry.id) setBoard({ ...board, name }); else { const loaded = await api.getBoard(entry.id); await api.saveBoard({ ...loaded, name }); void refreshList() } } catch (error) { toast.error(why(error)) } }
   const deleteBoard = async (entry: BoardSummary) => { if (!await askConfirm({ title: `Delete “${entry.name}”?`, description: 'The board and its items are removed.', confirm: 'Delete', destructive: true })) return; try { await api.deleteBoard(entry.id); const list = await refreshList(); if (board?.id === entry.id) { const next = list[0]; setBoard(next ? await api.getBoard(next.id) : null) } } catch (error) { toast.error(why(error)) } }
   const addUrl = async (url: string, x: number, y: number) => { if (!board) return; const world = screenToWorld({ x, y }, board.view); try { await api.boardAddFromUrl(board.id, url, world.x, world.y); await loadBoard(board.id) } catch (error) { toast.error(why(error)) } }
@@ -102,7 +124,10 @@ export default function BoardsPage({ standaloneId = null }: { standaloneId?: str
     {!standaloneId && <aside aria-label="Boards" className="flex w-[var(--ath-board-list-mobile)] shrink-0 flex-col overflow-y-auto border-e border-border bg-sidebar p-2 min-[700px]:w-[var(--ath-board-list-width)]">
       <div className="mb-1 flex h-8 shrink-0 items-center justify-between gap-2 px-1">
         <span className="text-xs font-semibold text-muted-foreground">Boards</span>
-        <Tip label="Create board"><Button variant="ghost" size="icon-sm" aria-label="Create board" onClick={() => void createBoard()}><AppIcon name="Plus" /></Button></Tip>
+        <div className="flex items-center">
+          <Tip label="Import from PureRef"><Button variant="ghost" size="icon-sm" aria-label="Import from PureRef" onClick={() => void importPureRef()}><AppIcon name="Download" /></Button></Tip>
+          <Tip label="Create board"><Button variant="ghost" size="icon-sm" aria-label="Create board" onClick={() => void createBoard()}><AppIcon name="Plus" /></Button></Tip>
+        </div>
       </div>
       <div className="flex flex-col gap-0.5">
         {summaries.map((entry) => <div key={entry.id} className="group flex items-center gap-0.5">
@@ -132,7 +157,11 @@ export default function BoardsPage({ standaloneId = null }: { standaloneId?: str
             <h2 className="m-0 text-sm font-semibold">No board selected</h2>
             <p className="m-0 mt-1 text-[0.8667rem] text-muted-foreground">Create a board to collect references, notes and page captures.</p>
           </div>
-          <Button onClick={() => void createBoard()}><AppIcon name="Plus" />New Board</Button>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <Button onClick={() => void createBoard()}><AppIcon name="Plus" />New Board</Button>
+            <Button variant="outline" onClick={() => void importPureRef()}><AppIcon name="Download" />Import from PureRef…</Button>
+          </div>
+          <p className="m-0 text-xs text-muted-foreground">Or drop a .pur file here.</p>
         </div>
       </div> : <>
         <div data-part="board-toolbar" className="absolute left-1/2 top-3 z-10 flex w-max max-w-[calc(100%-1.5rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1 rounded-xl border border-border bg-popover/95 p-1 shadow-menu backdrop-blur-md">
