@@ -111,7 +111,7 @@ checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 
 [[package]]
 name = "athanor"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "athanor-adblock",
  "athanor-core",
@@ -141,7 +141,7 @@ dependencies = [
 
 [[package]]
 name = "athanor-adblock"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "adblock",
  "base64 0.22.1",
@@ -157,7 +157,7 @@ dependencies = [
 
 [[package]]
 name = "athanor-core"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "base64 0.22.1",
  "percent-encoding",
@@ -172,7 +172,7 @@ dependencies = [
 
 [[package]]
 name = "athanor-ext"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "athanor-core",
  "semver",
@@ -184,7 +184,7 @@ dependencies = [
 
 [[package]]
 name = "athanor-import"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "rusqlite",
  "serde",
@@ -195,7 +195,7 @@ dependencies = [
 
 [[package]]
 name = "athanor-pur"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "rusqlite",
  "thiserror 2.0.21",

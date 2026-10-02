@@ -263,7 +263,6 @@ pub fn add_from_url(
 }
 
 /// What a PureRef import made.
-#[cfg(windows)]
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PureRefImport {
