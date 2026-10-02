@@ -244,6 +244,12 @@ pub async fn nav_history_go(b: B<'_>, tab: Id, entry: i64) -> R {
 }
 
 #[tauri::command]
+pub async fn translate_page(b: B<'_>, tab: Id, lang: String) -> R {
+    b.translate_page(&tab, &lang);
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn print_page(b: B<'_>, tab: Id) -> R {
     b.print_page(&tab);
     Ok(())

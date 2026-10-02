@@ -21,6 +21,7 @@ export const api = {
   reopenClosed: (count: number) => call('reopen_closed', { count }),
   setSoftwareRendering: (tab: Id, software: boolean) => call('set_software_rendering', { tab, software }),
   zoomPage: (tab: Id, dir: number) => call('zoom_page', { tab, dir }), findInPage: (tab: Id, action: 'start' | 'next' | 'prev' | 'clear', query: string, matchCase: boolean) => call('find_in_page', { tab, action, query, matchCase }), hardReload: (tab: Id) => call('hard_reload', { tab }), printPage: (tab: Id) => call('print_page', { tab }), toggleFullscreen: () => call('toggle_fullscreen', {}), focusShell: () => call('focus_shell', {}), focusPage: (tab: Id) => call('focus_page', { tab }), runShortcut: (combo: string) => call('run_shortcut', { combo }),
+  translatePage: (tab: Id, lang: string) => call('translate_page', { tab, lang }),
   navHistory: (tab: Id) => call('nav_history', { tab }), navHistoryGo: (tab: Id, entry: number) => call('nav_history_go', { tab, entry }),
   boardPickPureref: () => call('board_pick_pureref', {}), boardImportPureref: (path: string) => call('board_import_pureref', { path }),
   windowGetPosition: () => call('window_get_position', {}), windowMoveTo: (x: number, y: number) => call('window_move_to', { x, y }),

@@ -89,3 +89,15 @@ Boards can import PureRef 2.x scenes (`.pur`): the "Import from PureRef" button,
 ## CAPTCHA and sign-in frames
 
 Frames of reCAPTCHA, hCaptcha, Turnstile, Arkose and accounts.google.com are never cancelled and replayed for ad-block scripting (`is_challenge_frame` in `win.rs`); doing so left an empty box. `e2e/ui/captcha.cjs` loads Google's reCAPTCHA demo and checks the checkbox frame renders.
+
+## Translate page
+
+Right-click a page and choose Translate page, or press T while the menu is open (Show original brings it back). The page script `translate.js` lists the page's text blocks and replaces only the text of existing text nodes (plus `title`, `placeholder`, `alt`, `aria-label` and the tab title), so the tree, listeners and scripts are untouched; `code`, `pre`, inputs, editable areas, `translate="no"` and `.notranslate` are skipped. A sentence split by inline elements is sent whole with `<n>` markers and put back into its own nodes. `translate.rs` sends the text in batches to Google's public translate endpoint (page text leaves the device when you use this) into the shell's language. Checked by `e2e/ui/translate.cjs`.
+
+## Ctrl+T
+
+The command bar gives the keyboard back to the shell before focusing its field, so typing starts at once even when the page had focus (`e2e/ui/newtab-focus.cjs`).
+
+## Bot-check pages
+
+A Cloudflare challenge answers with HTTP 403 and replays navigations; Athanor shows the page the site sent instead of its own error page, ignores the late failure of a navigation that was replaced, and never cancels and replays challenge navigations (`__cf_chl`, `/cdn-cgi/`). `e2e/ui/cloudflare.cjs` loads one.

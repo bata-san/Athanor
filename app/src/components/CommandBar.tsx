@@ -61,8 +61,13 @@ export function CommandBar({ open, onOpenChange, mode, seed, snapshot, servers, 
   useEffect(() => {
     if (!open) return
     setQuery(seed); setActiveTool(null); setToolOutput('')
-    const id = window.setTimeout(() => { input.current?.focus(); input.current?.select() }, 30)
-    return () => window.clearTimeout(id)
+    // A page's own view may hold the keyboard (that is where Ctrl+T was pressed): give it back to the shell first,
+    // then focus again once the dialog has mounted, so typing starts in the field at once.
+    let cancelled = false
+    const focus = () => { if (!cancelled) { input.current?.focus(); input.current?.select() } }
+    const id = window.setTimeout(focus, 30)
+    void api.focusShell().then(() => { window.setTimeout(focus, 0) }).catch(() => undefined)
+    return () => { cancelled = true; window.clearTimeout(id) }
   }, [open, seed])
   const fresh = query === seed
   const q = fresh ? '' : query

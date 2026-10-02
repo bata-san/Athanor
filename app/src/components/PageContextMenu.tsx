@@ -5,8 +5,9 @@ import {
 } from 'lucide-react'
 import type { ContextItem, PageContextMenu } from '@/lib/types'
 import { api } from '@/lib/api'
+import { listen } from '@/lib/events'
 import { useOverlay } from '@/lib/overlay'
-import { ContextMenu, ContextMenuCheckboxItem, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger } from './ui/context-menu'
+import { ContextMenu, ContextMenuCheckboxItem, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuShortcut, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger } from './ui/context-menu'
 
 /** The engine's own entries we never show: they lead to services Athanor does not ship. */
 const HIDDEN = /moretools|share|webcapture|screenshot|collections|copilot|readaloud|emoji|cast|immersive|translate|reading|bing|sidebar|feedback|lookup|webselect/i
@@ -20,6 +21,20 @@ const ICONS: Record<string, LucideIcon> = {
   openimageinnewtab: ExternalLink, openlinkinnewwindow: ExternalLink,
   inspectelement: Bug, viewpagesource: FileCode2, spellcheck: SpellCheck, languages: Languages,
 }
+
+/** Tabs whose page is shown translated right now (the host says so; a navigation clears it). */
+const translated = new Set<string>()
+void listen('athanor://translate', ({ tab, state }) => { if (state === 'original') translated.delete(tab); else translated.add(tab) })
+
+/** The language pages are translated into: the one the shell speaks. */
+const targetLanguage = () => {
+  const tag = (navigator.language || 'en').toLowerCase()
+  if (tag.startsWith('zh')) return /tw|hk|hant/.test(tag) ? 'zh-TW' : 'zh-CN'
+  return tag.split('-')[0] || 'en'
+}
+
+/** Pressing this letter in the menu translates the page (or brings the original back). */
+export const TRANSLATE_KEY = 't'
 
 type Entry =
   | { type: 'item'; key: string; name?: string; label: string; icon?: LucideIcon; shortcut?: string | null; enabled: boolean; checked?: boolean; destructive?: boolean; run: () => void }
@@ -35,6 +50,12 @@ export function buildPageMenu(request: PageContextMenu, searchEngine: string, an
   const { target, tab } = request
   const mine: Entry[] = []
   const custom = (key: string, label: string, icon: LucideIcon, run: () => void): Entry => ({ type: 'item', key, name: key, label, icon, enabled: true, run: () => { answer(null); run() } })
+  if (!target.editable && /^https?:\/\//.test(target.pageUrl)) {
+    const done = translated.has(tab)
+    const entry = custom('athanor-translate', done ? 'Show original' : 'Translate page', Languages, () => void api.translatePage(tab, targetLanguage()))
+    if (entry.type === 'item') entry.shortcut = TRANSLATE_KEY.toUpperCase()
+    mine.push(entry)
+  }
   if (target.linkUrl) {
     const url = target.linkUrl
     mine.push(custom('athanor-open-link', 'Open Link in New Tab', ExternalLink, () => void api.openTab({ url, parent: tab })))
@@ -97,7 +118,7 @@ function Entries({ entries }: { entries: Entry[] }) {
     const Icon = entry.icon
     // A checked entry says so with a tick and with its role, not with bold type.
     if (entry.checked !== undefined) return <ContextMenuCheckboxItem key={entry.key} data-command={entry.name ?? entry.key} checked={entry.checked} onCheckedChange={() => {}} disabled={!entry.enabled} onSelect={entry.run}>{Icon ? <Icon aria-hidden="true" /> : <span className="size-4" />}<span className="truncate">{entry.label}</span></ContextMenuCheckboxItem>
-    return <ContextMenuItem key={entry.key} data-command={entry.name ?? entry.key} disabled={!entry.enabled} destructive={entry.destructive} onSelect={entry.run}>{Icon ? <Icon aria-hidden="true" /> : <span className="size-4" />}<span className="truncate">{entry.label}</span></ContextMenuItem>
+    return <ContextMenuItem key={entry.key} data-command={entry.name ?? entry.key} disabled={!entry.enabled} destructive={entry.destructive} onSelect={entry.run}>{Icon ? <Icon aria-hidden="true" /> : <span className="size-4" />}<span className="truncate">{entry.label}</span>{entry.key === 'athanor-translate' && entry.shortcut && <ContextMenuShortcut>{entry.shortcut}</ContextMenuShortcut>}</ContextMenuItem>
   })}</>
 }
 
@@ -142,7 +163,14 @@ export function PageContextMenuView({ request, anchor, searchEngine, onClose }: 
 
   return <ContextMenu onOpenChange={onOpenChange}>
     <ContextMenuTrigger asChild><div ref={catcher} aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10" data-part="page-context-anchor" /></ContextMenuTrigger>
-    <ContextMenuContent className="min-w-56" data-part="page-context-menu" aria-label="Page menu" onCloseAutoFocus={(event) => event.preventDefault()}>
+    <ContextMenuContent className="min-w-56" data-part="page-context-menu" aria-label="Page menu" onCloseAutoFocus={(event) => event.preventDefault()}
+      onKeyDown={(event) => {
+        // T in an open menu translates the page, the way a menu's own letter would.
+        if (event.key.toLowerCase() !== TRANSLATE_KEY || event.ctrlKey || event.metaKey || event.altKey) return
+        const entry = entries.find((candidate) => candidate.type === 'item' && candidate.key === 'athanor-translate')
+        if (entry?.type !== 'item') return
+        event.preventDefault(); event.stopPropagation(); setOpen(false); entry.run(); onClose()
+      }}>
       <Entries entries={entries} />
     </ContextMenuContent>
   </ContextMenu>

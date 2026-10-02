@@ -27,6 +27,7 @@ mod platform;
 mod platform;
 mod shield;
 mod state;
+mod translate;
 #[cfg(desktop)]
 mod updater;
 #[cfg(windows)]
@@ -181,6 +182,7 @@ pub fn run() {
             commands::find_in_page,
             commands::hard_reload,
             commands::print_page,
+            commands::translate_page,
             commands::board_pick_pureref,
             commands::board_import_pureref,
             commands::nav_history,

@@ -242,13 +242,19 @@ fn document_start_payload(filter: &Filter, url: &str) -> Option<String> {
     ))
 }
 
+/// Bot-check pages (Cloudflare's `__cf_chl_*` / `/cdn-cgi/` flow, and the CAPTCHA hosts) verify with a form POST and
+/// a redirect back; cancelling that navigation and replaying it as a plain GET makes the check fail.
+fn is_challenge_navigation(url: &str) -> bool {
+    url.contains("__cf_chl") || url.contains("/cdn-cgi/") || is_challenge_frame(url)
+}
+
 unsafe fn register_main_document_start(
     core: &ICoreWebView2,
     filter: Arc<Filter>,
     url: &str,
     armed: Arc<Mutex<HashSet<String>>>,
 ) -> windows::core::Result<bool> {
-    if !(filter.enabled() || filter.block_drm()) || !is_web(url) {
+    if !(filter.enabled() || filter.block_drm()) || !is_web(url) || is_challenge_navigation(url) {
         return Ok(false);
     }
     let Some(script) = document_start_payload(&filter, url) else {
@@ -515,6 +521,7 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
         }
     }
 
+    let latest_navigation = Arc::new(std::sync::atomic::AtomicU64::new(0));
     // --- URL / title / history / loading ---
     {
         let (sink, tab, page_url, filter, page_context) = (
@@ -586,6 +593,7 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
             ctx.page_url.clone(),
         );
         let page_context_for_nav = page_context.clone();
+        let latest_navigation = latest_navigation.clone();
         let start_armed = Arc::new(Mutex::new(HashSet::<String>::new()));
         let armed = start_armed.clone();
         core.add_NavigationStarting(
@@ -607,6 +615,9 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
                         return Ok(());
                     }
                 }
+                let mut navigation_id = 0u64;
+                let _ = args.NavigationId(&mut navigation_id);
+                latest_navigation.store(navigation_id, std::sync::atomic::Ordering::SeqCst);
                 let mut user_initiated = Default::default();
                 let _ = args.IsUserInitiated(&mut user_initiated);
                 *page_url.lock() = uri.clone();
@@ -621,6 +632,7 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
         )?;
     }
     {
+        let latest_navigation = latest_navigation.clone();
         let (sink, tab, filter, page_url, ui) = (
             ctx.sink.clone(),
             tab.clone(),
@@ -632,11 +644,28 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
             &NavigationCompletedEventHandler::create(Box::new(move |sender, args| {
                 if let (Some(core), Some(args)) = (&sender, &args) {
                     let mut ok = Default::default();
-                    if args.IsSuccess(&mut ok).is_ok() && !ok.as_bool() {
+                    let mut navigation_id = 0u64;
+                    let _ = args.NavigationId(&mut navigation_id);
+                    // A navigation that was cancelled and replayed (or superseded) reports its failure late; the page
+                    // that is actually loading is the newest one.
+                    let stale = navigation_id != 0
+                        && navigation_id
+                            != latest_navigation.load(std::sync::atomic::Ordering::SeqCst);
+                    if !stale && args.IsSuccess(&mut ok).is_ok() && !ok.as_bool() {
                         let failed = page_url.lock().clone();
                         let mut status = COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN;
                         let _ = args.WebErrorStatus(&mut status);
-                        if let Some(orig) = filter.upgrade_fallback(&failed) {
+                        // The server answered (a 403 bot check, a 503 maintenance page): its page is what the
+                        // person should see, not ours.
+                        let mut http = 0i32;
+                        if let Ok(args2) = args.cast::<ICoreWebView2NavigationCompletedEventArgs2>()
+                        {
+                            let _ = args2.HttpStatusCode(&mut http);
+                        }
+                        log::info!("navigation failed: web status {} http {http}", status.0);
+                        if http >= 400 {
+                            // fall through to the loading-state events below
+                        } else if let Some(orig) = filter.upgrade_fallback(&failed) {
                             core.Navigate(&HSTRING::from(orig))?;
                         } else if is_web(&failed)
                             && status != COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED

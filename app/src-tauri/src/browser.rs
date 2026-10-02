@@ -94,6 +94,8 @@ pub struct Browser {
     /// Called with the effective theme id whenever it changes (settings theme or the active space's override).
     theme_hook: OnceLock<ThemeHook>,
     last_theme: Mutex<String>,
+    /// Tabs whose page is currently shown translated.
+    translated: Mutex<std::collections::HashSet<String>>,
 }
 
 impl Browser {
@@ -194,6 +196,7 @@ impl Browser {
             save_notify: Notify::new(),
             theme_hook: OnceLock::new(),
             last_theme: Mutex::new(String::new()),
+            translated: Mutex::new(Default::default()),
         })
     }
 
@@ -382,6 +385,9 @@ impl Browser {
     pub fn handle_event(self: &Arc<Self>, ev: EngineEvent) {
         match ev {
             EngineEvent::NavigationStarted { tab, url } => {
+                if !url.starts_with("data:") && self.translated.lock().remove(&tab) {
+                    self.translation_state(&tab, "original");
+                }
                 let mut g = self.inner.lock();
                 // The error page is itself a navigation (to a data: document); it is not a place the tab went to.
                 if url.starts_with("data:") && g.runtime.get(&tab).is_some_and(|r| r.failed) {
@@ -1386,6 +1392,86 @@ impl Browser {
             "Page.navigateToHistoryEntry",
             &serde_json::json!({ "entryId": entry_id }).to_string(),
         );
+    }
+
+    fn translation_state(&self, tab: &str, state: &str) {
+        let _ = self.app.emit(
+            "athanor://translate",
+            serde_json::json!({ "tab": tab, "state": state }),
+        );
+    }
+
+    /// Translate the page of `tab` into `lang`, or put the original back when it is already translated. Only the
+    /// text of the page's text nodes is replaced (see `translate.js`), so its structure and scripts are untouched.
+    pub fn translate_page(self: &Arc<Self>, tab: &str, lang: &str) {
+        let tab = tab.to_string();
+        if self.translated.lock().remove(&tab) {
+            let _ = self
+                .engine
+                .eval(&tab, "window.__athTr&&window.__athTr.restore()");
+            self.translation_state(&tab, "original");
+            return;
+        }
+        self.translated.lock().insert(tab.clone());
+        self.translation_state(&tab, "working");
+        let target = lang.to_string();
+        let collect = format!(
+            "{}
+window.__athTr.collect()",
+            crate::translate::PAGE_SCRIPT
+        );
+        let reply: Box<dyn FnOnce(String) + Send> = {
+            let (this, tab) = (self.clone(), tab.clone());
+            Box::new(move |json| {
+                // Translating takes seconds; never on the engine's callback thread.
+                std::thread::spawn(move || this.run_translation(&tab, &target, &json));
+            })
+        };
+        if self.engine.eval_json(&tab, &collect, reply).is_err() {
+            self.translated.lock().remove(&tab);
+            self.translation_state(&tab, "original");
+            self.toast("error", "This page can't be translated here");
+        }
+    }
+
+    fn run_translation(self: &Arc<Self>, tab: &str, target: &str, json: &str) {
+        let units: Vec<crate::translate::Unit> = serde_json::from_str(json).unwrap_or_default();
+        if units.is_empty() {
+            self.translated.lock().remove(tab);
+            self.translation_state(tab, "original");
+            self.toast("info", "Nothing on this page to translate");
+            return;
+        }
+        let tight = target.starts_with("ja") || target.starts_with("zh");
+        let (failed, error) = crate::translate::translate_all(&units, target, |results| {
+            // The page may have moved on (or been restored) meanwhile; then there is nothing to write into.
+            if !self.translated.lock().contains(tab) {
+                return;
+            }
+            let list: Vec<serde_json::Value> = results
+                .into_iter()
+                .map(|(id, parts)| serde_json::json!([id, parts]))
+                .collect();
+            let script = format!(
+                "window.__athTr&&window.__athTr.apply({},{})",
+                serde_json::Value::Array(list),
+                tight
+            );
+            let _ = self.engine.eval(tab, &script);
+        });
+        if !self.translated.lock().contains(tab) {
+            return;
+        }
+        if failed > 0 {
+            self.toast(
+                "error",
+                format!(
+                    "Part of the page could not be translated{}",
+                    error.map(|e| format!(": {e}")).unwrap_or_default()
+                ),
+            );
+        }
+        self.translation_state(tab, "done");
     }
 
     pub fn print_page(&self, tab: &str) {
