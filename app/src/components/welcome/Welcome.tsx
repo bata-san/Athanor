@@ -159,7 +159,7 @@ function ToggleRow({ icon, title, description, checked, onChange }: { icon: Reac
 
 function IntroStep() {
   const rows: [React.ReactNode, string, string][] = [
-    [<PanelLeft key="a" />, 'Spaces, folders, vertical tabs', 'Everything you keep open, sorted and one glance away. Tabs file themselves.'],
+    [<PanelLeft key="a" />, 'Spaces, folders, vertical tabs', 'Keep tabs loose until you press File, then organize them in one step.'],
     [<ShieldCheck key="b" />, 'Shield built in', 'Ads, trackers and YouTube ads are handled by the engine, not an extension.'],
     [<LayoutPanelTop key="c" />, 'Boards and developer tools', 'Pin references to a canvas; format JSON, decode JWTs and more from the command bar.'],
   ]

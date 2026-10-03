@@ -156,7 +156,7 @@ export async function mockInvoke<K extends keyof CommandArgs>(name: K, rawArgs: 
     case 'reopen_closed': break
     case 'set_software_rendering': { const tab = state.workspace.tabs.find((t) => t.id === args.tab); if (tab) tab.softwareRendering = args.software; emitSnapshot(); break }
     case 'set_muted': { const tab = state.workspace.tabs.find((t) => t.id === args.tab); if (tab) tab.muted = args.muted; emitSnapshot(); break }
-    case 'move_tab': { const tab = state.workspace.tabs.find((t) => t.id === args.tab); if (tab) { if (args.space) tab.space = args.space; if ('folder' in args) tab.folder = args.folder; if (args.pinned !== undefined) tab.pinned = args.pinned; const old = tabIndex(tab.id); state.workspace.tabs.splice(old, 1); const before = args.before ? tabIndex(args.before) : -1; state.workspace.tabs.splice(before >= 0 ? before : state.workspace.tabs.length, 0, tab); emitSnapshot() } break }
+    case 'move_tab': { const tab = state.workspace.tabs.find((t) => t.id === args.tab); if (tab) { if (args.space) tab.space = args.space; if ('folder' in args) tab.folder = args.folder; if (args.pinned !== undefined) tab.pinned = args.pinned; tab.autoFiled = false; const old = tabIndex(tab.id); state.workspace.tabs.splice(old, 1); const before = args.before ? tabIndex(args.before) : -1; state.workspace.tabs.splice(before >= 0 ? before : state.workspace.tabs.length, 0, tab); emitSnapshot() } break }
     case 'close_other_tabs': state.workspace.tabs.filter((t) => t.id !== args.tab && !t.pinned).forEach((t) => delete state.runtime[t.id]); state.workspace.tabs = state.workspace.tabs.filter((t) => t.id === args.tab || t.pinned); emitSnapshot(); break
     case 'close_tabs_below': { const idx = tabIndex(args.tab); const removed = state.workspace.tabs.slice(idx + 1).filter((t) => !t.pinned); removed.forEach((t) => delete state.runtime[t.id]); state.workspace.tabs = state.workspace.tabs.filter((t, i) => i <= idx || t.pinned); emitSnapshot(); break }
     case 'restore_tab': { const tab = state.workspace.tabs.find((t) => t.id === args.tab); if (tab) { tab.archived = false; state.workspace.activeTab = tab.id; emitSnapshot() } break }
@@ -183,8 +183,9 @@ export async function mockInvoke<K extends keyof CommandArgs>(name: K, rawArgs: 
         tab.folder = folder.id; tab.autoFiled = true; moved.push([tab.id, folder.id])
       }
       const created = state.workspace.folders.filter((folder) => !before.has(folder.id)).map((folder) => folder.id)
-      const serial = ++filingSerial
-      filingUndo = moved.length ? { serial, moved, created } : null
+      if (moved.length) filingSerial++
+      const serial = filingSerial
+      if (moved.length) filingUndo = { serial, moved, created }
       result = { tabs: moved.length, folders: new Set(moved.map(([, folder]) => folder)).size, undo: serial }
       if (moved.length) emitSnapshot()
       break
@@ -195,9 +196,10 @@ export async function mockInvoke<K extends keyof CommandArgs>(name: K, rawArgs: 
       if (undo && undo.serial === args.undo) {
         for (const [id, folder] of undo.moved) { const tab = state.workspace.tabs.find((entry) => entry.id === id); if (tab?.folder === folder && tab.autoFiled) { tab.folder = null; tab.autoFiled = false; restored++ } }
         const used = new Set(state.workspace.tabs.map((tab) => tab.folder))
+        const folderCount = state.workspace.folders.length
         state.workspace.folders = state.workspace.folders.filter((folder) => !undo.created.includes(folder.id) || used.has(folder.id))
         filingUndo = null
-        if (restored) emitSnapshot()
+        if (restored || state.workspace.folders.length !== folderCount) emitSnapshot()
       }
       result = restored
       break

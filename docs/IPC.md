@@ -236,6 +236,8 @@ via `athanor://shortcut` when a page has focus. Use one shared handler for both.
 
 `auto_file_all()` is retained as the command name for compatibility, but is called only by an explicit File action. It returns `{ tabs: number, folders: number, undo: number }`. It considers open, unfiled, unpinned web tabs across spaces. `undo_file_all({ undo: number })` restores still-filed tabs from the latest action and returns the number restored; an older token is ignored. Opening, navigating, and changing a title never trigger filing. The legacy `Settings.autoFile` field still deserializes from older settings files but is forced to `false` and has no UI control. `Ctrl+Shift+F` is shell-owned and works when a page has focus.
 
+A no-op `auto_file_all()` returns zero counts without replacing the latest Undo token. Existing `Folder.color` and `Space.color` values remain in the serialized model for compatibility; the shell displays neutral monochrome icons and no longer offers color controls.
+
 ## Settings added for the welcome tour
 
 `Settings.homepage` (where new tabs open; default `https://www.google.com/`, or `athanor://newtab`), `youtubeAdSkip`, `blockDrm`, `onboarded`, `webFont` (IBM Plex Sans JP as the web default, applied at the next start) and `autoUpdate`. The default search engine is Google.

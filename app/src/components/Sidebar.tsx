@@ -4,7 +4,7 @@ import { useDraggable, useDroppable } from '@dnd-kit/core'
 import { dropId, useDragState } from '@/lib/tabDnd'
 import { AnimatePresence, m } from 'motion/react'
 import {
-  Archive, ArrowDownToLine, AudioLines, ChevronRight, Columns2, Copy, Folder as FolderIcon, FolderInput, FolderPlus, Globe, LayoutPanelTop, Link2, Loader2, Lock, PanelLeft, PanelLeftClose, Palette, Pencil, Pin, PinOff, Plus, Puzzle, RotateCcw, Settings, Smile, Trash2, Volume2, VolumeX, WandSparkles, X, XCircle, ZapOff
+  Archive, ArrowDownToLine, AudioLines, ChevronRight, Columns2, Copy, Folder as FolderIcon, FolderInput, FolderPlus, Globe, LayoutPanelTop, Link2, Loader2, Lock, PanelLeft, PanelLeftClose, Pencil, Pin, PinOff, Plus, Puzzle, RotateCcw, Settings, Smile, Trash2, Volume2, VolumeX, WandSparkles, X, XCircle, ZapOff
 } from 'lucide-react'
 import type { PanelInfo, Snapshot, Tab } from '@/lib/types'
 import { groupSidebarTabs, tabNumbers } from '@/lib/sidebarModel'
@@ -27,10 +27,6 @@ import { dragWindow, toggleWindow } from './WindowControls'
 type Page = 'settings' | 'boards' | 'extensions'
 type Props = { snapshot: Snapshot; panels: PanelInfo[]; openPage: (page: Page) => void; openPanel: (panel: PanelInfo) => void; windowControls?: React.ReactNode }
 
-const SWATCHES: { name: string; value: string | null }[] = [
-  { name: 'Default', value: null }, { name: 'Gray', value: '#71717a' }, { name: 'Red', value: '#ef4444' }, { name: 'Orange', value: '#f97316' }, { name: 'Amber', value: '#eab308' },
-  { name: 'Green', value: '#22c55e' }, { name: 'Blue', value: '#3b82f6' }, { name: 'Violet', value: '#8b5cf6' }, { name: 'Pink', value: '#ec4899' },
-]
 const SPACE_ICONS = ['Briefcase', 'Sparkles', 'BookOpen', 'Home', 'Terminal', 'Zap', 'Globe2', 'Gauge', 'NotebookPen', 'Layers3', 'Shield', 'Bug']
 
 /* `rail:` styles apply while the sidebar is collapsed to its icon rail (custom variant in tokens.css; CSS-driven so the collapse can animate). */
@@ -235,7 +231,7 @@ function TabMenu({ tab, snapshot, activeTab, spaceFolders }: TabMenuCtx) {
       <ContextMenuSubContent className="w-52">
         {moveSpaces.map((space) => <ContextMenuItem key={space.id} onSelect={() => void api.moveTab({ tab: tab.id, space: space.id, folder: null })}><AppIcon name={space.icon} />{space.name}</ContextMenuItem>)}
         {moveSpaces.length > 0 && moveFolders.length > 0 && <ContextMenuSeparator />}
-        {moveFolders.map((folder) => <ContextMenuItem key={folder.id} onSelect={() => void api.moveTab({ tab: tab.id, folder: folder.id })}><FolderIcon style={folder.color ? { color: folder.color } : undefined} />{folder.name}</ContextMenuItem>)}
+        {moveFolders.map((folder) => <ContextMenuItem key={folder.id} onSelect={() => void api.moveTab({ tab: tab.id, folder: folder.id })}><FolderIcon />{folder.name}</ContextMenuItem>)}
         {tab.folder && <><ContextMenuSeparator /><ContextMenuItem onSelect={() => void api.moveTab({ tab: tab.id, folder: null })}><XCircle />Remove from Folder</ContextMenuItem></>}
       </ContextMenuSubContent>
     </ContextMenuSub>}
@@ -332,11 +328,11 @@ function FolderGroup({ folder, tabs, activeId, compact, children }: { folder: Sn
     className={cn(rowBase, 'font-medium hover:bg-tab-hover data-[folded=true]:text-muted-foreground')}
     data-part="folder-header" data-folded={String(folder.collapsed)} aria-label={folder.name} aria-expanded={!folder.collapsed}>
     <ChevronRight className={cn('size-3 text-muted-foreground transition-transform duration-200', 'rail:hidden', !folder.collapsed && 'rotate-90')} />
-    <FolderIcon className="text-muted-foreground" style={folder.color ? { color: folder.color } : undefined} />
+    <FolderIcon className="text-muted-foreground" />
     <span className={cn('sb-label min-w-0 flex-1 truncate', holdsActive && 'font-semibold')}>{folder.name}</span>
     {folder.collapsed && count > 0 && <span className="flex shrink-0 items-center -space-x-0.5 rail:hidden" aria-hidden="true" data-part="folder-preview">{tabs.slice(0, 3).map((tab) => tab.favicon ? <img key={tab.id} src={tab.favicon} alt="" className="size-[0.9rem] rounded-[0.2rem] bg-sidebar object-contain ring-1 ring-sidebar" /> : <span key={tab.id} className="grid size-[0.9rem] place-items-center rounded-[0.2rem] bg-sidebar-accent ring-1 ring-sidebar"><Globe className="!size-2.5 text-muted-foreground" /></span>)}</span>}
     {holdsActive && <span className="size-1.5 shrink-0 rounded-full bg-foreground rail:hidden" role="img" aria-label="Contains the current tab" />}
-    {folder.auto && <Tip label="Filed automatically" side="top"><WandSparkles className={`!size-3 text-muted-foreground/70 rail:hidden`} /></Tip>}
+    {folder.auto && <Tip label="Created by filing" side="top"><WandSparkles className="!size-3 text-muted-foreground/70 rail:hidden" /></Tip>}
     <span className={`font-mono text-[0.7333rem] font-normal tabular-nums text-muted-foreground rail:hidden`}>{count}</span>
   </button>
   return <div ref={setNodeRef} className="rounded-lg transition-colors data-[over=true]:bg-accent/70 data-[over=true]:ring-2 data-[over=true]:ring-ring/60" data-part="folder" data-over={String(over)}>
@@ -344,11 +340,6 @@ function FolderGroup({ folder, tabs, activeId, compact, children }: { folder: Sn
       <ContextMenuTrigger asChild><div onContextMenu={ownContextMenu}><Tip label={folder.name} side="right" disabled={!compact}>{header}</Tip></div></ContextMenuTrigger>
       <ContextMenuContent className="w-56">
         <ContextMenuItem onSelect={() => void rename()}><Pencil />Rename…</ContextMenuItem>
-        <ContextMenuSub>
-          <ContextMenuSubTrigger><Palette />Color</ContextMenuSubTrigger>
-          <ContextMenuSubContent className="w-44">{SWATCHES.map((swatch) => <ContextMenuItem key={swatch.name} onSelect={() => void api.setFolderColor(folder.id, swatch.value)}><span className="grid size-4 place-items-center"><span className="size-3 rounded-full border border-border" style={{ background: swatch.value ?? 'transparent' }} /></span>{swatch.name}</ContextMenuItem>)}</ContextMenuSubContent>
-        </ContextMenuSub>
-        <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => void remove(false)}><Trash2 />Delete Folder…</ContextMenuItem>
         <ContextMenuItem destructive onSelect={() => void remove(true)}><XCircle />Delete Folder and Close Tabs…</ContextMenuItem>
       </ContextMenuContent>
@@ -364,7 +355,7 @@ function SpaceChip({ space, active, snapshot }: { space: Snapshot['workspace']['
   const remove = async () => { if (await askConfirm({ title: `Delete “${space.name}”?`, description: 'The space and the tabs inside it will be closed.', confirm: 'Delete', destructive: true })) void api.removeSpace(space.id) }
   const chip = <button ref={setNodeRef} type="button" aria-label={`Switch to ${space.name}`} onClick={() => void api.switchSpace(space.id)}
     className="relative isolate grid size-7 place-items-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 data-[active=true]:text-foreground data-[over=true]:ring-2 data-[over=true]:ring-ring/50 [&_svg]:size-4"
-    data-part="space" data-active={String(active)} data-over={String(isOver)} style={{ '--space-color': space.color, color: active ? space.color : undefined } as React.CSSProperties}>
+    data-part="space" data-active={String(active)} data-over={String(isOver)}>
     {active && <m.span layoutId="active-space" transition={snap} aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 rounded-[inherit] border border-border/70 bg-tab-active shadow-[0_1px_2px_oklch(0_0_0/0.07)]" />}
     <AppIcon name={space.icon} />
   </button>
@@ -375,10 +366,6 @@ function SpaceChip({ space, active, snapshot }: { space: Snapshot['workspace']['
       <ContextMenuSub>
         <ContextMenuSubTrigger><Smile />Icon</ContextMenuSubTrigger>
         <ContextMenuSubContent className="grid w-auto grid-cols-4 gap-0.5 p-1.5">{SPACE_ICONS.map((icon) => <ContextMenuItem key={icon} className="size-9 justify-center p-0" aria-label={icon} data-checked={String(icon === space.icon)} onSelect={() => void api.updateSpace(space.id, { icon })}><AppIcon name={icon} /></ContextMenuItem>)}</ContextMenuSubContent>
-      </ContextMenuSub>
-      <ContextMenuSub>
-        <ContextMenuSubTrigger><Palette />Color</ContextMenuSubTrigger>
-        <ContextMenuSubContent className="w-44">{SWATCHES.map((swatch) => <ContextMenuItem key={swatch.name} onSelect={() => void api.updateSpace(space.id, { color: swatch.value ?? cssToken('--ath-space-default-color') })}><span className="grid size-4 place-items-center"><span className="size-3 rounded-full border border-border" style={{ background: swatch.value ?? cssToken('--ath-space-default-color') }} /></span>{swatch.name}</ContextMenuItem>)}</ContextMenuSubContent>
       </ContextMenuSub>
       <ContextMenuSeparator />
       {snapshot.workspace.spaces.length > 1 && <ContextMenuItem destructive onSelect={() => void remove()}><Trash2 />Delete Space…</ContextMenuItem>}

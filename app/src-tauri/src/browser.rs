@@ -1110,7 +1110,9 @@ impl Browser {
                     .filter(|f| !existing.contains(&f.id))
                     .map(|f| f.id.clone())
                     .collect();
-            g.filing_serial += 1;
+            if !moved.is_empty() {
+                g.filing_serial += 1;
+            }
             let serial = g.filing_serial;
             let result = FilingResult {
                 tabs: moved.len(),
@@ -1121,15 +1123,13 @@ impl Browser {
                     .len(),
                 undo: serial,
             };
-            g.filing_undo = if moved.is_empty() {
-                None
-            } else {
-                Some(FilingUndo {
+            if !moved.is_empty() {
+                g.filing_undo = Some(FilingUndo {
                     serial,
                     moved,
                     created,
-                })
-            };
+                });
+            }
             result
         };
         if result.tabs > 0 {
@@ -1139,7 +1139,7 @@ impl Browser {
     }
 
     pub fn undo_file_all(self: &Arc<Self>, serial: u64) -> usize {
-        let restored = {
+        let (restored, changed) = {
             let mut g = self.inner.lock();
             let Some(action) = g.filing_undo.take() else {
                 return 0;
@@ -1159,11 +1159,12 @@ impl Browser {
                     .iter()
                     .filter_map(|tab| tab.folder.clone())
                     .collect();
+            let before = g.ws.folders.len();
             g.ws.folders
                 .retain(|folder| !action.created.contains(&folder.id) || used.contains(&folder.id));
-            restored
+            (restored, restored > 0 || g.ws.folders.len() != before)
         };
-        if restored > 0 {
+        if changed {
             self.sync();
         }
         restored

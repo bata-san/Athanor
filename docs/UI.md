@@ -22,6 +22,8 @@ Mock mode starts automatically when `window.__TAURI_INTERNALS__` is absent. It i
 
 Tabs stay loose when opened or navigated. The File button in the desktop toolbar, `Ctrl+Shift+F`, the command bar entry, Settings > Filing, and the sidebar context menu all call the same filing action. It applies enabled rules to open, unfiled, unpinned web tabs across spaces, reports the number of tabs and destination folders, and offers Undo for seven seconds. Undo only moves tabs that are still in the folder chosen by that action, so a later manual move is respected. Newly created empty folders are removed. Legacy `autoFile` settings are accepted but ignored and saved as `false`.
 
+A File press with no matches leaves the previous action's Undo available while its toast is visible. The welcome tour describes filing as a deliberate action. The shell renders saved folder and space colors in neutral tones, including old profiles with colored values; folder names and icons still distinguish them.
+
 The sidebar's close control stays in the keyboard order even while visually quiet. The start page explains the empty recent-tab area. Shared page headers wrap at narrow widths, and less-used toolbar actions remain in More when space is tight. Shell destructive controls use neutral light and dark tones.
 
 ## Right-click menus
