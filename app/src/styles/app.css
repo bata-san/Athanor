@@ -14,6 +14,7 @@
   [data-part='titlebar'], [data-part='toolbar'], [data-part='sidebar-header'] { -webkit-user-select: none; user-select: none; }
 }
 .toast-root { font-family: var(--font-ui) !important; }
+@media (max-width: 900px) { .ath-optional-tool { display: none; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 /* Reduce Motion: the system setting or ours. Movement goes away; state changes stay visible as plain fades. */
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; } }

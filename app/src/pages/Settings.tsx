@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import type { ExtensionInfo, FilingRule, LineIssue, Settings as SettingsShape, ThemeInfo } from '@/lib/types'
 import { api } from '@/lib/api'
+import { fileTabs } from '@/lib/filing'
 import { countFilterLines, ignoredLineSummary, lineCountLabel, lineSelectionRange } from '@/lib/userFilters'
 import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -111,7 +112,7 @@ export default function SettingsPage() {
   const runFiling = async () => {
     if (filing) return
     setFiling(true)
-    try { await api.autoFileAll(); toast.success('Automatic filing finished') }
+    try { await fileTabs() }
     catch (error) { toast.error(error instanceof Error ? error.message : String(error)) }
     finally { setFiling(false) }
   }
@@ -226,10 +227,8 @@ export default function SettingsPage() {
         </>}
 
         {section === 'Filing' && <>
-          <Section title="Automatic filing" description="Group tabs into folders using a matching site, URL path, or title." actions={<Button className="max-md:min-h-11" variant="outline" disabled={filing} onClick={() => void runFiling()}><AppIcon name="WandSparkles" />{filing ? 'Filing…' : 'File Open Tabs Now'}</Button>}>
-            <Row title="File new tabs automatically" description="Use these rules when a tab opens.">
-              <TouchSwitch label="File new tabs automatically" checked={settings.autoFile} onCheckedChange={(autoFile) => patch({ autoFile })} />
-            </Row>
+          <Section title="Filing" description="Tabs stay where you open them until you press File. Rules group open tabs by site, URL path, or title." actions={<Button className="max-md:min-h-11" variant="outline" disabled={filing} onClick={() => void runFiling()}><AppIcon name="FolderInput" />{filing ? 'Filing…' : 'File Open Tabs'}</Button>}>
+            <p className="m-0 py-3 text-sm text-muted-foreground">File from the toolbar or press Ctrl+Shift+F. Undo is available in the toast.</p>
           </Section>
           <Section title="Filing rules" description="Built-in destinations include Development, Reading list, Shopping, Social, and Design. Rules create a folder the first time a match appears." actions={<Button className="max-md:min-h-11" size="sm" onClick={addRule}><AppIcon name="Plus" />Add Rule</Button>}>
             <div className="py-2">
@@ -243,7 +242,7 @@ export default function SettingsPage() {
                   <Input className="max-md:h-11" aria-label="Title contains" placeholder="Title contains (optional)" value={rule.titleContains ?? ''} onChange={(event) => persistRules(rules.map((item) => item.id === rule.id ? { ...item, titleContains: event.target.value || null } : item))} />
                   <Tip label="Delete rule"><Button className="max-md:size-11" type="button" size="icon" variant="ghost" aria-label="Delete rule" onClick={() => deleteRule(rule)}><AppIcon name="Trash2" className="text-destructive" /></Button></Tip>
                 </div>)}
-                {rules.length === 0 && <p className="m-0 py-4 text-[0.8667rem] text-muted-foreground">No filing rules yet. Add a rule to start organizing tabs automatically.</p>}
+                {rules.length === 0 && <p className="m-0 py-4 text-[0.8667rem] text-muted-foreground">No filing rules yet. Add a rule, then press File when you are ready.</p>}
               </div>
             </div>
           </Section>

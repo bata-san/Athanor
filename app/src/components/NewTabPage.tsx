@@ -27,7 +27,7 @@ export function NewTabPage({ servers, onNavigate }: { servers: DevServer[]; onNa
   }
   const open = (id: string) => void api.activateTab(id).catch((error) => toast.error(why(error)))
 
-  return <div className="relative flex h-full w-full flex-col items-center overflow-y-auto bg-background px-6 pb-12 pt-[clamp(4rem,16vh,9rem)] text-foreground" data-part="new-tab-page">
+  return <div className="relative flex h-full w-full flex-col items-center overflow-y-auto bg-background px-4 pb-12 pt-[clamp(2.5rem,14vh,8rem)] text-foreground sm:px-6" data-part="new-tab-page">
     <div className="flex w-full max-w-xl flex-col items-center">
       <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"><AthanorMark className="size-5" /></div>
       <h1 className="mt-2.5 text-[1rem] font-semibold tracking-tight">Athanor</h1>
@@ -44,6 +44,8 @@ export function NewTabPage({ servers, onNavigate }: { servers: DevServer[]; onNa
         <span className="flex size-7 items-center justify-center rounded-md bg-muted text-foreground"><AppIcon name={tab.pinned ? 'Layers3' : 'Globe2'} className="size-4" /></span>
         <span className="w-full truncate text-center font-medium">{tab.title}</span>
       </button>)}</nav>}
+
+      {pinned.length === 0 && recent.length === 0 && <div className="mt-7 flex w-full flex-col items-center gap-2 rounded-xl border border-dashed border-border px-4 py-6 text-center" role="status"><AppIcon name="Layers3" className="size-5 text-muted-foreground" /><span className="text-sm font-medium">A clean start</span><span className="text-xs text-muted-foreground">Open a page above. Your recent tabs will appear here.</span></div>}
 
       <div className="mt-6 flex w-full items-center justify-between gap-3 text-xs text-muted-foreground"><span className="flex items-center gap-2"><Kbd>Ctrl+K</Kbd><span>Command bar</span></span><Tip label="Open boards"><Button variant="ghost" size="sm" className="gap-1.5 px-2 max-md:min-h-11" onClick={() => { void api.openTab({ url: 'athanor://boards' }).catch((error) => toast.error(why(error))) }}><AppIcon name="PanelsTopLeft" /><span>Boards</span></Button></Tip></div>
     </div>

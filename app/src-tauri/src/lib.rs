@@ -113,10 +113,12 @@ pub fn run() {
             let paths = Paths { root: data };
             // Default web font: must be in place before the first WebView2 starts.
             #[cfg(windows)]
-            webfont::prepare(
-                &app.path().app_local_data_dir()?,
-                webfont::enabled_in(&paths.file("settings.json")),
-            );
+            if std::env::var_os("ATHANOR_DATA_DIR").is_none() {
+                webfont::prepare(
+                    &app.path().app_local_data_dir()?,
+                    webfont::enabled_in(&paths.file("settings.json")),
+                );
+            }
             let filter = Arc::new(Filter::new(paths.adblock()));
             let ext_host = ExtHost::new(paths.clone());
             {
@@ -218,6 +220,7 @@ pub fn run() {
             commands::remove_space,
             commands::switch_space,
             commands::auto_file_all,
+            commands::undo_file_all,
             commands::set_filing_rules,
             commands::archive_inactive_now,
             commands::split_with,

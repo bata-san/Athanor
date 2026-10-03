@@ -66,7 +66,7 @@ impl Default for Settings {
             archive_after_hours: 12,
             https_upgrade: true,
             strip_tracking: true,
-            auto_file: true,
+            auto_file: false,
             restore_session: true,
             sidebar_side: "left".into(),
             sidebar_compact: false,
@@ -146,6 +146,8 @@ impl Settings {
 
     /// Bring every field back into its valid range (also used for settings read from disk).
     pub fn sanitize(&mut self) {
+        // Accept old settings.json files, but automatic filing is no longer a behavior.
+        self.auto_file = false;
         if !self.search_engine.contains("{q}") {
             self.search_engine = Settings::default().search_engine;
         }
@@ -325,5 +327,17 @@ mod tests {
         let s: Settings = serde_json::from_str(r#"{"theme":"midnight"}"#).unwrap();
         assert_eq!(s.theme, "midnight");
         assert!(s.https_upgrade);
+    }
+
+    #[test]
+    fn legacy_auto_file_setting_cannot_enable_background_filing() {
+        let mut settings: Settings = serde_json::from_str(r#"{"autoFile":true}"#).unwrap();
+        settings.sanitize();
+        assert!(!settings.auto_file);
+        settings.apply(SettingsPatch {
+            auto_file: Some(true),
+            ..Default::default()
+        });
+        assert!(!settings.auto_file);
     }
 }

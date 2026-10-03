@@ -21,7 +21,7 @@ const COMMANDS = [
   { id: 'extensions', label: 'Manage extensions', icon: 'Zap' },
   { id: 'devtools', label: 'Toggle developer panel', shortcut: 'Ctrl+Shift+D', icon: 'SquareCode' },
   { id: 'split', label: 'Split with next tab', shortcut: 'Ctrl+\\', icon: 'Split' },
-  { id: 'autofile', label: 'File tabs into folders', icon: 'Folder' },
+  { id: 'autofile', label: 'File tabs into folders', shortcut: 'Ctrl+Shift+F', icon: 'FolderInput' },
   { id: 'welcome', label: 'Welcome tour and import', icon: 'Sparkles' },
 ]
 const DEV_TOOLS: DevTool[] = ['json-pretty', 'json-minify', 'base64-encode', 'base64-decode', 'url-encode', 'url-decode', 'jwt', 'timestamp', 'uuid', 'sha256', 'color']

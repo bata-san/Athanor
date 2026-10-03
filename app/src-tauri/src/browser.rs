@@ -62,6 +62,20 @@ struct Session {
     filer: Option<Filer>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FilingResult {
+    pub tabs: usize,
+    pub folders: usize,
+    pub undo: u64,
+}
+
+struct FilingUndo {
+    serial: u64,
+    moved: Vec<(Id, Id)>,
+    created: Vec<Id>,
+}
+
 struct Inner {
     ws: Workspace,
     runtime: HashMap<Id, TabRuntime>,
@@ -73,6 +87,8 @@ struct Inner {
     view: ViewState,
     blocked_total: u64,
     closed: Vec<String>,
+    filing_undo: Option<FilingUndo>,
+    filing_serial: u64,
     /// The address each tab last really arrived at (a typed address that turns out to be a download is not one).
     committed: HashMap<String, String>,
     /// Cookies waiting for a tab that is being recreated in the other rendering mode.
@@ -181,6 +197,8 @@ impl Browser {
             view: ViewState::default(),
             blocked_total: 0,
             closed: vec![],
+            filing_undo: None,
+            filing_serial: 0,
             committed: HashMap::new(),
             cookie_seed: HashMap::new(),
             had_split: false,
@@ -420,7 +438,6 @@ impl Browser {
                 }
                 let title = g.ws.tab(&tab).map(|t| t.title.clone()).unwrap_or_default();
                 g.history.record(&url, &title, now());
-                self.auto_file_locked(&mut g, &tab);
                 let zoom = crate::pagetools::zoom_key(&url)
                     .and_then(|host| g.settings.site_zoom.get(&host).copied())
                     .unwrap_or(1.0);
@@ -515,7 +532,6 @@ impl Browser {
                 if let Some(url) = g.ws.tab(&tab).map(|t| t.url.clone()) {
                     g.history.set_title(&url, &title);
                 }
-                self.auto_file_locked(&mut g, &tab);
                 drop(g);
                 self.changed();
             }
@@ -582,13 +598,6 @@ impl Browser {
                 drop(g);
                 self.changed();
             }
-        }
-    }
-
-    fn auto_file_locked(&self, g: &mut Inner, tab: &str) {
-        if g.settings.auto_file {
-            let filer = g.filer.clone();
-            g.ws.auto_file(tab, &filer);
         }
     }
 
@@ -765,7 +774,6 @@ impl Browser {
                     ..Default::default()
                 },
             );
-            self.auto_file_locked(&mut g, &id);
             if a.background.unwrap_or(false) {
                 g.view.want_live.insert(id.clone());
             } else {
@@ -1073,21 +1081,92 @@ impl Browser {
         }
     }
 
-    pub fn auto_file_all(self: &Arc<Self>) {
-        {
+    pub fn auto_file_all(self: &Arc<Self>) -> FilingResult {
+        let result = {
             let mut g = self.inner.lock();
             let filer = g.filer.clone();
+            let existing: std::collections::HashSet<Id> =
+                g.ws.folders.iter().map(|f| f.id.clone()).collect();
             let ids: Vec<Id> =
                 g.ws.tabs
                     .iter()
-                    .filter(|t| t.folder.is_none() && !t.pinned)
+                    .filter(|t| {
+                        t.folder.is_none()
+                            && !t.pinned
+                            && !t.archived
+                            && !t.url.starts_with("athanor://")
+                    })
                     .map(|t| t.id.clone())
                     .collect();
+            let mut moved = Vec::new();
             for id in ids {
-                g.ws.auto_file(&id, &filer);
+                if let Some(folder) = g.ws.auto_file(&id, &filer) {
+                    moved.push((id, folder));
+                }
             }
+            let created: Vec<Id> =
+                g.ws.folders
+                    .iter()
+                    .filter(|f| !existing.contains(&f.id))
+                    .map(|f| f.id.clone())
+                    .collect();
+            g.filing_serial += 1;
+            let serial = g.filing_serial;
+            let result = FilingResult {
+                tabs: moved.len(),
+                folders: moved
+                    .iter()
+                    .map(|(_, folder)| folder)
+                    .collect::<std::collections::HashSet<_>>()
+                    .len(),
+                undo: serial,
+            };
+            g.filing_undo = if moved.is_empty() {
+                None
+            } else {
+                Some(FilingUndo {
+                    serial,
+                    moved,
+                    created,
+                })
+            };
+            result
+        };
+        if result.tabs > 0 {
+            self.sync();
         }
-        self.sync();
+        result
+    }
+
+    pub fn undo_file_all(self: &Arc<Self>, serial: u64) -> usize {
+        let restored = {
+            let mut g = self.inner.lock();
+            let Some(action) = g.filing_undo.take() else {
+                return 0;
+            };
+            if action.serial != serial {
+                g.filing_undo = Some(action);
+                return 0;
+            }
+            let mut restored = 0;
+            for (id, folder) in action.moved {
+                if g.ws.undo_auto_file(&id, &folder) {
+                    restored += 1;
+                }
+            }
+            let used: std::collections::HashSet<Id> =
+                g.ws.tabs
+                    .iter()
+                    .filter_map(|tab| tab.folder.clone())
+                    .collect();
+            g.ws.folders
+                .retain(|folder| !action.created.contains(&folder.id) || used.contains(&folder.id));
+            restored
+        };
+        if restored > 0 {
+            self.sync();
+        }
+        restored
     }
 
     pub fn set_filing_rules(self: &Arc<Self>, rules: Vec<Rule>) {

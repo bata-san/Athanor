@@ -11,7 +11,7 @@ import { Card } from './ui/card'
 /** Scrolling page body. `title` renders the header; children are the cards. */
 export function Page({ title, description, actions, children, className, ...props }: { title: React.ReactNode; description?: React.ReactNode; actions?: React.ReactNode } & Omit<React.HTMLAttributes<HTMLDivElement>, 'title'>) {
   return <div className={cn('flex h-full min-w-0 flex-1 flex-col overflow-hidden', className)} {...props}>
-    <header className="flex min-h-11 shrink-0 items-center justify-between gap-4 border-b border-border px-6 py-2 max-md:px-4">
+    <header className="flex min-h-11 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-6 py-2 max-md:px-4">
       <div className="min-w-0"><h1 className="m-0 truncate text-[1rem] font-semibold tracking-tight">{title}</h1>{description && <p className="m-0 mt-0.5 line-clamp-2 text-[0.8667rem] text-muted-foreground">{description}</p>}</div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
     </header>
@@ -22,7 +22,7 @@ export function Page({ title, description, actions, children, className, ...prop
 /** A bordered card with an optional title row. Put `Row`s (or anything) inside. */
 export function Section({ title, description, actions, children, className }: { title?: React.ReactNode; description?: React.ReactNode; actions?: React.ReactNode; children?: React.ReactNode; className?: string }) {
   return <Card className={cn('overflow-hidden', className)}>
-    {(title || actions) && <div className="flex items-start justify-between gap-4 px-4 pt-3 pb-0.5"><div className="min-w-0"><h2 className="m-0 text-sm font-semibold">{title}</h2>{description && <p className="m-0 mt-0.5 text-[0.8667rem] text-muted-foreground">{description}</p>}</div>{actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}</div>}
+    {(title || actions) && <div className="flex flex-wrap items-start justify-between gap-3 px-4 pt-3 pb-0.5"><div className="min-w-0 flex-1"><h2 className="m-0 text-sm font-semibold">{title}</h2>{description && <p className="m-0 mt-0.5 text-[0.8667rem] text-muted-foreground">{description}</p>}</div>{actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}</div>}
     <div className="px-4 py-0.5 [&>*+*]:border-t [&>*+*]:border-border">{children}</div>
   </Card>
 }

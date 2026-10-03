@@ -18,6 +18,12 @@ Add a command's argument and result types in `lib/types.ts`, expose it through `
 
 Mock mode starts automatically when `window.__TAURI_INTERNALS__` is absent. It includes example spaces, tabs, folders, filter lists, developer servers, extension panels, and reference boards; it also implements tab actions, filing, archive, split view, settings, boards, and developer utilities. `?platform=android` forces the mobile shell only in mock mode.
 
+## Filing on request
+
+Tabs stay loose when opened or navigated. The File button in the desktop toolbar, `Ctrl+Shift+F`, the command bar entry, Settings > Filing, and the sidebar context menu all call the same filing action. It applies enabled rules to open, unfiled, unpinned web tabs across spaces, reports the number of tabs and destination folders, and offers Undo for seven seconds. Undo only moves tabs that are still in the folder chosen by that action, so a later manual move is respected. Newly created empty folders are removed. Legacy `autoFile` settings are accepted but ignored and saved as `false`.
+
+The sidebar's close control stays in the keyboard order even while visually quiet. The start page explains the empty recent-tab area. Shared page headers wrap at narrow widths, and less-used toolbar actions remain in More when space is tight. Shell destructive controls use neutral light and dark tones.
+
 ## Right-click menus
 
 Every menu is a shadcn `ContextMenu` / `DropdownMenu`. Sidebar rows (tabs, pinned tiles, folders, spaces, the empty area) own their menus in `components/Sidebar.tsx`. The *page's* menu is different: WebView2 raises `ContextMenuRequested`, the adapter keeps it open and emits `athanor://context-menu`; `components/PageContextMenu.tsx` freezes the page (`capture_frame`), draws the engine's entries (icons by command name, noisy Edge-only entries hidden) plus Athanor's own at the click position, and answers with `resolve_context_menu` (a command id, or `null` on dismissal). `e2e/ui/context-menu.cjs` drives all of this on the real WebView2.

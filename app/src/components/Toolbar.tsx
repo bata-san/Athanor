@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type * as React from 'react'
-import { LayoutGrid, ArrowLeft, ArrowRight, Columns2, Command, LayoutPanelTop, MoreHorizontal, PanelLeft, PanelsTopLeft, Puzzle, RotateCw, Settings, SquareTerminal, X } from 'lucide-react'
+import { LayoutGrid, ArrowLeft, ArrowRight, Columns2, Command, FolderInput, LayoutPanelTop, MoreHorizontal, PanelLeft, PanelsTopLeft, Puzzle, RotateCw, Settings, SquareTerminal, X } from 'lucide-react'
 import type { NavHistory, Snapshot, Tab } from '@/lib/types'
 import { listen } from '@/lib/events'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { fileTabs } from '@/lib/filing'
 import { cn } from '@/lib/utils'
 import { Button } from './ui/button'
 import { DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuTrigger } from './ui/dropdown-menu'
@@ -96,13 +97,17 @@ export function StageBar({ snapshot, activeTab, openBar, openPage, toggleDev, op
       <UrlPill snapshot={snapshot} activeTab={activeTab} onOpen={openBar} onSettings={() => openPage('settings')} className="w-full max-w-[44rem]" />
     </div>
     <div className="flex items-center" data-no-drag>
-      <NavButton label={snapshot.workspace.split ? 'Close split view' : 'Split view'} shortcut={'Ctrl+\\'} active={Boolean(snapshot.workspace.split)} onClick={split}><Columns2 aria-hidden="true" /></NavButton>
+      <NavButton label="File tabs into folders" shortcut="Ctrl+Shift+F" onClick={() => void fileTabs()}><FolderInput aria-hidden="true" /></NavButton>
+      <NavButton label={snapshot.workspace.split ? 'Close split view' : 'Split view'} shortcut={'Ctrl+\\'} active={Boolean(snapshot.workspace.split)} className="ath-optional-tool" onClick={split}><Columns2 aria-hidden="true" /></NavButton>
       <NavButton label="Show all tabs" shortcut="Ctrl+Space" onClick={openOverview}><LayoutGrid aria-hidden="true" /></NavButton>
-      <NavButton label="Developer panel" shortcut="Ctrl+Shift+D" onClick={toggleDev}><SquareTerminal aria-hidden="true" /></NavButton>
+      <NavButton label="Developer panel" shortcut="Ctrl+Shift+D" className="ath-optional-tool" onClick={toggleDev}><SquareTerminal aria-hidden="true" /></NavButton>
       <NavButton label="Command bar" shortcut="Ctrl+K" onClick={openBar}><Command aria-hidden="true" /></NavButton>
       <OverlayDropdownMenu>
         <Tip label="More"><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="size-7 rounded-md data-[state=open]:bg-foreground/[0.07] data-[state=open]:text-foreground [&_svg]:size-[1rem]" aria-label="More" data-part="nav-button"><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger></Tip>
         <DropdownMenuContent align="end" className="w-60">
+          <DropdownMenuItem onSelect={split}><Columns2 aria-hidden="true" />{snapshot.workspace.split ? 'Close Split View' : 'Split View'}<DropdownMenuShortcut>Ctrl+\</DropdownMenuShortcut></DropdownMenuItem>
+          <DropdownMenuItem onSelect={toggleDev}><SquareTerminal aria-hidden="true" />Developer Panel<DropdownMenuShortcut>Ctrl+Shift+D</DropdownMenuShortcut></DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => openPage('boards')}><LayoutPanelTop aria-hidden="true" />Reference Boards</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => openPage('extensions')}><Puzzle aria-hidden="true" />Extensions</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => void api.setSettings({ sidebarCompact: !snapshot.settings.sidebarCompact })}><PanelLeft aria-hidden="true" />{snapshot.settings.sidebarCompact ? 'Show Sidebar' : 'Hide Sidebar'}<DropdownMenuShortcut>Ctrl+B</DropdownMenuShortcut></DropdownMenuItem>

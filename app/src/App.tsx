@@ -5,6 +5,7 @@ import { DndContext, DragOverlay } from '@dnd-kit/core'
 import { ArrowLeft, ArrowRight, Command as CommandIcon, Plus, ShieldCheck } from 'lucide-react'
 import { AnimatePresence } from 'motion/react'
 import { api } from './lib/api'
+import { fileTabs } from './lib/filing'
 import { listen } from './lib/events'
 import { useAppStore, bootStore } from './lib/store'
 import { shortcutFromKeyboard, normalizeShortcut } from './lib/shortcuts'
@@ -216,6 +217,7 @@ export function App() {
     else if (combo === 'Ctrl+F' && tab) { setFindOpen(true); setFindSeed((value) => value + 1) }
     else if ((combo === 'Ctrl+G' || combo === 'Ctrl+Shift+G') && tab) { if (findOpen) findCommand.current?.(combo === 'Ctrl+G' ? 'next' : 'prev'); else if (!tab.url.startsWith('athanor://')) { setFindOpen(true); setFindSeed((value) => value + 1) } }
     else if (combo === 'Ctrl+D' && tab) { void api.setPinned(tab.id, !tab.pinned); toast(tab.pinned ? 'Unpinned' : 'Pinned to the top of the sidebar', { duration: 1800 }) }
+    else if (combo === 'Ctrl+Shift+F') void fileTabs()
     else if (combo === 'Ctrl+,') openInternalPage('settings')
     else if (combo === 'Ctrl+/') setSheetOpen((value) => !value)
     else if (combo === 'Ctrl+Space') setOverviewOpen((value) => !value)
@@ -277,7 +279,7 @@ export function App() {
       if (cmd === 'extensions') { openInternalPage('extensions'); setPaletteOpen(false) }
       if (cmd === 'devtools') { setDevOpen(true); setPaletteOpen(false) }
       if (cmd === 'split' && snapshot) { const next = snapshot.workspace.tabs.find((t) => t.space === snapshot.workspace.activeSpace && t.id !== snapshot.workspace.activeTab && !t.archived); if (next) void api.splitWith({ tab: next.id, dir: 'row' }); setPaletteOpen(false) }
-      if (cmd === 'autofile') { void api.autoFileAll(); setPaletteOpen(false) }
+      if (cmd === 'autofile') { void fileTabs(); setPaletteOpen(false) }
       if (cmd === 'welcome') { setPaletteOpen(false); setTour(true) }
       return
     }

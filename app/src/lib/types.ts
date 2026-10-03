@@ -40,7 +40,7 @@ export interface CommandArgs {
   open_tab: { url?: string; parent?: Id; folder?: Id; space?: Id; background?: boolean; pinned?: boolean }; navigate: { tab: Id; input: string }; activate_tab: { tab: Id }; close_tab: { tab: Id }; duplicate_tab: { tab: Id }; reload: { tab: Id }; stop: { tab: Id }; go_back: { tab: Id }; go_forward: { tab: Id }; set_pinned: { tab: Id; pinned: boolean }; set_muted: { tab: Id; muted: boolean }; move_tab: { tab: Id; space?: Id; folder?: Id | null; before?: Id | null; pinned?: boolean }; close_other_tabs: { tab: Id }; close_tabs_below: { tab: Id }; restore_tab: { tab: Id }; copy_url: { tab: Id };
   create_folder: { space: Id; name: string }; rename_folder: { id: Id; name: string }; toggle_folder: { id: Id }; delete_folder: { id: Id; closeTabs: boolean }; set_folder_color: { id: Id; color: string | null };
   add_space: { name: string; icon: string; color: string }; rename_space: { id: Id; name: string }; remove_space: { id: Id }; switch_space: { id: Id }; update_space: { id: Id; icon?: string; color?: string };
-  auto_file_all: Record<string, never>; set_filing_rules: { rules: FilingRule[] }; archive_inactive_now: Record<string, never>;
+  auto_file_all: Record<string, never>; undo_file_all: { undo: number }; set_filing_rules: { rules: FilingRule[] }; archive_inactive_now: Record<string, never>;
   split_with: SplitArgs; unsplit: Record<string, never>; set_split_ratio: { path: boolean[]; ratio: number }; focus_pane: { tab: Id }; get_split_rects: Record<string, never>;
   set_content_bounds: Rect; set_overlay_open: { open: boolean }; capture_frame: { tab: Id }; import_detect: Record<string, never>; import_run: { request: ImportRequest }; import_pick_file: Record<string, never>; set_page_radius: { radius: number }; resolve_context_menu: { tab: Id; command: number | null }; context_action: { action: string; data: string }; set_viewport_emulation: { tab: Id; preset: 'mobile' | 'tablet' | 'laptop' | null };
   omnibox_suggest: { query: string }; open_devtools: { tab: Id }; run_dev_tool: { tool: DevTool; input: string }; list_dev_servers: Record<string, never>;
@@ -62,3 +62,4 @@ export interface DetectedBrowser { id: string; name: string; engine: 'chromium' 
 export type ImportSource = { kind: 'browser'; browser: string; profile: string } | { kind: 'file'; path: string }
 export interface ImportRequest { source: ImportSource; bookmarks: boolean; history: boolean }
 export interface ImportReport { bookmarks: number; folders: number; history: number; skipped: number; space: Id | null; warnings: string[] }
+export interface CommandResult { auto_file_all: { tabs: number; folders: number; undo: number }; undo_file_all: number }

@@ -47,6 +47,7 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   { combo: 'Ctrl+Shift+Tab', label: 'Previous tab', group: 'Tabs', owner: 'backend' },
   { combo: 'Ctrl+1', label: 'Go to tab 1–8, pinned first (Ctrl+9: last)', group: 'Tabs', owner: 'backend' },
   { combo: 'Ctrl+Space', label: 'Show all tabs (overview)', group: 'Tabs', owner: 'shell' },
+  { combo: 'Ctrl+Shift+F', label: 'File tabs into folders', group: 'Tabs', owner: 'shell' },
   { combo: 'Ctrl+D', label: 'Pin or unpin tab', group: 'Tabs', owner: 'shell' },
   { combo: 'Ctrl+\\', label: 'Split with next tab', group: 'Tabs', owner: 'backend' },
   { combo: 'Ctrl+L', label: 'Open location', group: 'Navigation', owner: 'shell' },

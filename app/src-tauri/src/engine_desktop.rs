@@ -103,6 +103,10 @@ impl EngineBackend for DesktopEngine {
         let initial = parsed.clone();
         let mut builder =
             WebviewBuilder::new(tab_label(id), WebviewUrl::External(initial)).devtools(true);
+        #[cfg(windows)]
+        if let Some(root) = std::env::var_os("ATHANOR_DATA_DIR") {
+            builder = builder.data_directory(std::path::PathBuf::from(root).join("wv"));
+        }
         if let Some(ua) = &opts.user_agent {
             builder = builder.user_agent(ua);
         }
@@ -114,7 +118,10 @@ impl EngineBackend for DesktopEngine {
         #[cfg(windows)]
         if opts.software_rendering {
             use tauri::Manager;
-            if let Ok(base) = self.window.app_handle().path().app_local_data_dir() {
+            let base = std::env::var_os("ATHANOR_DATA_DIR")
+                .map(std::path::PathBuf::from)
+                .or_else(|| self.window.app_handle().path().app_local_data_dir().ok());
+            if let Some(base) = base {
                 let mut args = String::from(
                     "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-gpu --disable-gpu-compositing",
                 );
@@ -182,11 +189,17 @@ impl EngineBackend for DesktopEngine {
                     "popup-{}",
                     NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
                 );
-                match tauri::WebviewWindowBuilder::new(&app, label, WebviewUrl::External(url))
-                    .window_features(features)
-                    .title("Athanor")
-                    .build()
-                {
+                let popup =
+                    tauri::WebviewWindowBuilder::new(&app, label, WebviewUrl::External(url))
+                        .window_features(features)
+                        .title("Athanor");
+                #[cfg(windows)]
+                let popup = if let Some(root) = std::env::var_os("ATHANOR_DATA_DIR") {
+                    popup.data_directory(std::path::PathBuf::from(root).join("wv"))
+                } else {
+                    popup
+                };
+                match popup.build() {
                     Ok(window) => NewWindowResponse::Create { window },
                     Err(_) => NewWindowResponse::Deny,
                 }

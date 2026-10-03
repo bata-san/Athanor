@@ -561,6 +561,19 @@ impl Workspace {
         Some(folder)
     }
 
+    /// Undo a filing only while the tab is still where that filing put it.
+    pub fn undo_auto_file(&mut self, tab_id: &str, folder: &str) -> bool {
+        let Some(tab) = self.tab_mut(tab_id) else {
+            return false;
+        };
+        if tab.folder.as_deref() != Some(folder) || !tab.auto_filed {
+            return false;
+        }
+        tab.folder = None;
+        tab.auto_filed = false;
+        true
+    }
+
     /// Remove auto-created folders that no longer hold any tab.
     pub fn prune_empty_auto_folders(&mut self) -> usize {
         let used: Vec<Id> = self.tabs.iter().filter_map(|t| t.folder.clone()).collect();
@@ -1050,6 +1063,23 @@ mod tests {
         );
         w.set_pinned(&a, true);
         assert!(w.auto_file(&a, &filer).is_none());
+    }
+
+    #[test]
+    fn opening_and_navigating_leave_matching_tabs_unfiled_until_requested() {
+        let mut w = ws();
+        let tab = w.open_tab("https://github.com/one", OpenOptions::default(), 1);
+        w.update_tab(&tab, Some("https://github.com/two"), Some("GitHub"), None);
+        assert_eq!(w.tab(&tab).unwrap().folder, None);
+        assert!(w.folders.is_empty());
+        let folder = w.auto_file(&tab, &Filer::default()).expect("manual filing");
+        assert_eq!(
+            w.tab(&tab).unwrap().folder.as_deref(),
+            Some(folder.as_str())
+        );
+        assert!(w.undo_auto_file(&tab, &folder));
+        assert_eq!(w.tab(&tab).unwrap().folder, None);
+        assert!(!w.undo_auto_file(&tab, &folder));
     }
 
     #[test]

@@ -33,7 +33,7 @@ const initialTabs: Tab[] = [
   makeTab('tab-news', 'Hacker News', 'https://news.ycombinator.com', 'space-work', null, { lastActive: now - 40 * 60_000 }),
   makeTab('tab-yt', 'Lo-fi beats to code to - YouTube', 'https://youtube.com/watch?v=x', 'space-work', null, { lastActive: now - 8 * 3_600_000 }),
 ]
-const defaultSettings: Settings = { searchEngine: 'https://www.google.com/search?q={q}', archiveAfterHours: 24, httpsUpgrade: true, stripTracking: true, autoFile: true, restoreSession: true, sidebarSide: 'left', sidebarCompact: false, sidebarWidth: 236, theme: 'chalk', adblockEnabled: true, homepage: 'https://www.google.com/', youtubeAdSkip: true, blockDrm: false, webFont: true, autoUpdate: true, siteZoom: {}, sitePermissions: {}, uiScale: 100, reduceMotion: false, highContrast: false, onboarded: !new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).has('welcome') }
+const defaultSettings: Settings = { searchEngine: 'https://www.google.com/search?q={q}', archiveAfterHours: 24, httpsUpgrade: true, stripTracking: true, autoFile: false, restoreSession: true, sidebarSide: 'left', sidebarCompact: false, sidebarWidth: 236, theme: 'chalk', adblockEnabled: true, homepage: 'https://www.google.com/', youtubeAdSkip: true, blockDrm: false, webFont: true, autoUpdate: true, siteZoom: {}, sitePermissions: {}, uiScale: 100, reduceMotion: false, highContrast: false, onboarded: !new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).has('welcome') }
 const initialSnapshot = (): Snapshot => ({ workspace: { spaces, folders, tabs: initialTabs, activeSpace: 'space-work', activeTab: 'tab-welcome', split: null }, runtime: Object.fromEntries(initialTabs.map((tab) => [tab.id, { loading: false, canGoBack: tab.url !== 'athanor://newtab', canGoForward: false, blocked: tab.id === 'tab-github' ? 12 : 0, audible: false, secure: tab.url.startsWith('https:') }])), settings: defaultSettings, filingRules: [{ id: 'rule-github', folder: 'Development', host: 'github.com', pathPrefix: null, titleContains: null, enabled: true }, { id: 'rule-docs', folder: 'Reading list', host: 'developer.mozilla.org', pathPrefix: null, titleContains: null, enabled: true }, { id: 'rule-design', folder: 'Design', host: 'figma.com', pathPrefix: null, titleContains: null, enabled: true }, { id: 'rule-shopping', folder: 'Shopping', host: 'amazon.com', pathPrefix: null, titleContains: null, enabled: true }, { id: 'rule-social', folder: 'Social', host: 'reddit.com', pathPrefix: null, titleContains: null, enabled: true }], platform: 'windows', version: '0.1.0 mock', blockedTotal: 128 })
 let state = initialSnapshot()
 if (mockGetPlatformFromUrl()) state.platform = mockGetPlatformFromUrl()!
@@ -56,6 +56,8 @@ const themes: ThemeInfo[] = [{ id: 'monolith', name: 'Monolith', dark: true, sou
 const servers: DevServer[] = [{ port: 5173, url: 'http://localhost:5173', title: 'Vite app' }, { port: 3000, url: 'http://localhost:3000', title: 'Next.js' }]
 const shields = new Map<string, boolean>()
 let userFilters = ['! My filters — one rule per line', '||ads.example.com^', 'example.com##.banner', '@@||example.com^$document', ''].join('\n')
+let filingSerial = 0
+let filingUndo: { serial: number; moved: [Id, Id][]; created: Id[] } | null = null
 const eventListeners = new Map<string, Set<(payload: unknown) => void>>()
 export function isMockMode(): boolean { return typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window) }
 export function mockListen<K extends keyof EventPayloads>(event: K, handler: (payload: EventPayloads[K]) => void): () => void {
@@ -90,12 +92,7 @@ function openTab(args: CommandArgs['open_tab']): string {
   const id = uid('tab'); const url = cleanUrl(args.url ?? 'athanor://newtab');
   const host = (() => { try { return new URL(url).hostname } catch { return '' } })()
   let folder = args.folder ?? null
-  let autoFiled = false
-  if (!folder && args.url && state.settings.autoFile && !args.pinned) {
-    const matched = state.filingRules.find((rule) => matchesFilingRule(rule, url, host || url))
-    if (matched) { let target = state.workspace.folders.find((entry) => entry.name === matched.folder && entry.space === (args.space ?? state.workspace.activeSpace)); if (!target) { target = { id: uid('folder'), name: matched.folder, space: args.space ?? state.workspace.activeSpace, collapsed: false, color: null, auto: true }; state.workspace.folders.push(target) } folder = target.id; autoFiled = true }
-  }
-  const tab: Tab = makeTab(id, args.url ? host || url : 'New tab', url, args.space ?? state.workspace.activeSpace, folder, { pinned: args.pinned ?? false, parent: args.parent ?? null, autoFiled, lastActive: Date.now() })
+  const tab: Tab = makeTab(id, args.url ? host || url : 'New tab', url, args.space ?? state.workspace.activeSpace, folder, { pinned: args.pinned ?? false, parent: args.parent ?? null, autoFiled: false, lastActive: Date.now() })
   state.workspace.tabs.push(tab); state.runtime[id] = { loading: false, canGoBack: false, canGoForward: false, blocked: 0, audible: false, secure: url.startsWith('https:') }
   if (!args.background) { state.workspace.activeTab = id; if (args.space) state.workspace.activeSpace = args.space }
   return id
@@ -174,7 +171,37 @@ export async function mockInvoke<K extends keyof CommandArgs>(name: K, rawArgs: 
     case 'remove_space': if (state.workspace.spaces.length > 1) { state.workspace.spaces = state.workspace.spaces.filter((s) => s.id !== args.id); state.workspace.tabs = state.workspace.tabs.filter((t) => t.space !== args.id); state.workspace.activeSpace = state.workspace.spaces[0]!.id; emitSnapshot() } break
     case 'switch_space': state.workspace.activeSpace = args.id; { const candidate = state.workspace.tabs.find((t) => t.space === args.id && !t.archived); if (candidate) state.workspace.activeTab = candidate.id } emitSnapshot(); break
     case 'update_space': { const s = state.workspace.spaces.find((x) => x.id === args.id); if (s) Object.assign(s, args); emitSnapshot(); break }
-    case 'auto_file_all': { for (const tab of state.workspace.tabs) { if (tab.folder || tab.pinned) continue; const rule = state.filingRules.find((entry) => matchesFilingRule(entry, tab.url, tab.title)); if (rule) { let f = state.workspace.folders.find((x) => x.name === rule.folder && x.space === tab.space); if (!f) { f = { id: uid('folder'), name: rule.folder, space: tab.space, collapsed: false, color: null, auto: true }; state.workspace.folders.push(f) } tab.folder = f.id; tab.autoFiled = true } } emit('athanor://toast', { level: 'success', message: 'Tabs filed into matching folders.' }); emitSnapshot(); break }
+    case 'auto_file_all': {
+      const before = new Set(state.workspace.folders.map((folder) => folder.id))
+      const moved: [Id, Id][] = []
+      for (const tab of state.workspace.tabs) {
+        if (tab.folder || tab.pinned || tab.archived || tab.url.startsWith('athanor://')) continue
+        const rule = state.filingRules.find((entry) => matchesFilingRule(entry, tab.url, tab.title))
+        if (!rule) continue
+        let folder = state.workspace.folders.find((entry) => entry.name.toLowerCase() === rule.folder.toLowerCase() && entry.space === tab.space)
+        if (!folder) { folder = { id: uid('folder'), name: rule.folder, space: tab.space, collapsed: false, color: null, auto: true }; state.workspace.folders.push(folder) }
+        tab.folder = folder.id; tab.autoFiled = true; moved.push([tab.id, folder.id])
+      }
+      const created = state.workspace.folders.filter((folder) => !before.has(folder.id)).map((folder) => folder.id)
+      const serial = ++filingSerial
+      filingUndo = moved.length ? { serial, moved, created } : null
+      result = { tabs: moved.length, folders: new Set(moved.map(([, folder]) => folder)).size, undo: serial }
+      if (moved.length) emitSnapshot()
+      break
+    }
+    case 'undo_file_all': {
+      let restored = 0
+      const undo = filingUndo
+      if (undo && undo.serial === args.undo) {
+        for (const [id, folder] of undo.moved) { const tab = state.workspace.tabs.find((entry) => entry.id === id); if (tab?.folder === folder && tab.autoFiled) { tab.folder = null; tab.autoFiled = false; restored++ } }
+        const used = new Set(state.workspace.tabs.map((tab) => tab.folder))
+        state.workspace.folders = state.workspace.folders.filter((folder) => !undo.created.includes(folder.id) || used.has(folder.id))
+        filingUndo = null
+        if (restored) emitSnapshot()
+      }
+      result = restored
+      break
+    }
     case 'set_filing_rules': state.filingRules = args.rules; emitSnapshot(); break
     case 'archive_inactive_now': { const hours = state.settings.archiveAfterHours; if (hours > 0) { const cutoff = Date.now() - hours * 3_600_000; for (const tab of state.workspace.tabs) if (tab.id !== state.workspace.activeTab && !tab.pinned && !tab.archived && tab.lastActive < cutoff) tab.archived = true } emitSnapshot(); break }
     case 'split_with': { const other = active(); if (other && other.id !== args.tab) { state.workspace.split = { root: { kind: 'split', dir: args.dir, ratio: 0.5, a: { kind: 'leaf', tab: args.tab }, b: { kind: 'leaf', tab: other.id } }, focused: other.id }; result = true; emit('athanor://split-rects', splitRects()!); emitSnapshot() } else result = false; break }
@@ -223,7 +250,7 @@ export async function mockInvoke<K extends keyof CommandArgs>(name: K, rawArgs: 
     case 'get_user_filters': result = userFilters; break
     case 'set_user_filters': { const issues = validateFilterText(args.text); const rejected = issues.find((issue) => issue.line === 0); if (rejected) throw new Error(rejected.message); userFilters = args.text; result = issues; break }
     case 'get_settings': result = structuredClone(state.settings); break
-    case 'set_settings': Object.assign(state.settings, args.patch); document.documentElement.dataset.themeDark = String(mockThemeDark(state.settings.theme)); emitSnapshot(); break
+    case 'set_settings': Object.assign(state.settings, args.patch, { autoFile: false }); document.documentElement.dataset.themeDark = String(mockThemeDark(state.settings.theme)); emitSnapshot(); break
     case 'list_extensions': result = structuredClone(extensions); break
     case 'set_extension_enabled': { const ext = extensions.find((e) => e.id === args.id); if (ext) ext.enabled = args.enabled; panels = panels.filter((p) => p.ext !== args.id || args.enabled); emitSnapshot(); break }
     case 'install_extension': { const name = String(args.path).split(/[\\/]/).filter(Boolean).at(-1) || 'Sample Extension'; const id = uid('extension'); extensions.push({ id, name, version: '1.0.0', description: 'Installed from a local directory.', enabled: true, source: 'user', permissions: ['activeTab'] }); emit('athanor://toast', { level: 'success', message: `${name} installed.` }); break }

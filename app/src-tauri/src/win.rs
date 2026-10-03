@@ -397,6 +397,7 @@ fn combo(vk: u32, ctrl: bool, shift: bool, alt: bool) -> Option<&'static str> {
         (0xDD, true, true, false) => "Ctrl+Tab",
         (0xDB, true, true, false) => "Ctrl+Shift+Tab",
         (0x46, true, false, false) => "Ctrl+F",
+        (0x46, true, true, false) => "Ctrl+Shift+F",
         (0x47, true, false, false) | (0x72, false, false, false) => "Ctrl+G",
         (0x47, true, true, false) | (0x72, false, true, false) => "Ctrl+Shift+G",
         (0x44, true, false, false) => "Ctrl+D",

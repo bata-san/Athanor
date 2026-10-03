@@ -10,6 +10,7 @@ import type { PanelInfo, Snapshot, Tab } from '@/lib/types'
 import { groupSidebarTabs, tabNumbers } from '@/lib/sidebarModel'
 import { useCtrlHeld } from '@/lib/modifiers'
 import { api } from '@/lib/api'
+import { fileTabs } from '@/lib/filing'
 import { cn, cssToken } from '@/lib/utils'
 import { enter, fold, snap } from '@/lib/motion'
 import { AthanorMark } from './AthanorMark'
@@ -125,7 +126,7 @@ export function Sidebar({ snapshot, panels, openPage, openPanel, windowControls 
         <ContextMenuItem onSelect={() => void createFolder()}><FolderPlus />New Folder…</ContextMenuItem>
         <ContextMenuItem onSelect={() => void createSpace()}><Plus />New Space…</ContextMenuItem>
         <ContextMenuSeparator />
-        <ContextMenuItem onSelect={() => void api.autoFileAll()}><FolderInput />File Tabs into Folders</ContextMenuItem>
+        <ContextMenuItem onSelect={() => void fileTabs()}><FolderInput />File Tabs into Folders</ContextMenuItem>
         {groups.root.length + groups.folders.reduce((n, g) => n + g.tabs.length, 0) > 0 && <ContextMenuItem onSelect={() => void api.archiveInactiveNow()}><Archive />Archive Inactive Tabs</ContextMenuItem>}
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => void api.setSettings({ sidebarCompact: !compact })}>{compact ? <PanelLeft /> : <PanelLeftClose />}{compact ? 'Show Sidebar' : 'Hide Sidebar'}</ContextMenuItem>
@@ -269,7 +270,7 @@ function idleLabel(lastActive: number) {
   return hours < 48 ? `${hours}h` : `${Math.floor(hours / 24)}d`
 }
 
-const tabAction = `grid size-[1.4667rem] place-items-center rounded text-muted-foreground hover:bg-foreground/10 hover:text-foreground rail:hidden [&_svg]:size-3.5`
+const tabAction = `grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-foreground/10 hover:text-foreground rail:hidden [&_svg]:size-3.5`
 
 function TabRow(props: RowProps) {
   const { tab, active, runtime, compact, number, shortcutNumber } = props
@@ -292,7 +293,7 @@ function TabRow(props: RowProps) {
     {tab.muted && <button type="button" className={tabAction} aria-label="Unmute tab" title="Tab muted" onPointerDown={(event) => event.stopPropagation()} onClick={() => void api.setMuted(tab.id, false)}><VolumeX /></button>}
     {number !== undefined && <NumberBadge value={number} className="me-1 rail:absolute rail:end-0.5 rail:top-0.5" />}
     {number === undefined && idle && <span className="me-1 font-instr text-[0.7333rem] uppercase tabular-nums text-muted-foreground/80 group-hover/tab:hidden rail:hidden" title={`Last used ${idle} ago`}>{idle}</span>}
-    <button type="button" className={`${tabAction} hidden ${number === undefined ? 'group-hover/tab:grid group-data-[active=true]/tab:grid' : ''} focus-visible:grid`} data-part="tab-close" aria-label={`Close ${tab.title}`} onPointerDown={(event) => event.stopPropagation()} onClick={close}><X /></button>
+    <button type="button" className={`${tabAction} opacity-0 pointer-events-none ${number === undefined ? 'group-hover/tab:opacity-100 group-hover/tab:pointer-events-auto group-data-[active=true]/tab:opacity-100 group-data-[active=true]/tab:pointer-events-auto' : ''} focus-visible:opacity-100 focus-visible:pointer-events-auto`} data-part="tab-close" aria-label={`Close ${tab.title}`} onPointerDown={(event) => event.stopPropagation()} onClick={close}><X /></button>
   </div>
   return <OverlayContextMenu><ContextMenuTrigger asChild><div onContextMenu={ownContextMenu}><Tip label={tab.title} side="right" disabled={!compact}>{row}</Tip></div></ContextMenuTrigger><TabMenu {...props} /></OverlayContextMenu>
 }

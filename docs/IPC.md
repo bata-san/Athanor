@@ -61,7 +61,7 @@ export interface TabRuntime {                        // per-tab live state, keye
 export interface Settings {
   searchEngine: string;            // URL template containing {q}
   archiveAfterHours: number;       // 0 = never
-  httpsUpgrade: boolean; stripTracking: boolean; autoFile: boolean; restoreSession: boolean;
+  httpsUpgrade: boolean; stripTracking: boolean; autoFile: boolean; restoreSession: boolean; // autoFile is legacy and always false
   sidebarSide: 'left' | 'right'; sidebarCompact: boolean; sidebarWidth: number;
   theme: string;                   // theme id
   adblockEnabled: boolean;
@@ -148,8 +148,8 @@ Names are `snake_case`; args are camelCase properties of the single argument obj
 * `create_folder({ space, name }) → Id`, `rename_folder({ id, name })`, `toggle_folder({ id })`, `delete_folder({ id, closeTabs })`, `set_folder_color({ id, color })`
 * `add_space({ name, icon, color }) → Id`, `rename_space({ id, name })`, `remove_space({ id })`, `switch_space({ id })`, `update_space({ id, icon?, color? })`
 
-### Auto filing & archive
-* `auto_file_all()` — run the filer over unfiled tabs.
+### Manual filing & archive
+* `auto_file_all() -> { tabs, folders, undo }` — file matching open tabs when File is pressed.
 * `set_filing_rules({ rules: FilingRule[] })`
 * `archive_inactive_now()`
 
@@ -231,6 +231,10 @@ for the full list of part names.
 
 The shell registers document-level shortcuts for when the shell itself has focus; the backend forwards the same combos
 via `athanor://shortcut` when a page has focus. Use one shared handler for both.
+
+## Manual filing (current contract)
+
+`auto_file_all()` is retained as the command name for compatibility, but is called only by an explicit File action. It returns `{ tabs: number, folders: number, undo: number }`. It considers open, unfiled, unpinned web tabs across spaces. `undo_file_all({ undo: number })` restores still-filed tabs from the latest action and returns the number restored; an older token is ignored. Opening, navigating, and changing a title never trigger filing. The legacy `Settings.autoFile` field still deserializes from older settings files but is forced to `false` and has no UI control. `Ctrl+Shift+F` is shell-owned and works when a page has focus.
 
 ## Settings added for the welcome tour
 

@@ -2,7 +2,7 @@
 
 use crate::{
     boards::{self, BoardSummary},
-    browser::{Browser, OpenArgs},
+    browser::{Browser, FilingResult, OpenArgs},
     devservers,
     ext_host::{CommandInfo, ExtHost, ExtensionInfo, PanelInfo, ThemeInfo},
     shield::Shield,
@@ -462,9 +462,13 @@ pub async fn switch_space(b: B<'_>, id: Id) -> R {
 // ---------- filing / archive ----------
 
 #[tauri::command]
-pub async fn auto_file_all(b: B<'_>) -> R {
-    b.auto_file_all();
-    Ok(())
+pub async fn auto_file_all(b: B<'_>) -> R<FilingResult> {
+    Ok(b.auto_file_all())
+}
+
+#[tauri::command]
+pub async fn undo_file_all(b: B<'_>, undo: u64) -> R<usize> {
+    Ok(b.undo_file_all(undo))
 }
 
 #[tauri::command]
