@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build --configLoader runner",
+    "build": "tsc -b && vite build",
     "typecheck": "tsc -b --pretty",
-    "test": "vitest run --configLoader runner",
+    "test": "vitest run",
     "preview": "vite preview --host 0.0.0.0",
     "tauri": "tauri"
   },
