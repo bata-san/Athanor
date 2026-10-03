@@ -121,3 +121,7 @@ A navigation that turns into a download, or is replaced by another one, ends "ab
 ## Auto-archive and playing tabs
 
 Tabs left idle for `archiveAfterHours` (12 by default) are archived and their page is discarded. A tab that is playing sound is in use: it is never archived and counts as used right now, so a YouTube tab left playing in the background is not stopped, and one that falls silent is not archived on the next pass (`Workspace::archive_inactive`'s `busy` list, filled from the engine's audible state).
+
+## Navigations are never replayed unless safe
+
+To have the ad-block script in place from the first byte, Athanor may cancel a navigation and start it again. That turns a form POST into a GET, drops the referrer and doubles every request, so it only happens for navigations Athanor or the page started by itself (`replay_is_safe` in `win.rs`): never for clicks, form submits, requests with a body, or redirects. Logins and checkouts that POST now arrive as POST. `e2e/ui/login-post.cjs` posts a login form to a local server (through `localtest.me`) and checks it arrives as a POST and ends logged in.

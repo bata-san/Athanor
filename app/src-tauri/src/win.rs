@@ -330,6 +330,29 @@ fn is_challenge_frame(url: &str) -> bool {
         || host == "accounts.google.com"
 }
 
+/// Whether a navigation may be cancelled and replayed as a plain GET so the ad-block script can be in place from the
+/// first byte. Only a navigation Athanor or the page started by itself qualifies: a click, a form submit (POST),
+/// a redirect or a reload must arrive exactly as the page asked, or logins and checkouts lose their form data.
+unsafe fn replay_is_safe(args: &ICoreWebView2NavigationStartingEventArgs) -> bool {
+    let mut user_initiated = Default::default();
+    let _ = unsafe { args.IsUserInitiated(&mut user_initiated) };
+    let mut redirected = Default::default();
+    let _ = unsafe { args.IsRedirected(&mut redirected) };
+    if user_initiated.as_bool() || redirected.as_bool() {
+        return false;
+    }
+    // A request with a body (POST) names its type.
+    if let Ok(headers) = unsafe { args.RequestHeaders() } {
+        let mut has = Default::default();
+        if unsafe { headers.Contains(&HSTRING::from("Content-Type"), &mut has) }.is_ok()
+            && has.as_bool()
+        {
+            return false;
+        }
+    }
+    true
+}
+
 unsafe fn register_frame_document_start(
     core: ICoreWebView2,
     frame: ICoreWebView2Frame,
@@ -499,15 +522,17 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
                                     return Ok(());
                                 };
                                 let url = pw(|p| args.Uri(p))?;
-                                if unsafe {
-                                    register_frame_document_start(
-                                        core_for_nav.clone(),
-                                        frame,
-                                        filter_for_nav.clone(),
-                                        url,
-                                        armed.clone(),
-                                    )?
-                                } {
+                                if unsafe { replay_is_safe(&args) }
+                                    && unsafe {
+                                        register_frame_document_start(
+                                            core_for_nav.clone(),
+                                            frame,
+                                            filter_for_nav.clone(),
+                                            url,
+                                            armed.clone(),
+                                        )?
+                                    }
+                                {
                                     args.SetCancel(true)?;
                                 }
                                 Ok(())
@@ -609,9 +634,16 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
                         core.Navigate(&HSTRING::from(new_uri))?;
                         return Ok(());
                     }
-                    if unsafe {
-                        register_main_document_start(&core, filter.clone(), &uri, armed.clone())?
-                    } {
+                    if unsafe { replay_is_safe(&args) }
+                        && unsafe {
+                            register_main_document_start(
+                                &core,
+                                filter.clone(),
+                                &uri,
+                                armed.clone(),
+                            )?
+                        }
+                    {
                         args.SetCancel(true)?;
                         return Ok(());
                     }
