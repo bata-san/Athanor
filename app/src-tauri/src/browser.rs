@@ -1057,7 +1057,14 @@ impl Browser {
             } else {
                 Millis::from(hours) * 3_600_000
             };
-            let n = g.ws.archive_inactive(now(), ttl).len();
+            // A tab that is playing sound is in use, however long ago it was last looked at.
+            let busy: Vec<Id> = g
+                .runtime
+                .iter()
+                .filter(|(_, r)| r.audible)
+                .map(|(id, _)| id.clone())
+                .collect();
+            let n = g.ws.archive_inactive(now(), ttl, &busy).len();
             g.ws.prune_empty_auto_folders();
             n
         };

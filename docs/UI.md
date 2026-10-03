@@ -109,3 +109,7 @@ A Cloudflare challenge answers with HTTP 403 and replays navigations; Athanor sh
 ## Aborted navigations
 
 A navigation that turns into a download, or is replaced by another one, ends "aborted" without any response. Athanor shows no error page for that (the page stays as it was), like other browsers; before, every download from a site such as GitHub releases ended in "The connection was interrupted", and Try again downloaded the file once more. Real failures (reset, timeout, offline, certificate) still get the page. `e2e/ui/ghdownload.cjs` (needs `DL_URL`) and `e2e/ui/sites.cjs` check this against live sites.
+
+## Auto-archive and playing tabs
+
+Tabs left idle for `archiveAfterHours` (12 by default) are archived and their page is discarded. A tab that is playing sound is in use: it is never archived and counts as used right now, so a YouTube tab left playing in the background is not stopped, and one that falls silent is not archived on the next pass (`Workspace::archive_inactive`'s `busy` list, filled from the engine's audible state).

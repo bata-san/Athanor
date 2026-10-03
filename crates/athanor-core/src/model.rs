@@ -570,7 +570,9 @@ impl Workspace {
     }
 
     /// Archive tabs idle for longer than `ttl` ms. Pinned, active and split tabs are exempt.
-    pub fn archive_inactive(&mut self, now: Millis, ttl: Millis) -> Vec<Id> {
+    /// Tabs in `busy` (playing audio, say) are in use whatever the clock says: they are never archived and count as
+    /// used right now, so one that falls silent is not archived on the very next pass.
+    pub fn archive_inactive(&mut self, now: Millis, ttl: Millis, busy: &[Id]) -> Vec<Id> {
         let active = self.active_tab.clone();
         let split: Vec<Id> = self
             .split
@@ -579,6 +581,10 @@ impl Workspace {
             .unwrap_or_default();
         let mut out = vec![];
         for t in &mut self.tabs {
+            if busy.contains(&t.id) {
+                t.last_active = now;
+                continue;
+            }
             let idle = now.saturating_sub(t.last_active);
             if !t.pinned
                 && !t.archived
@@ -1086,12 +1092,40 @@ mod tests {
         );
         w.set_pinned(&b, true);
         assert!(w.split_with(&c, Dir::Row, false));
-        let archived = w.archive_inactive(10_000, 1_000);
+        let archived = w.archive_inactive(10_000, 1_000, &[]);
         assert_eq!(archived, vec![d.clone()]);
         assert!(w.tab(&d).unwrap().archived);
         assert!(w.activate(&d, 10_001));
         assert!(!w.tab(&d).unwrap().archived, "activating restores");
         assert_eq!(w.active_tab.as_deref(), Some(d.as_str()));
+        let _ = a;
+    }
+
+    #[test]
+    fn a_tab_playing_sound_is_never_archived_and_counts_as_used() {
+        let mut w = ws();
+        let a = w.open_tab("https://a.test", OpenOptions::default(), 0);
+        let music = w.open_tab(
+            "https://music.test",
+            OpenOptions {
+                background: true,
+                ..Default::default()
+            },
+            0,
+        );
+        let idle = w.open_tab(
+            "https://idle.test",
+            OpenOptions {
+                background: true,
+                ..Default::default()
+            },
+            0,
+        );
+        let archived = w.archive_inactive(50_000, 1_000, std::slice::from_ref(&music));
+        assert_eq!(archived, vec![idle.clone()]);
+        assert!(!w.tab(&music).unwrap().archived);
+        // It falls silent: it was in use a moment ago, so the next pass leaves it alone too.
+        assert!(w.archive_inactive(50_500, 1_000, &[]).is_empty());
         let _ = a;
     }
 
