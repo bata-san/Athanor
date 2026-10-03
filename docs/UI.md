@@ -125,3 +125,7 @@ Tabs left idle for `archiveAfterHours` (12 by default) are archived and their pa
 ## Navigations are never replayed unless safe
 
 To have the ad-block script in place from the first byte, Athanor may cancel a navigation and start it again. That turns a form POST into a GET, drops the referrer and doubles every request, so it only happens for navigations Athanor or the page started by itself (`replay_is_safe` in `win.rs`): never for clicks, form submits, requests with a body, or redirects. Logins and checkouts that POST now arrive as POST. `e2e/ui/login-post.cjs` posts a login form to a local server (through `localtest.me`) and checks it arrives as a POST and ends logged in.
+
+## Android sign-in popups and cookies
+
+`window.open` with a size (Android reports it as a dialog window) opens a real popup over the screen with a close bar (`AthanorEngine.openPopup`), so it keeps its opener: `postMessage` back to the page and `window.close()` work, which is how most sign-in popups finish. Plain `target=_blank` links still become tabs. Back closes the popup first. Third-party cookies are accepted, as on desktop, so a login set by the identity provider is seen by the site. Checked on a phone with `e2e/phone/popup-login.cjs` (`adb reverse`).

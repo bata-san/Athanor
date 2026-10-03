@@ -290,10 +290,112 @@ class AthanorEngine(private val activity: Activity) : Plugin(activity) {
 
         @JvmStatic fun dispatchSystemBack(): Boolean {
             val plugin = loadedPlugin ?: return false
+            if (plugin.closeTopPopup()) return true
             val tab = plugin.activeTab ?: return false
             plugin.emitEvent(JSONObject().put("type", "shortcut").put("tab", tab).put("combo", "Back"))
             return true
         }
+    }
+
+    /** Sized `window.open` windows (sign-in popups), newest last. They keep their opener, so `postMessage` and `window.close()` work. */
+    private val popups = ArrayList<FrameLayout>()
+
+    private fun closeTopPopup(): Boolean {
+        val top = popups.lastOrNull() ?: return false
+        closePopup(top)
+        return true
+    }
+
+    private fun closePopup(frame: FrameLayout) {
+        if (!popups.remove(frame)) return
+        (frame.parent as? ViewGroup)?.removeView(frame)
+        (0 until frame.childCount).map { frame.getChildAt(it) }.forEach { child -> destroyWebViews(child) }
+        frame.removeAllViews()
+    }
+
+    private fun destroyWebViews(view: View) {
+        if (view is WebView) { view.stopLoading(); view.destroy(); return }
+        if (view is ViewGroup) (0 until view.childCount).map { view.getChildAt(it) }.forEach { destroyWebViews(it) }
+    }
+
+    /**
+     * A real window for `window.open` with a size: sign-in popups finish by talking to their opener and closing
+     * themselves, which a blind new tab cannot do. Drawn over the whole screen with a bar to close it.
+     */
+    private fun openPopup(opener: WebView, tabId: String, resultMsg: android.os.Message): Boolean {
+        val parent = host ?: return false
+        val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
+        val density = activity.resources.displayMetrics.density
+        val popup = WebView(activity)
+        popup.settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            setSupportMultipleWindows(true)
+            javaScriptCanOpenWindowsAutomatically = true
+            allowFileAccess = false
+            allowContentAccess = false
+            mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            userAgentString = opener.settings.userAgentString
+        }
+        CookieManager.getInstance().setAcceptThirdPartyCookies(popup, true)
+        val frame = FrameLayout(activity)
+        val column = android.widget.LinearLayout(activity).apply { orientation = android.widget.LinearLayout.VERTICAL; setBackgroundColor(android.graphics.Color.BLACK) }
+        val title = android.widget.TextView(activity).apply {
+            setTextColor(android.graphics.Color.WHITE); textSize = 14f; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding((16 * density).toInt(), 0, (8 * density).toInt(), 0); gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+        val close = android.widget.TextView(activity).apply {
+            text = "\u2715"; setTextColor(android.graphics.Color.WHITE); textSize = 18f; gravity = android.view.Gravity.CENTER
+            contentDescription = "Close"; setOnClickListener { closePopup(frame) }
+        }
+        val bar = android.widget.LinearLayout(activity).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            addView(title, android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
+            addView(close, android.widget.LinearLayout.LayoutParams((56 * density).toInt(), ViewGroup.LayoutParams.MATCH_PARENT))
+        }
+        column.addView(bar, android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (48 * density).toInt()))
+        column.addView(popup, android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        frame.addView(column, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        // Edge to edge: keep the bar and the page clear of the system bars.
+        ViewCompat.setOnApplyWindowInsetsListener(frame) { _, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            column.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            insets
+        }
+        popup.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                val scheme = request.url.scheme?.lowercase(Locale.ROOT).orEmpty()
+                if (scheme == "http" || scheme == "https") {
+                    if (request.isForMainFrame) {
+                        val rewritten = rewrite(request.url.toString())
+                        if (rewritten != null && rewritten != request.url.toString()) { view.loadUrl(rewritten); return true }
+                    }
+                    return false
+                }
+                if (scheme == "intent") openIntentUrl(request.url.toString())
+                return true
+            }
+
+            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                val url = request.url.toString()
+                val scheme = request.url.scheme?.lowercase(Locale.ROOT)
+                if (scheme != "http" && scheme != "https") return null
+                val kind = RequestKindClassifier.classify(url, request.isForMainFrame, request.requestHeaders)
+                val source = tabs[tabId]?.currentUrl.orEmpty()
+                val blocked = runCatching { nativeShouldBlock(tabId, url, source, kind) }.getOrDefault(false)
+                if (!blocked) return null
+                return WebResourceResponse("text/plain", "UTF-8", 403, "Blocked by Athanor", mapOf("Cache-Control" to "no-store"), ByteArrayInputStream(ByteArray(0)))
+            }
+        }
+        popup.webChromeClient = object : WebChromeClient() {
+            override fun onReceivedTitle(view: WebView, text: String?) { title.text = text.orEmpty() }
+            override fun onCloseWindow(window: WebView) { closePopup(frame) }
+        }
+        popups.add(frame)
+        parent.addView(frame, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        transport.webView = popup
+        resultMsg.sendToTarget()
+        return true
     }
 
     private external fun nativeShouldBlock(tab: String, url: String, source: String, kind: Int): Boolean
@@ -507,7 +609,9 @@ class AthanorEngine(private val activity: Activity) : Plugin(activity) {
             val mobileChromeUa = userAgent ?: userAgentString.replace("; wv", "").replace("Version/4.0 ", "")
             userAgentString = mobileChromeUa
         }
-        CookieManager.getInstance().setAcceptThirdPartyCookies(view, false)
+        // Sign-in flows lean on cookies set across sites (identity providers, SSO frames); desktop WebView2 and Chrome
+        // accept them, so a login that completes on the provider must be remembered on the site too.
+        CookieManager.getInstance().setAcceptThirdPartyCookies(view, true)
         var documentStartEnabled = WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
         if (documentStartEnabled) initScripts.forEach { script ->
             runCatching { WebViewCompat.addDocumentStartJavaScript(view, script, setOf("*")) }
@@ -773,6 +877,7 @@ class AthanorEngine(private val activity: Activity) : Plugin(activity) {
         }
 
         override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message): Boolean {
+            if (isDialog && openPopup(view, tabId, resultMsg)) return true
             val proxy = WebView(activity)
             proxy.settings.javaScriptEnabled = false
             proxy.webViewClient = object : WebViewClient() {
