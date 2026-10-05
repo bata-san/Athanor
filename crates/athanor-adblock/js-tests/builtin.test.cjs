@@ -49,7 +49,7 @@ test("youtube: ad containers are hidden by a stylesheet", () => {
   assert.match(css, /display:none!important/);
 });
 
-test("youtube: an ad in progress is muted, fast-forwarded, skipped, then playback is restored", async () => {
+test("youtube: skip controls are used without changing the shared video playback", async () => {
   const { window } = page('<div class="html5-video-player ad-showing"><video class="html5-main-video"></video><button class="ytp-ad-skip-button"></button></div>');
   const video = window.document.querySelector("video");
   let clicked = 0;
@@ -59,9 +59,9 @@ test("youtube: an ad in progress is muted, fast-forwarded, skipped, then playbac
   video.muted = false;
   window.eval(youtube);
   await tick(50);
-  assert.equal(video.muted, true, "muted during the ad");
-  assert.equal(video.playbackRate, 16, "sped up");
-  assert.ok(video.currentTime >= 29.9, "jumped to the end");
+  assert.equal(video.muted, false, "mute stays unchanged");
+  assert.equal(video.playbackRate, 1.5, "speed stays unchanged");
+  assert.equal(video.currentTime, 0, "the shared video is never sought");
   assert.ok(clicked >= 1, "skip pressed");
   // ad ends
   window.document.querySelector(".html5-video-player").classList.remove("ad-showing");
@@ -82,12 +82,12 @@ test("youtube: a normal video is never touched", async () => {
   assert.equal(video.muted, false);
 });
 
-test("youtube: the ad-blocker interstitial is dismissed", async () => {
+test("youtube: enforcement remains visible so playback failure is explained", async () => {
   const { window } = page('<tp-yt-paper-dialog><ytd-enforcement-message-view-model>blocked</ytd-enforcement-message-view-model></tp-yt-paper-dialog><tp-yt-iron-overlay-backdrop></tp-yt-iron-overlay-backdrop>');
   window.eval(youtube);
   await tick(50);
-  assert.equal(window.document.querySelector("ytd-enforcement-message-view-model"), null);
-  assert.equal(window.document.querySelector("tp-yt-iron-overlay-backdrop"), null);
+  assert.ok(window.document.querySelector("ytd-enforcement-message-view-model"));
+  assert.ok(window.document.querySelector("tp-yt-iron-overlay-backdrop"));
 });
 
 test("drm: encrypted media is refused and the API surface is removed", async () => {

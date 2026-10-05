@@ -21,7 +21,166 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 type B<'a> = State<'a, Arc<Browser>>;
+
+/// Contextual media controls always address the selected tab and never alter playback automatically.
+#[tauri::command]
+pub async fn page_media(
+    b: B<'_>,
+    webview: tauri::Webview,
+    tab: Id,
+    action: String,
+) -> R<serde_json::Value> {
+    shell_only(&webview)?;
+    if !matches!(action.as_str(), "state" | "toggle-play") {
+        return Err("Unknown playback action".into());
+    }
+    let snapshot = b.snapshot();
+    let page = snapshot.workspace.tab(&tab).ok_or("This tab was closed")?;
+    if !matches!(
+        url::Url::parse(&page.url)
+            .ok()
+            .map(|url| url.scheme().to_owned())
+            .as_deref(),
+        Some("http" | "https")
+    ) {
+        return Ok(serde_json::json!({"available": false}));
+    }
+    let action = serde_json::to_string(&action).map_err(e)?;
+    let script = format!(
+        r#"(()=>{{const elements=[...document.querySelectorAll('video,audio')];const visible=e=>e.getClientRects().length>0;const media=elements.find(e=>visible(e)&&!e.paused&&!e.ended)||elements.find(e=>visible(e)&&e.tagName==='VIDEO')||elements.find(e=>!e.paused&&!e.ended)||elements.find(e=>e.tagName==='AUDIO');if(!media)return {{available:false}};const action={action};if(action==='toggle-play'){{if(media.paused||media.ended){{media.play().catch(()=>{{media.__athanorPlaybackError='The site did not start playback. Try its Play button on the page.'}})}}else media.pause()}}const error=media.__athanorPlaybackError||null;media.__athanorPlaybackError=null;return {{available:true,paused:media.paused,ended:media.ended,error}};}})()"#
+    );
+    let (send, receive) = tokio::sync::oneshot::channel();
+    b.evaluate_page(
+        &tab,
+        &script,
+        Box::new(move |result| {
+            let _ = send.send(result);
+        }),
+    )?;
+    let result = tokio::time::timeout(std::time::Duration::from_secs(3), receive)
+        .await
+        .map_err(|_| "The media player did not respond")?
+        .map_err(e)?;
+    serde_json::from_str(&result).map_err(|_| "The page's player is unavailable".into())
+}
+
+#[tauri::command]
+pub async fn password_list(b: B<'_>, webview: tauri::Webview) -> R<serde_json::Value> {
+    shell_only(&webview)?;
+    #[cfg(windows)]
+    {
+        let browser = b.inner().clone();
+        let result = tauri::async_runtime::spawn_blocking(move || crate::passwords::list(&browser))
+            .await
+            .map_err(e)??;
+        serde_json::to_value(result).map_err(e)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = b;
+        Ok(serde_json::json!([]))
+    }
+}
+
+#[tauri::command]
+pub async fn password_import(b: B<'_>, webview: tauri::Webview) -> R<serde_json::Value> {
+    shell_only(&webview)?;
+    #[cfg(windows)]
+    {
+        let Some(file) = rfd::AsyncFileDialog::new()
+            .set_title("Import passwords from a browser CSV")
+            .add_filter("Password CSV", &["csv"])
+            .pick_file()
+            .await
+        else {
+            return Ok(serde_json::Value::Null);
+        };
+        let path = file.path().to_owned();
+        let browser = b.inner().clone();
+        let report =
+            tauri::async_runtime::spawn_blocking(move || crate::passwords::import(&browser, &path))
+                .await
+                .map_err(e)??;
+        serde_json::to_value(report).map_err(e)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = b;
+        Err("Password import is available on Windows".into())
+    }
+}
+
+#[tauri::command]
+pub async fn password_remove(b: B<'_>, webview: tauri::Webview, id: String) -> R {
+    shell_only(&webview)?;
+    #[cfg(windows)]
+    {
+        let browser = b.inner().clone();
+        tauri::async_runtime::spawn_blocking(move || crate::passwords::remove(&browser, &id))
+            .await
+            .map_err(e)?
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (b, id);
+        Err("Saved passwords are available on Windows".into())
+    }
+}
+
+#[tauri::command]
+pub async fn password_fill(b: B<'_>, webview: tauri::Webview, id: String, tab: Id) -> R {
+    shell_only(&webview)?;
+    #[cfg(windows)]
+    {
+        let snapshot = b.snapshot();
+        if snapshot.runtime.get(&tab).is_some_and(|r| r.failed) {
+            return Err("Open the site's sign-in page first".into());
+        }
+        let url = snapshot
+            .workspace
+            .tab(&tab)
+            .ok_or("This tab was closed")?
+            .url
+            .clone();
+        let browser = b.inner().clone();
+        let script = tauri::async_runtime::spawn_blocking(move || {
+            crate::passwords::fill_script(&browser, &id, &url)
+        })
+        .await
+        .map_err(e)??;
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        b.evaluate_page(
+            &tab,
+            &script,
+            Box::new(move |result| {
+                let _ = tx.send(result);
+            }),
+        )?;
+        let result = tokio::time::timeout(std::time::Duration::from_secs(5), rx)
+            .await
+            .map_err(|_| "The sign-in page did not respond")?
+            .map_err(e)?;
+        match serde_json::from_str::<String>(&result).ok().as_deref() {
+            Some("filled") => Ok(()),
+            Some("wrong-site") => Err("The page changed. Open the matching sign-in page first.".into()),
+            _ => Err("No sign-in form was found. Open the password step on the matching site and try again.".into()),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (b, id, tab);
+        Err("Saved passwords are available on Windows".into())
+    }
+}
 type R<T = ()> = Result<T, String>;
+
+fn shell_only(webview: &tauri::Webview) -> R {
+    if webview.label() == "shell" {
+        Ok(())
+    } else {
+        Err("This action is available only from the browser interface".into())
+    }
+}
 
 fn e(err: impl std::fmt::Display) -> String {
     err.to_string()
@@ -216,18 +375,46 @@ pub async fn reset_site_permissions(b: B<'_>) -> R {
 
 /// Show a downloaded file in its folder.
 #[tauri::command]
-pub async fn reveal_download(path: String) -> R {
+pub async fn get_downloads(
+    b: B<'_>,
+    webview: tauri::Webview,
+) -> R<Vec<crate::downloads::Download>> {
+    shell_only(&webview)?;
+    Ok(b.downloads())
+}
+
+#[tauri::command]
+pub async fn control_download(b: B<'_>, webview: tauri::Webview, id: u32, action: String) -> R {
+    shell_only(&webview)?;
+    b.control_download(id, &action)
+}
+
+#[tauri::command]
+pub async fn reveal_download(b: B<'_>, webview: tauri::Webview, path: String) -> R {
+    shell_only(&webview)?;
     #[cfg(windows)]
     {
         // Only files that exist; the path comes from a download Athanor itself started.
-        if std::path::Path::new(&path).exists() {
-            let _ = std::process::Command::new("explorer")
-                .arg(format!("/select,{path}"))
-                .spawn();
+        if !b
+            .downloads()
+            .iter()
+            .any(|d| d.path == path && d.state == "done")
+        {
+            return Err("This download has not finished".into());
         }
+        if !std::path::Path::new(&path).is_file() {
+            return Err("The downloaded file was moved or deleted".into());
+        }
+        std::process::Command::new("explorer.exe")
+            .arg(format!("/select,{path}"))
+            .spawn()
+            .map_err(e)?;
     }
     #[cfg(not(windows))]
-    let _ = path;
+    {
+        let _ = (b, path);
+        return Err("Show in folder is unavailable on this platform".into());
+    }
     Ok(())
 }
 
@@ -791,8 +978,14 @@ pub async fn set_adblock_list_enabled(b: B<'_>, id: String, enabled: bool) -> R 
     b.filter.set_list_enabled(&id, enabled);
     let browser = b.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        browser.filter.rebuild();
-        browser.emit_adblock();
+        if enabled {
+            browser
+                .filter
+                .update_one_blocking(&id, || browser.emit_adblock());
+        } else {
+            browser.filter.rebuild();
+            browser.emit_adblock();
+        }
     });
     b.emit_adblock();
     Ok(())
@@ -802,8 +995,7 @@ pub async fn set_adblock_list_enabled(b: B<'_>, id: String, enabled: bool) -> R 
 pub async fn update_adblock_lists(b: B<'_>) -> R {
     let browser = b.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        browser.filter.update_blocking();
-        browser.emit_adblock();
+        browser.filter.update_blocking(|| browser.emit_adblock());
     });
     b.emit_adblock();
     Ok(())

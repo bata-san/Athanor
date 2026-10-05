@@ -4,6 +4,7 @@ import { api } from '@/lib/api'
 import { listen } from '@/lib/events'
 import { useOverlay } from '@/lib/overlay'
 import { useHover } from '@/lib/hover'
+import { useDownloads } from '@/lib/downloads'
 import type { DownloadEvent, PermissionPrompt, ScriptDialogEvent } from '@/lib/types'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog'
@@ -23,10 +24,9 @@ const ASKS: Record<string, string> = {
  * Everything the web engine would otherwise show in its own (Edge-looking) windows, drawn here instead:
  * JavaScript dialogs, permission prompts, download progress and the link-under-the-pointer preview.
  */
-export function NativeUi() {
+export function NativeUi({ openDownloads }: { openDownloads: () => void }) {
   const [dialogs, setDialogs] = useState<ScriptDialogEvent[]>([])
   const [prompts, setPrompts] = useState<PermissionPrompt[]>([])
-  const names = useRef(new Map<number, string>())
 
   useEffect(() => {
     const offs = [
@@ -34,10 +34,11 @@ export function NativeUi() {
       listen('athanor://permission', (prompt) => setPrompts((queue) => [...queue, prompt])),
       listen('athanor://closed', ({ count, title }) => toast(count === 1 ? `Closed \u201c${title || 'tab'}\u201d` : `Closed ${count} tabs`, { duration: 7000, action: { label: 'Undo', onClick: () => { void api.reopenClosed(count) } } })),
       listen('athanor://status-text', (event) => useHover.getState().set(event.tab, event.text)),
-      listen('athanor://download', (event) => handleDownload(event, names.current)),
+      listen('athanor://download', (event) => { useDownloads.getState().update(event); handleDownload(event, openDownloads) }),
     ]
+    void Promise.all(offs).then(() => api.getDownloads()).then((items) => useDownloads.getState().hydrate(items)).catch(console.error)
     return () => { for (const off of offs) void off.then((fn) => fn()) }
-  }, [])
+  }, [openDownloads])
 
   const dialog = dialogs[0]
   const prompt = prompts[0]
@@ -49,14 +50,13 @@ export function NativeUi() {
   </>
 }
 
-function handleDownload(event: DownloadEvent, names: Map<number, string>) {
+function handleDownload(event: DownloadEvent, openDownloads: () => void) {
   const id = `download-${event.id}`
-  names.set(event.id, event.name)
-  const percent = event.total > 0 ? Math.min(99, Math.floor((event.received / event.total) * 100)) : null
-  if (event.state === 'started') toast.loading(`Downloading ${event.name}`, { id, description: 'Starting…' })
-  else if (event.state === 'progress') toast.loading(`Downloading ${event.name}`, { id, description: percent === null ? `${(event.received / 1048576).toFixed(1)} MB` : `${percent}%` })
-  else if (event.state === 'done') toast.success(`Downloaded ${event.name}`, { id, description: undefined, duration: 9000, action: { label: 'Show in folder', onClick: () => { void api.revealDownload(event.path) } } })
-  else toast.error(`Could not download ${event.name}`, { id, description: undefined, duration: 7000 })
+  const action = { label: 'View downloads', onClick: openDownloads }
+  if (event.state === 'started') toast(`Downloading ${event.name}`, { id, description: 'You can keep browsing while the file downloads.', action, duration: 4000 })
+  else if (event.state === 'done') toast.success(`Downloaded ${event.name}`, { id, description: 'Your file is ready in Downloads.', duration: 8000, action })
+  else if (event.state === 'failed') toast.error(`Download interrupted: ${event.name}`, { id, description: event.error ?? 'The transfer could not finish. Check Downloads for recovery options.', duration: 10000, action })
+  else if (event.state === 'cancelled' || event.state === 'paused') toast.dismiss(id)
 }
 
 function ScriptDialog({ event, onDone }: { event: ScriptDialogEvent; onDone: (accept: boolean, text: string) => void }) {

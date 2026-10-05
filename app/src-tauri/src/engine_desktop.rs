@@ -81,6 +81,26 @@ fn bounds(r: Rect) -> tauri::Rect {
 }
 
 impl EngineBackend for DesktopEngine {
+    fn control_download(&self, id: u32, action: &str) -> EngineResult {
+        #[cfg(windows)]
+        {
+            let (tx, rx) = std::sync::mpsc::channel();
+            let action = action.to_owned();
+            self.window
+                .run_on_main_thread(move || {
+                    let _ = tx.send(crate::win_ui::control_download(id, &action));
+                })
+                .map_err(err)?;
+            rx.recv_timeout(std::time::Duration::from_secs(5))
+                .map_err(err)?
+                .map_err(err)
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (id, action);
+            Err(err("Download controls are unavailable on this platform"))
+        }
+    }
     fn create_tab(
         &self,
         id: &str,

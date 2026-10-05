@@ -137,6 +137,10 @@ pub enum EngineEvent {
         state: String,
         received: u64,
         total: u64,
+        #[serde(default)]
+        error: Option<String>,
+        #[serde(default)]
+        can_resume: bool,
     },
     /// The page's zoom changed (keyboard, Ctrl+wheel, pinch). `factor` is 1.0 at 100 %.
     #[serde(rename_all = "camelCase")]
@@ -153,6 +157,12 @@ pub enum EngineEvent {
 pub type EventSink = Arc<dyn Fn(EngineEvent) + Send + Sync>;
 
 pub trait EngineBackend: Send + Sync {
+    /// Control the existing transfer, preserving its cookies, POST body and signed URL.
+    fn control_download(&self, _id: u32, _action: &str) -> EngineResult {
+        Err(EngineError::Engine(
+            "Download controls are unavailable on this platform".into(),
+        ))
+    }
     fn create_tab(
         &self,
         id: &str,

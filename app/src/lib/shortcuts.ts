@@ -52,6 +52,7 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   { combo: 'Ctrl+\\', label: 'Split with next tab', group: 'Tabs', owner: 'backend' },
   { combo: 'Ctrl+L', label: 'Open location', group: 'Navigation', owner: 'shell' },
   { combo: 'Ctrl+K', label: 'Command bar', group: 'Navigation', owner: 'shell' },
+  { combo: 'Ctrl+J', label: 'Downloads', group: 'Navigation', owner: 'shell' },
   { combo: 'Alt+Left', label: 'Back', group: 'Navigation', owner: 'backend' },
   { combo: 'Alt+Right', label: 'Forward', group: 'Navigation', owner: 'backend' },
   { combo: 'F5', label: 'Reload (Ctrl+R)', group: 'Navigation', owner: 'backend' },

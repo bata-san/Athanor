@@ -39,7 +39,7 @@ export function UrlPill({ snapshot, activeTab, onOpen, onSettings, className }: 
   const describedBy = useId()
   const protectionId = `${describedBy}-protection`
   useOverlay(shieldOpen, 'shield')
-  useEffect(() => { if (shieldOpen && host) void api.getSiteShield(host).then(setShieldEnabled) }, [shieldOpen, host])
+  useEffect(() => { let alive = true; if (host) void api.getSiteShield(host).then((enabled) => { if (alive) setShieldEnabled(enabled) }).catch(() => undefined); return () => { alive = false } }, [shieldOpen, host, snapshot.settings.adblockEnabled])
   useEffect(() => () => window.clearTimeout(copyTimer.current), [])
   const Lead = !host ? Search : runtime?.secure ? Lock : Globe
   const hovered = useHover((state) => (activeTab ? state.links[activeTab.id] : undefined))
@@ -49,14 +49,13 @@ export function UrlPill({ snapshot, activeTab, onOpen, onSettings, className }: 
     const url = activeTab?.url ?? ''
     if (!url) return
     window.clearTimeout(copyTimer.current)
-    setCopied(true)
-    copyTimer.current = window.setTimeout(() => setCopied(false), 1600)
     const clipboard = navigator.clipboard
-    if (clipboard) void clipboard.writeText(url).catch(() => toast('Could not copy the address'))
+    if (clipboard) void clipboard.writeText(url).then(() => { setCopied(true); copyTimer.current = window.setTimeout(() => setCopied(false), 1600) }).catch(() => { setCopied(false); toast.error('Could not copy the address') })
     else toast('Could not copy the address')
   }
   const blockedLabel = `${blocked} ${blocked === 1 ? 'request' : 'requests'} blocked on this page`
-  const shieldLabel = !shieldEnabled ? 'Protection is off for this site' : blocked ? blockedLabel : 'Nothing blocked on this page'
+  const protectedSite = snapshot.settings.adblockEnabled && shieldEnabled
+  const shieldLabel = !snapshot.settings.adblockEnabled ? 'Protection is off in Settings' : !shieldEnabled ? 'Protection is off for this site' : blocked ? blockedLabel : 'Nothing blocked on this page'
   const description = !host ? 'No page is open'
     : hovered ? `${hovered}, the link under the pointer`
       : `${host}${path}, ${runtime?.secure ? 'secure connection' : 'connection is not secure'}${blocked ? `, ${blockedLabel}` : ''}${loading ? ', loading' : ''}`
@@ -76,21 +75,21 @@ export function UrlPill({ snapshot, activeTab, onOpen, onSettings, className }: 
           </button>
         </Tip>
         {zoom && <Tip label="Reset zoom" shortcut="Ctrl+0"><button type="button" className="me-0.5 h-6 shrink-0 rounded-md px-1.5 font-instr text-[0.7333rem] font-medium tabular-nums text-muted-foreground outline-none transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40" data-part="zoom-badge" aria-label={`Page zoom ${Math.round(zoom * 100)} percent. Reset to 100%`} onClick={() => activeTab && void api.zoomPage(activeTab.id, 0)}>{Math.round(zoom * 100)}%</button></Tip>}
-        {host && <Tip label={shieldLabel} side="bottom"><button type="button" className={cn('me-0.5 flex h-6 shrink-0 items-center gap-1 rounded-md px-1 text-muted-foreground outline-none transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 [&_svg]:size-[1rem]', !shieldEnabled && 'opacity-60')} data-part="shield-badge" aria-label={`${blockedLabel}. Protection settings`} onClick={() => setShieldOpen((open) => !open)}>{shieldEnabled ? <ShieldCheck aria-hidden="true" /> : <ShieldAlert aria-hidden="true" />}{blocked > 0 && <span className="font-mono text-[0.7333rem] font-medium tabular-nums">{blocked}</span>}</button></Tip>}
+        {host && <Tip label={shieldLabel} side="bottom"><button type="button" className={cn('me-0.5 flex h-6 shrink-0 items-center gap-1 rounded-md px-1 text-muted-foreground outline-none transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 [&_svg]:size-[1rem]', !protectedSite && 'opacity-60')} data-part="shield-badge" aria-label={`${shieldLabel}. Protection settings`} onClick={() => setShieldOpen((open) => !open)}>{protectedSite ? <ShieldCheck aria-hidden="true" /> : <ShieldAlert aria-hidden="true" />}{blocked > 0 && <span className="font-mono text-[0.7333rem] font-medium tabular-nums">{blocked}</span>}</button></Tip>}
         {host && <Tip label={copied ? 'Address copied' : 'Copy page address'} side="bottom"><button type="button" className="me-0.5 grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 [&_svg]:size-[1rem]" data-part="copy-address" aria-label={copied ? 'Address copied' : 'Copy page address'} onClick={copyAddress}>{copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}</button></Tip>}
         {loading && <span className="pointer-events-none absolute inset-x-2 bottom-0 h-[2px] overflow-hidden rounded-full" aria-hidden="true"><span className="block h-full w-2/5 rounded-full bg-foreground/70 [animation:ath-indeterminate_1.1s_var(--ease-snap)_infinite]" /></span>}
       </div>
     </PopoverAnchor>
     {host && <PopoverContent align="start" className="w-80" role="dialog" aria-label={`Protection for ${host}`} onOpenAutoFocus={(event) => event.preventDefault()}>
       <div className="flex items-center gap-3">
-        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-secondary [&_svg]:size-[1.2rem]">{shieldEnabled ? <ShieldCheck /> : <ShieldAlert />}</span>
+        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-secondary [&_svg]:size-[1.2rem]">{protectedSite ? <ShieldCheck /> : <ShieldAlert />}</span>
         <div className="min-w-0 flex-1">
           <h3 className="m-0 truncate text-sm font-semibold" title={`${host}${path}`}>{host}</h3>
           <span className="block truncate font-mono text-[0.7333rem] text-muted-foreground">{path || '/'}</span>
         </div>
-        <Switch checked={shieldEnabled} aria-label="Block ads and trackers" aria-describedby={protectionId} onCheckedChange={(enabled) => { setShieldEnabled(enabled); void api.setSiteShield(host, enabled) }} />
+        <Switch checked={protectedSite} aria-label="Block ads and trackers" aria-describedby={protectionId} disabled={!snapshot.settings.adblockEnabled} onCheckedChange={(enabled) => { void api.setSiteShield(host, enabled).then(() => { setShieldEnabled(enabled); toast(enabled ? 'Protection enabled for this site' : 'Protection disabled for this site', { description: 'Reload the page to apply the change.', action: { label: 'Reload', onClick: () => { if (activeTab) void api.reload(activeTab.id) } } }) }).catch((error) => toast.error(String(error))) }} />
       </div>
-      <p id={protectionId} className="m-0 mt-2 text-xs text-muted-foreground">{runtime?.secure ? 'Secure connection' : 'Not secure'} · {shieldEnabled ? 'Protection is on for this site' : 'Protection is off for this site'}</p>
+      <p id={protectionId} className="m-0 mt-2 text-xs text-muted-foreground">{runtime?.secure ? 'Secure connection' : 'Not secure'} · {!snapshot.settings.adblockEnabled ? 'Protection is off in Settings' : shieldEnabled ? 'Protection is on for this site' : 'Protection is off for this site'}</p>
       <div className="mt-4 grid grid-cols-2 gap-2">
         <div className="rounded-lg border border-border p-3"><strong className="block text-xl font-semibold tabular-nums">{blocked}</strong><span className="text-xs text-muted-foreground">on this page</span></div>
         <div className="rounded-lg border border-border p-3"><strong className="block text-xl font-semibold tabular-nums">{snapshot.blockedTotal}</strong><span className="text-xs text-muted-foreground">all time</span></div>

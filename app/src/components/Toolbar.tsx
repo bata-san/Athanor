@@ -1,17 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import type * as React from 'react'
-import { LayoutGrid, ArrowLeft, ArrowRight, Columns2, Command, FolderInput, LayoutPanelTop, MoreHorizontal, PanelLeft, PanelsTopLeft, Puzzle, RotateCw, Settings, SquareTerminal, X } from 'lucide-react'
-import type { NavHistory, Snapshot, Tab } from '@/lib/types'
+import { Bell, Download, KeyRound, LayoutGrid, ArrowLeft, ArrowRight, Columns2, Command, FolderInput, LayoutPanelTop, MoreHorizontal, PanelLeft, PanelsTopLeft, Pause, Play, Puzzle, RotateCw, Settings, SquareTerminal, Volume2, VolumeX, X } from 'lucide-react'
+import type { MediaState, NavHistory, Snapshot, Tab } from '@/lib/types'
 import { listen } from '@/lib/events'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { fileTabs } from '@/lib/filing'
 import { cn } from '@/lib/utils'
+import { downloadStatus, formatBytes, isDownloading, useDownloads } from '@/lib/downloads'
 import { Button } from './ui/button'
 import { DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuTrigger } from './ui/dropdown-menu'
 import { Tip } from './ui/tooltip'
 import { OverlayDropdownMenu } from './overlay-menus'
 import { UrlPill } from './UrlPill'
+import { useNotices } from './Notifications'
 import { dragWindow, toggleWindow } from './WindowControls'
 
 type Page = 'settings' | 'boards' | 'extensions'
@@ -89,23 +91,34 @@ export function NavCluster({ snapshot, activeTab, className }: { snapshot: Snaps
  * The slim strip above the page: the page's title on the left (also the drag handle), tools and the window
  * buttons on the right. Everything you type goes through the address pill / command bar instead.
  */
-export function StageBar({ snapshot, activeTab, openBar, openPage, toggleDev, openOverview, windowControls }: { snapshot: Snapshot; activeTab: Tab | null; openBar: () => void; openOverview: () => void; openPage: (page: Page) => void; toggleDev: () => void; windowControls?: React.ReactNode }) {
+export function StageBar({ snapshot, activeTab, openBar, openPage, toggleDev, openOverview, openDownloads, openNotifications, openPasswords, windowControls }: { snapshot: Snapshot; activeTab: Tab | null; openBar: () => void; openOverview: () => void; openDownloads: () => void; openNotifications: () => void; openPasswords: () => void; openPage: (page: Page) => void; toggleDev: () => void; windowControls?: React.ReactNode }) {
+  const notificationError = useNotices((state) => state.displayError)
   const split = () => { const next = snapshot.workspace.tabs.find((tab) => tab.id !== activeTab?.id && tab.space === snapshot.workspace.activeSpace && !tab.archived); if (snapshot.workspace.split) void api.unsplit(); else if (next) void api.splitWith({ tab: next.id, dir: 'row' }); else toast('Open another tab to use Split View', { duration: 2400 }) }
-  return <div className="flex h-9 shrink-0 items-center gap-1 ps-1.5" data-part="toolbar" onPointerDown={dragWindow} onDoubleClick={toggleWindow}>
+  return <div className="flex h-9 shrink-0 items-center gap-1 ps-1.5" style={{ containerType: 'inline-size', containerName: 'ath-toolbar' }} data-part="toolbar" onPointerDown={dragWindow} onDoubleClick={toggleWindow}>
     <NavCluster snapshot={snapshot} activeTab={activeTab} className="shrink-0" />
     <div className="flex min-w-0 flex-1 justify-center px-1" data-no-drag>
       <UrlPill snapshot={snapshot} activeTab={activeTab} onOpen={openBar} onSettings={() => openPage('settings')} className="w-full max-w-[44rem]" />
     </div>
+    <MediaControls snapshot={snapshot} activeTab={activeTab} />
+    {notificationError && <div data-no-drag><NavButton label="Read notifications: toast display unavailable" onClick={openNotifications}><Bell aria-hidden="true" /></NavButton></div>}
+    <DownloadActivity onOpen={openDownloads} />
     <div className="flex items-center" data-no-drag>
-      <NavButton label="File tabs into folders" shortcut="Ctrl+Shift+F" onClick={() => void fileTabs()}><FolderInput aria-hidden="true" /></NavButton>
+      <NavButton label="File tabs into folders" shortcut="Ctrl+Shift+F" className="ath-optional-tool" onClick={() => void fileTabs()}><FolderInput aria-hidden="true" /></NavButton>
       <NavButton label={snapshot.workspace.split ? 'Close split view' : 'Split view'} shortcut={'Ctrl+\\'} active={Boolean(snapshot.workspace.split)} className="ath-optional-tool" onClick={split}><Columns2 aria-hidden="true" /></NavButton>
-      <NavButton label="Show all tabs" shortcut="Ctrl+Space" onClick={openOverview}><LayoutGrid aria-hidden="true" /></NavButton>
+      <NavButton label="Show all tabs" shortcut="Ctrl+Space" className="ath-optional-tool" onClick={openOverview}><LayoutGrid aria-hidden="true" /></NavButton>
       <NavButton label="Developer panel" shortcut="Ctrl+Shift+D" className="ath-optional-tool" onClick={toggleDev}><SquareTerminal aria-hidden="true" /></NavButton>
-      <NavButton label="Command bar" shortcut="Ctrl+K" onClick={openBar}><Command aria-hidden="true" /></NavButton>
+      <NavButton label="Command bar" shortcut="Ctrl+K" className="ath-optional-tool" onClick={openBar}><Command aria-hidden="true" /></NavButton>
       <OverlayDropdownMenu>
         <Tip label="More"><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="size-7 rounded-md data-[state=open]:bg-foreground/[0.07] data-[state=open]:text-foreground [&_svg]:size-[1rem]" aria-label="More" data-part="nav-button"><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger></Tip>
         <DropdownMenuContent align="end" className="w-60">
+          <DropdownMenuItem onSelect={openDownloads}><Download aria-hidden="true" />Downloads<DropdownMenuShortcut>Ctrl+J</DropdownMenuShortcut></DropdownMenuItem>
+          <DropdownMenuItem onSelect={openNotifications}><Bell aria-hidden="true" />Notifications</DropdownMenuItem>
+          {snapshot.platform === 'windows' && <DropdownMenuItem onSelect={openPasswords}><KeyRound aria-hidden="true" />Passwords</DropdownMenuItem>}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => void fileTabs()}><FolderInput aria-hidden="true" />File tabs into folders<DropdownMenuShortcut>Ctrl+Shift+F</DropdownMenuShortcut></DropdownMenuItem>
           <DropdownMenuItem onSelect={split}><Columns2 aria-hidden="true" />{snapshot.workspace.split ? 'Close Split View' : 'Split View'}<DropdownMenuShortcut>Ctrl+\</DropdownMenuShortcut></DropdownMenuItem>
+          <DropdownMenuItem onSelect={openOverview}><LayoutGrid aria-hidden="true" />Show all tabs<DropdownMenuShortcut>Ctrl+Space</DropdownMenuShortcut></DropdownMenuItem>
+          <DropdownMenuItem onSelect={openBar}><Command aria-hidden="true" />Command bar<DropdownMenuShortcut>Ctrl+K</DropdownMenuShortcut></DropdownMenuItem>
           <DropdownMenuItem onSelect={toggleDev}><SquareTerminal aria-hidden="true" />Developer Panel<DropdownMenuShortcut>Ctrl+Shift+D</DropdownMenuShortcut></DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => openPage('boards')}><LayoutPanelTop aria-hidden="true" />Reference Boards</DropdownMenuItem>
@@ -119,6 +132,59 @@ export function StageBar({ snapshot, activeTab, openBar, openPage, toggleDev, op
     </div>
     {windowControls ?? <div className="w-1" />}
   </div>
+}
+
+function MediaControls({ snapshot, activeTab }: { snapshot: Snapshot; activeTab: Tab | null }) {
+  const [media, setMedia] = useState<MediaState | null>(null)
+  const [pending, setPending] = useState(false)
+  const currentTab = useRef(activeTab?.id)
+  currentTab.current = activeTab?.id
+  const runtime = activeTab ? snapshot.runtime[activeTab.id] : undefined
+  useEffect(() => {
+    setMedia(null)
+    if (!activeTab || !/^https?:/.test(activeTab.url) || runtime?.failed) return
+    let alive = true
+    let timer = 0
+    const tab = activeTab.id
+    const poll = async () => {
+      try { const value = await api.pageMedia(tab); if (alive) { setMedia(value); if (value.error) toast('Playback could not start', { description: value.error }) } } catch { if (alive) setMedia(null) }
+      if (alive) timer = window.setTimeout(() => void poll(), 2000)
+    }
+    void poll()
+    return () => { alive = false; window.clearTimeout(timer) }
+  }, [activeTab?.id, activeTab?.url, runtime?.failed])
+  if (!activeTab || !media?.available && !runtime?.audible) return null
+  const tab = activeTab.id
+  const paused = media?.paused || media?.ended
+  return <div className="flex h-8 shrink-0 items-center rounded-lg bg-foreground/[0.055] px-0.5" data-part="media-controls" data-no-drag role="group" aria-label="Page playback">
+    {media?.available && <NavButton label={paused ? 'Play' : 'Pause'} disabled={pending} onClick={() => {
+      setPending(true)
+      void api.pageMedia(tab, 'toggle-play').then((state) => { if (currentTab.current === tab) { setMedia(state); if (state.error) toast('Playback could not start', { description: state.error }); else if (!state.available) toast('Use the player on the page to control playback') } }).catch((error) => toast.error('Could not control playback', { description: String(error) })).finally(() => setPending(false))
+    }}>{paused ? <Play aria-hidden="true" /> : <Pause aria-hidden="true" />}</NavButton>}
+    <NavButton label={activeTab.muted ? 'Unmute page' : 'Mute page'} disabled={pending} onClick={() => void api.setMuted(tab, !activeTab.muted).catch((error) => toast.error('Could not change page audio', { description: String(error) }))}>{activeTab.muted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</NavButton>
+  </div>
+}
+
+/** Transfers stay visible in the existing toolbar without covering or hiding the page. */
+function DownloadActivity({ onOpen }: { onOpen: () => void }) {
+  const items = useDownloads((state) => state.items)
+  const [pending, setPending] = useState(false)
+  const active = items.filter((item) => isDownloading(item) || item.state === 'paused' || item.state === 'failed' && item.canResume)
+  if (!active.length) return null
+  const item = active.find(isDownloading) ?? active[0]!
+  const determinate = item.total > 0
+  const percent = determinate ? Math.min(100, Math.max(0, item.received / item.total * 100)) : 0
+  const label = `${item.name} · ${downloadStatus(item)}${active.length > 1 ? ` · ${active.length} transfers` : ''}`
+  return <div className="flex h-8 min-w-0 w-[clamp(8rem,20vw,17rem)] shrink items-center rounded-lg bg-foreground/[0.055]" data-part="download-activity" data-no-drag><Button variant="ghost" className="h-8 min-w-0 flex-1 shrink gap-2 px-2 text-start" aria-label={label} title={label} onClick={onOpen}>
+    <Download className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+    <span className="flex min-w-0 flex-1 flex-col gap-1">
+      <span className="flex min-w-0 items-center gap-1 text-[0.7333rem]"><span className="truncate">{item.name}</span><span className="shrink-0 text-muted-foreground">{item.state === 'paused' ? 'Paused' : item.state === 'failed' ? 'Interrupted' : determinate ? `${Math.floor(percent)}%` : formatBytes(item.received)}{active.length > 1 ? ` +${active.length - 1}` : ''}</span></span>
+      <span className="relative h-0.5 overflow-hidden rounded-full bg-foreground/10" role="progressbar" aria-label={`Download ${item.name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={determinate ? Math.floor(percent) : undefined} aria-valuetext={downloadStatus(item)}><span className={cn('absolute inset-y-0 start-0 rounded-full bg-primary', !determinate && isDownloading(item) && '[animation:ath-indeterminate_1.1s_var(--ease-snap)_infinite] motion-reduce:animate-none')} style={{ width: determinate ? `${percent}%` : isDownloading(item) ? '35%' : '0%' }} /></span>
+    </span>
+  </Button><NavButton label={isDownloading(item) ? `Pause ${item.name}` : `Resume ${item.name}`} disabled={pending || !isDownloading(item) && !item.canResume} onClick={() => {
+    setPending(true)
+    void api.controlDownload(item.id, isDownloading(item) ? 'pause' : 'resume').catch((error) => toast.error('Could not change download', { description: String(error), action: { label: 'Downloads', onClick: onOpen } })).finally(() => setPending(false))
+  }}>{isDownloading(item) ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}</NavButton></div>
 }
 
 export function MobileBar({ snapshot, activeTab, openBar, openSwitcher, openMenu, openPage }: { snapshot: Snapshot; activeTab: Tab | null; openBar: () => void; openSwitcher: () => void; openMenu: () => void; openPage: (page: Page) => void }) {

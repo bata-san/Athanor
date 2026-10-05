@@ -6,6 +6,7 @@ mod brand;
 mod browser;
 mod commands;
 mod devservers;
+mod downloads;
 #[cfg(desktop)]
 mod engine_desktop;
 #[cfg(target_os = "android")]
@@ -18,7 +19,11 @@ mod filter;
 mod import;
 #[cfg(target_os = "android")]
 mod jni_bridge;
+#[cfg(desktop)]
+mod notifications;
 mod pagetools;
+#[cfg(windows)]
+mod passwords;
 #[cfg(desktop)]
 #[path = "platform_desktop.rs"]
 mod platform;
@@ -72,6 +77,8 @@ fn asset_response(app: &tauri::AppHandle, hash: &str) -> Response<Vec<u8>> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default();
+    #[cfg(desktop)]
+    let builder = builder.manage(notifications::NotificationHost::default());
     #[cfg(target_os = "android")]
     let builder = builder.plugin(engine_mobile::plugin());
     #[cfg(desktop)]
@@ -195,6 +202,19 @@ pub fn run() {
             commands::resolve_permission,
             commands::reset_site_permissions,
             commands::reveal_download,
+            commands::get_downloads,
+            commands::page_media,
+            commands::control_download,
+            commands::password_list,
+            commands::password_import,
+            commands::password_remove,
+            commands::password_fill,
+            #[cfg(desktop)]
+            notifications::get_notification_state,
+            #[cfg(desktop)]
+            notifications::sync_notifications,
+            #[cfg(desktop)]
+            notifications::notification_height,
             commands::focus_shell,
             commands::focus_page,
             commands::run_shortcut,

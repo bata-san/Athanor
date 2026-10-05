@@ -11,7 +11,6 @@ youtube.com,youtube-nocookie.com##+js(set-constant, ytInitialPlayerResponse.adPl
 youtube.com,youtube-nocookie.com##+js(set-constant, ytInitialPlayerResponse.adSlots, undefined)
 
 ! Ad containers.
-youtube.com##.video-ads.ytp-ad-module
 youtube.com##.ytp-ad-overlay-container
 youtube.com##.ytp-paid-content-overlay
 youtube.com###masthead-ad
@@ -32,4 +31,5 @@ youtube.com##ytd-rich-item-renderer:has(> #content > ytd-ad-slot-renderer)
 ||youtube.com/api/stats/ads$xhr,image,ping,~third-party
 ||youtube.com/pagead/$xhr,image,ping,~third-party
 ||youtube.com/ptracking$xhr,image,ping,~third-party
-||youtube.com/get_midroll_info$xhr,~third-party
+! The content and ad player share the video transport; don't block timeline or video segment requests.
+@@||googlevideo.com/videoplayback$domain=youtube.com|youtube-nocookie.com

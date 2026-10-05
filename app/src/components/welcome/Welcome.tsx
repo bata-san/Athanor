@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type * as React from 'react'
 import { AnimatePresence, m } from 'motion/react'
 import { ArrowLeft, ArrowRight, Check, Download, FileText, Layers3, LayoutPanelTop, Loader2, PanelLeft, PanelRight, Search, ShieldCheck, Sparkles, SquareTerminal, X } from 'lucide-react'
@@ -84,7 +84,7 @@ export function Welcome({ snapshot, onDone }: { snapshot: Snapshot; onDone: () =
               variants={{ enter: (d: number) => ({ opacity: 0, x: d * 28 }), center: { opacity: 1, x: 0 }, exit: (d: number) => ({ opacity: 0, x: d * -28 }) }}
               initial="enter" animate="center" exit="exit" transition={enter}>
               {name === 'Welcome' && <IntroStep />}
-              {name === 'Import' && <ImportStep imported={imported} onImported={(report) => setImported((current) => [...current, report])} />}
+              {name === 'Import' && <ImportStep platform={snapshot.platform} imported={imported} onImported={(report) => setImported((current) => [...current, report])} />}
               {name === 'Look' && <LookStep snapshot={snapshot} />}
               {name === 'Privacy' && <PrivacyStep snapshot={snapshot} />}
               {name === 'Ready' && <ReadyStep snapshot={snapshot} imported={imported} />}
@@ -178,7 +178,7 @@ function IntroStep() {
 
 type Phase = 'idle' | 'running' | 'done' | 'error'
 
-function ImportStep({ imported, onImported }: { imported: ImportReport[]; onImported: (report: ImportReport) => void }) {
+function ImportStep({ platform, imported, onImported }: { platform: string; imported: ImportReport[]; onImported: (report: ImportReport) => void }) {
   const [browsers, setBrowsers] = useState<DetectedBrowser[] | null>(null)
   const [browserId, setBrowserId] = useState<string | null>(null)
   const [profileId, setProfileId] = useState<string | null>(null)
@@ -188,24 +188,21 @@ function ImportStep({ imported, onImported }: { imported: ImportReport[]; onImpo
   const [report, setReport] = useState<ImportReport | null>(null)
   const [error, setError] = useState('')
   const [status, setStatus] = useState('')
-  const timer = useRef<number | null>(null)
+  const [passwordBusy, setPasswordBusy] = useState(false)
+  const [passwordStatus, setPasswordStatus] = useState('')
 
   useEffect(() => { let alive = true; void api.importDetect().then((found) => { if (!alive) return; setBrowsers(found); const first = found[0]; if (first) { setBrowserId(first.id); setProfileId(first.profiles[0]?.id ?? null) } }).catch(() => alive && setBrowsers([])); return () => { alive = false } }, [])
-  useEffect(() => () => { if (timer.current) window.clearInterval(timer.current) }, [])
 
   const current = browsers?.find((browser) => browser.id === browserId) ?? null
   const profile = current?.profiles.find((entry) => entry.id === profileId) ?? null
 
   const run = async (request: Parameters<typeof api.importRun>[0], label: string) => {
     setPhase('running'); setError('')
-    const messages = [`Opening ${label}…`, request.bookmarks ? 'Reading bookmarks…' : '', request.history ? 'Reading history…' : '', 'Filing everything…'].filter(Boolean)
-    let at = 0; setStatus(messages[0]!)
-    timer.current = window.setInterval(() => { at = Math.min(messages.length - 1, at + 1); setStatus(messages[at]!) }, 900)
+    setStatus(`Importing ${[request.bookmarks ? 'bookmarks' : '', request.history ? 'history' : ''].filter(Boolean).join(' and ')} from ${label}…`)
     try {
       const result = await api.importRun(request)
       setReport(result); onImported(result); setPhase('done')
     } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); setPhase('error') }
-    finally { if (timer.current) { window.clearInterval(timer.current); timer.current = null } }
   }
   const importFile = async () => {
     const path = await api.importPickFile()
@@ -259,8 +256,10 @@ function ImportStep({ imported, onImported }: { imported: ImportReport[]; onImpo
         <div className="mt-5 flex flex-wrap items-center gap-2">
           {current && profile && <Button className="gap-1.5" disabled={!(bookmarks && profile.hasBookmarks) && !(history && profile.hasHistory)} onClick={() => void run({ source: { kind: 'browser', browser: current.id, profile: profile.id }, bookmarks: bookmarks && profile.hasBookmarks, history: history && profile.hasHistory }, current.name)}><Download aria-hidden="true" />Import from {current.name}</Button>}
           <Button variant="outline" className="gap-1.5" onClick={() => void importFile()}><FileText aria-hidden="true" />Bookmarks file…</Button>
+          {platform === 'windows' && <Button variant="outline" className="gap-1.5" disabled={passwordBusy} onClick={() => { setPasswordBusy(true); setPasswordStatus(''); void api.passwordImport().then((report) => { if (report) setPasswordStatus(`Imported ${report.imported} passwords · Updated ${report.updated} · Skipped ${report.skipped}`) }).catch((error) => setPasswordStatus(String(error))).finally(() => setPasswordBusy(false)) }}>{passwordBusy ? 'Importing passwords…' : 'Passwords CSV…'}</Button>}
         </div>
-        <p className="mt-4 text-[0.7667rem] leading-[1.5] text-muted-foreground/80">Passwords, cookies and saved cards are never imported. {imported.length > 0 ? 'You can import more than once.' : 'You can also do this later from the command bar.'}</p>
+        {passwordStatus && <p className="mt-3 text-sm text-muted-foreground" role="status">{passwordStatus}</p>}
+        <p className="mt-4 text-[0.7667rem] leading-[1.5] text-muted-foreground/80">On Windows, export a password CSV from Chrome, Edge or Firefox, then import it here. Delete the exported CSV afterwards; it contains readable passwords. Cookies and saved cards are not copied. You can import again later from More → Passwords. {imported.length > 0 && 'Your bookmarks and history have been imported.'}</p>
       </m.div>}
     </AnimatePresence>
   </div>

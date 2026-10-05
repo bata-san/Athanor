@@ -17,6 +17,9 @@ export type BarMode = 'navigate' | 'new-tab'
 const COMMANDS = [
   { id: 'newtab', label: 'New tab', shortcut: 'Ctrl+T', icon: 'Plus' },
   { id: 'settings', label: 'Open settings', icon: 'Settings' },
+  { id: 'downloads', label: 'Show downloads', shortcut: 'Ctrl+J', icon: 'Download' },
+  { id: 'notifications', label: 'Show notifications', icon: 'Bell' },
+  { id: 'passwords', label: 'Passwords and import', icon: 'KeyRound' },
   { id: 'boards', label: 'Open reference boards', icon: 'PanelsTopLeft' },
   { id: 'extensions', label: 'Manage extensions', icon: 'Zap' },
   { id: 'devtools', label: 'Toggle developer panel', shortcut: 'Ctrl+Shift+D', icon: 'SquareCode' },
@@ -73,8 +76,9 @@ export function CommandBar({ open, onOpenChange, mode, seed, snapshot, servers, 
   const q = fresh ? '' : query
   useEffect(() => {
     if (!open) return
-    const timeout = window.setTimeout(() => { void api.omniboxSuggest(q).then(setSuggestions).catch(() => setSuggestions([])) }, 50)
-    return () => window.clearTimeout(timeout)
+    let active = true
+    const timeout = window.setTimeout(() => { void api.omniboxSuggest(q).then((items) => { if (active) setSuggestions(items) }).catch(() => { if (active) setSuggestions([]) }) }, 50)
+    return () => { active = false; window.clearTimeout(timeout) }
   }, [q, open])
 
   const tabs = useMemo(() => snapshot.workspace.tabs.filter((tab) => tab.space === snapshot.workspace.activeSpace && !tab.archived), [snapshot.workspace])

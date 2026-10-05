@@ -316,7 +316,8 @@ pub fn default_lists() -> Vec<ListSource> {
             true,
         ),
     ];
-    rows.into_iter()
+    let mut sources: Vec<_> = rows
+        .into_iter()
         .map(|(id, name, url, kind, default_enabled)| ListSource {
             id: id.into(),
             name: name.into(),
@@ -324,7 +325,18 @@ pub fn default_lists() -> Vec<ListSource> {
             kind,
             default_enabled,
         })
-        .collect()
+        .collect();
+    // The publisher uses a new URL every month. Rules are fetched only on personal opt-in;
+    // they are never embedded in Athanor's source or release artifacts.
+    let month = (chrono::Utc::now() + chrono::Duration::hours(9)).format("%Y%m");
+    sources.push(ListSource {
+        id: "280blocker".into(),
+        name: "280blocker (personal use)".into(),
+        url: format!("https://280blocker.net/files/280blocker_adblock_{month}.txt"),
+        kind: ListKind::Regional,
+        default_enabled: false,
+    });
+    sources
 }
 /// CSS and immediately evaluable JavaScript.
 #[derive(Debug, Clone, Default)]
@@ -468,6 +480,8 @@ struct Metadata {
     etag: Option<String>,
     last_modified: Option<String>,
     error: Option<String>,
+    #[serde(default)]
+    source_url: Option<String>,
 }
 #[derive(Serialize, Deserialize)]
 struct CacheHeader {
@@ -560,15 +574,28 @@ impl Blocker {
     }
     /// Download enabled sources with conditional GET and per-source error isolation.
     pub fn update_lists(&self, force: bool) -> Vec<UpdateReport> {
+        self.update_selected(force, None)
+    }
+    pub fn update_list(&self, id: &str) -> Vec<UpdateReport> {
+        self.update_selected(false, Some(id))
+    }
+    fn update_selected(&self, force: bool, selected: Option<&str>) -> Vec<UpdateReport> {
         let _guard = self.inner.build_lock.lock();
         let mut reports = Vec::new();
+        let mut pending = Vec::new();
         for source in default_lists() {
+            if selected.is_some_and(|id| id != source.id) {
+                continue;
+            }
             if !self.list_is_enabled(&source.id, source.default_enabled) {
                 continue;
             }
             let (etag, modified) = {
                 let config = self.inner.config.read();
                 let meta = config.metadata.get(&source.id);
+                let force = force
+                    || meta.is_some_and(|m| m.source_url.as_deref() != Some(&source.url))
+                    || !self.raw_path(&source.id).exists();
                 (
                     if force {
                         None
@@ -582,21 +609,64 @@ impl Blocker {
                     },
                 )
             };
-            let result =
-                self.inner
-                    .fetcher
-                    .fetch(&source.url, etag.as_deref(), modified.as_deref());
+            pending.push((source, etag, modified));
+        }
+        // Keep request concurrency bounded. One slow or unavailable list must not delay every
+        // other subscription by its full timeout, including Brave's scriptlet resources.
+        let mut fetched = Vec::new();
+        for batch in pending.chunks(4) {
+            std::thread::scope(|scope| {
+                let jobs: Vec<_> = batch
+                    .iter()
+                    .map(|(source, etag, modified)| {
+                        let fetcher = self.inner.fetcher.clone();
+                        scope.spawn(move || {
+                            (
+                                source.clone(),
+                                fetcher.fetch(&source.url, etag.as_deref(), modified.as_deref()),
+                            )
+                        })
+                    })
+                    .collect();
+                for job in jobs {
+                    if let Ok(result) = job.join() {
+                        fetched.push(result);
+                    }
+                }
+            });
+        }
+        for (source, result) in fetched {
             let mut changed = false;
             let mut error = None;
             match result {
                 Ok(response) if response.status == 304 => {
                     if !self.raw_path(&source.id).exists() {
                         error = Some("304 without cached body".into());
+                    } else {
+                        self.inner
+                            .config
+                            .write()
+                            .metadata
+                            .entry(source.id.clone())
+                            .or_default()
+                            .updated_at = Some(now());
                     }
                 }
                 Ok(response) if response.status == 200 => {
                     if response.body.trim().is_empty() {
                         error = Some("empty list".into());
+                    } else if response
+                        .body
+                        .trim_start()
+                        .to_ascii_lowercase()
+                        .starts_with("<!doctype html")
+                        || response
+                            .body
+                            .trim_start()
+                            .to_ascii_lowercase()
+                            .starts_with("<html")
+                    {
+                        error = Some("The server returned a web page instead of a filter list. Cached rules are kept.".into());
                     } else if source.kind == ListKind::Resources
                         && parse_resources(&response.body).is_err()
                     {
@@ -612,6 +682,7 @@ impl Blocker {
                         meta.updated_at = Some(now());
                         meta.etag = response.etag;
                         meta.last_modified = response.last_modified;
+                        meta.source_url = Some(source.url.clone());
                     }
                 }
                 Ok(response) => error = Some(format!("HTTP {}", response.status)),
@@ -637,6 +708,10 @@ impl Blocker {
     }
     /// Check one network request.
     pub fn check(&self, req: &Request<'_>) -> Decision {
+        self.check_with_method(req, "get")
+    }
+    /// Native adapters supply the original HTTP method so `$method` rules can match correctly.
+    pub fn check_with_method(&self, req: &Request<'_>, method: &str) -> Decision {
         if !self.enabled() || self.site_disabled(req.source_url) {
             return Decision::Allow;
         }
@@ -644,7 +719,7 @@ impl Blocker {
             req.url,
             req.source_url,
             req.resource_type.engine_name(),
-            "get",
+            method,
         ) {
             Ok(v) => v,
             Err(_) => return Decision::Allow,
@@ -674,6 +749,14 @@ impl Blocker {
     /// Only the destination URL is parsed on this path; the source host and site exception key
     /// are reused. Rebuild locks are never held while the engine matches.
     pub fn check_with_page_context(&self, req: &Request<'_>, page: &PageContext) -> Decision {
+        self.check_with_page_context_and_method(req, page, "get")
+    }
+    pub fn check_with_page_context_and_method(
+        &self,
+        req: &Request<'_>,
+        page: &PageContext,
+        method: &str,
+    ) -> Decision {
         if !self.enabled()
             || page
                 .site_key
@@ -693,7 +776,7 @@ impl Blocker {
             &page.source_hostname,
             req.resource_type.engine_name(),
             is_third_party,
-            "get",
+            method,
         );
         let compiled = self.inner.compiled.read().clone();
         self.check_parsed(&compiled, parsed)
@@ -810,7 +893,7 @@ impl Blocker {
         {
             js.push_str("\n(()=>{const css=");
             js.push_str(&css_json);
-            js.push_str(";if(css){const s=document.createElement('style');s.textContent=css;(document.head||document.documentElement).appendChild(s);}");
+            js.push_str(";if(css){const install=()=>{const root=document.head||document.documentElement;if(!root)return;const s=document.createElement('style');s.textContent=css;root.appendChild(s)};if(document.head||document.documentElement)install();else document.addEventListener('DOMContentLoaded',install,{once:true});}");
             if !procedural_actions.is_empty() {
                 js.push_str(
                     "globalThis.__athanorApplyProcedural&&globalThis.__athanorApplyProcedural(",

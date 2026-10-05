@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import type * as React from 'react'
-import { Toaster, toast } from 'sonner'
+import { toast } from 'sonner'
 import { DndContext, DragOverlay } from '@dnd-kit/core'
 import { ArrowLeft, ArrowRight, Command as CommandIcon, Plus, ShieldCheck } from 'lucide-react'
 import { AnimatePresence } from 'motion/react'
@@ -11,7 +11,6 @@ import { useAppStore, bootStore } from './lib/store'
 import { shortcutFromKeyboard, normalizeShortcut } from './lib/shortcuts'
 import { dividerRatioAt } from './lib/splitMath'
 import { useAnyOverlay, useOverlay, useOverlayStore } from './lib/overlay'
-import { isDarkTheme } from './lib/theme'
 import { mockPageContextMenu } from './lib/mock/backend'
 import type { PageContextMenu, PanelInfo, Rect, Snapshot, SplitNode, SplitRects, Tab } from './lib/types'
 import { cn } from './lib/utils'
@@ -29,6 +28,9 @@ import { useCover, useThumbnailCapture } from './lib/thumbs'
 import { TabOverview } from './components/TabOverview'
 import { FindBar } from './components/FindBar'
 import { NativeUi } from './components/NativeUi'
+import { Downloads } from './components/Downloads'
+import { Passwords } from './components/Passwords'
+import { NotificationHost, NotificationCenter } from './components/Notifications'
 import { ShortcutSheet } from './components/ShortcutSheet'
 import { canonicalShortcut, shortcutOwner } from './lib/shortcuts'
 import { TabSwitcher } from './components/TabSwitcher'
@@ -105,6 +107,7 @@ function useFreezeFrames(targets: () => { tab: string; rect: Rect }[]) {
 export function App() {
   const snapshot = useAppStore((s) => s.snapshot)
   const ready = useAppStore((s) => s.ready)
+  const bootError = useAppStore((s) => s.bootError)
   const panels = useAppStore((s) => s.panels)
   const extensionCommands = useAppStore((s) => s.commands)
   const servers = useAppStore((s) => s.servers)
@@ -118,6 +121,11 @@ export function App() {
   const openBar = useCallback((mode: BarMode = 'navigate', seed = '') => setBar({ open: true, mode, seed }), [])
   const [devOpen, setDevOpen] = useState(false)
   const [tour, setTour] = useState(false)
+  const [downloadsOpen, setDownloadsOpen] = useState(false)
+  const openDownloads = useCallback(() => setDownloadsOpen(true), [])
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [passwordsOpen, setPasswordsOpen] = useState(false)
+  const [notificationHeight, setNotificationHeight] = useState(0)
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const [splitRects, setSplitRects] = useState<SplitRects | null>(null)
   const [pageMenu, setPageMenu] = useState<{ request: PageContextMenu; anchor: { x: number; y: number } } | null>(null)
@@ -222,6 +230,7 @@ export function App() {
     else if (combo === 'Ctrl+/') setSheetOpen((value) => !value)
     else if (combo === 'Ctrl+Space') setOverviewOpen((value) => !value)
     else if (combo === 'Ctrl+K') openBar('navigate', '')
+    else if (combo === 'Ctrl+J') setDownloadsOpen(true)
     else if (combo === 'Ctrl+T') { setScreen('browser'); openBar('new-tab', '') }
     else if (combo === 'Ctrl+W' && tab) void api.closeTab(tab.id)
     else if (combo === 'Ctrl+L') { const url = tab?.url ?? ''; openBar('navigate', url.startsWith('athanor://') ? '' : url) }
@@ -275,6 +284,9 @@ export function App() {
       const cmd = value.slice(4)
       if (cmd === 'newtab') { void api.openTab(); setPaletteOpen(false) }
       if (cmd === 'settings') { openInternalPage('settings'); setPaletteOpen(false) }
+      if (cmd === 'downloads') { setDownloadsOpen(true); setPaletteOpen(false) }
+      if (cmd === 'notifications') { setNotificationsOpen(true); setPaletteOpen(false) }
+      if (cmd === 'passwords') { setPasswordsOpen(true); setPaletteOpen(false) }
       if (cmd === 'boards') { openInternalPage('boards'); setPaletteOpen(false) }
       if (cmd === 'extensions') { openInternalPage('extensions'); setPaletteOpen(false) }
       if (cmd === 'devtools') { setDevOpen(true); setPaletteOpen(false) }
@@ -296,6 +308,7 @@ export function App() {
   const standaloneBoardWindow = screen === 'board-window'
   const splitActive = Boolean(snapshot?.workspace.split)
 
+  if (bootError) return <div className="grid h-dvh w-full place-items-center bg-background p-6 text-foreground"><div className="max-w-md rounded-xl border border-border bg-card p-6" role="alert"><h1 className="text-base font-semibold">Athanor could not open your workspace</h1><p className="text-sm text-muted-foreground">{bootError}</p><Button onClick={() => void bootStore()}>Try again</Button></div></div>
   if (!snapshot || !ready) return <div className="grid h-dvh w-full place-items-center bg-background text-foreground"><span className="grid size-10 place-items-center rounded-xl bg-primary text-primary-foreground"><AthanorMark className="size-5" /></span></div>
   const sidebarRight = snapshot.settings.sidebarSide === 'right'
   const controls = !mobile ? <WindowControls /> : undefined
@@ -307,9 +320,10 @@ export function App() {
     <div className={cn('app-shell ath-chrome flex h-dvh w-full min-h-0 text-foreground', mobile && 'mobile-shell flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]', !mobile && sidebarRight && 'flex-row-reverse', standaloneBoardWindow && 'standalone-board-shell')} data-part="shell" data-side={snapshot.settings.sidebarSide} data-density={density}>
       {framed && <Sidebar snapshot={snapshot} panels={panels} openPage={openInternalPage} openPanel={(selected) => { setPanel(selected); setScreen('browser') }} windowControls={controlsInSidebar ? controls : undefined} />}
       <main className={cn('main-column relative flex min-h-0 min-w-0 flex-1 flex-col', framed && (sidebarRight ? 'ps-2 pb-2' : 'pe-2 pb-2'))}>
-        {framed && <StageBar snapshot={snapshot} activeTab={activeTab} openBar={showBar} openPage={openInternalPage} toggleDev={() => setDevOpen((value) => !value)} openOverview={() => setOverviewOpen(true)} windowControls={controlsInSidebar ? undefined : controls} />}
+        {framed && <StageBar snapshot={snapshot} activeTab={activeTab} openBar={showBar} openPage={openInternalPage} toggleDev={() => setDevOpen((value) => !value)} openOverview={() => setOverviewOpen(true)} openDownloads={openDownloads} openNotifications={() => setNotificationsOpen(true)} openPasswords={() => setPasswordsOpen(true)} windowControls={controlsInSidebar ? undefined : controls} />}
         {standaloneBoardWindow && !mobile && <StandaloneTitlebar />}
         {mobile && !standaloneBoardWindow && <MobileBar snapshot={snapshot} activeTab={activeTab} openBar={showBar} openSwitcher={() => setSwitcherOpen(true)} openMenu={() => openBar('navigate', '')} openPage={openInternalPage} />}
+        {mobile && notificationHeight > 0 && <div aria-hidden="true" className="shrink-0" style={{ height: Math.max(0, notificationHeight - (document.querySelector('[data-part="toolbar"]')?.getBoundingClientRect().bottom ?? 56)) }} />}
         <AnimatePresence initial={false}>{findOpen && framed && shownTab && !internalPage && <FindBar key="find" tab={shownTab.id} url={shownTab.url} seed={findSeed} onClose={closeFind} commandRef={findCommand} />}</AnimatePresence>
         <section ref={contentRef} className={cn('content relative min-h-0 min-w-0 flex-1 overflow-hidden bg-background', mobile ? 'mobile-content' : standaloneBoardWindow ? '' : 'rounded-[var(--ath-stage-radius)] shadow-[var(--ath-stage-shadow)]')} data-part="content" data-split={String(splitActive)}>
           <div key={`${currentPage}|${panel?.id ?? ''}|${internalPage ? shownTab?.url : 'web'}`} className="absolute inset-0 animate-[ath-rise_160ms_var(--ease-snap)_both]">
@@ -343,11 +357,14 @@ export function App() {
       <PageContextMenuView request={pageMenu?.request ?? null} anchor={pageMenu?.anchor ?? null} searchEngine={snapshot.settings.searchEngine} onClose={closePageMenu} />
       <ShortcutSheet open={sheetOpen} onOpenChange={setSheetOpen} />
       {!standaloneBoardWindow && <TabOverview open={overviewOpen} onClose={() => setOverviewOpen(false)} snapshot={snapshot} />}
-      <NativeUi />
+      <NativeUi openDownloads={openDownloads} />
+      <Downloads open={downloadsOpen} onOpenChange={setDownloadsOpen} platform={snapshot.platform} />
+      <Passwords open={passwordsOpen} onOpenChange={setPasswordsOpen} activeTab={activeTab} platform={snapshot.platform} />
+      <NotificationCenter open={notificationsOpen} onOpenChange={setNotificationsOpen} />
       <DialogHost />
       <AnimatePresence>{(!snapshot.settings.onboarded || tour) && <Welcome key="welcome" snapshot={snapshot} onDone={() => { setTour(false); void api.setSettings({ onboarded: true }) }} />}</AnimatePresence>
       <DragOverlay dropAnimation={null} zIndex={80}>{draggingId ? (() => { const tab = snapshot.workspace.tabs.find((entry) => entry.id === draggingId); return tab ? <DragGhost tab={tab} /> : null })() : null}</DragOverlay>
-      <Toaster className="toast-root" position={mobile ? 'top-center' : 'bottom-right'} theme={isDarkTheme() ? 'dark' : 'light'} style={{ '--normal-bg': 'var(--popover)', '--normal-text': 'var(--popover-foreground)', '--normal-border': 'var(--border)', '--border-radius': 'var(--radius)', fontFamily: 'var(--font-ui)' } as React.CSSProperties} />
+      <NotificationHost snapshot={snapshot} native={!isMock && snapshot.platform === 'windows' && !standaloneBoardWindow} suppressed={overlayOpen} onMobileHeight={mobile ? setNotificationHeight : undefined} />
     </div>
   </DndContext></TooltipProvider>
 }

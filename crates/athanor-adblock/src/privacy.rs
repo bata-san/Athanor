@@ -3,8 +3,37 @@
 use std::net::IpAddr;
 use url::Url;
 
+/// Signed asset URLs and identity/challenge flows must retain their original query and request context.
+pub fn is_sensitive_navigation(input: &str) -> bool {
+    let Ok(url) = Url::parse(input) else {
+        return false;
+    };
+    url.path().contains("/cdn-cgi/")
+        || url.query_pairs().any(|(key, _)| {
+            let key = key.to_ascii_lowercase();
+            key.starts_with("x-amz-")
+                || key.starts_with("x-goog-")
+                || key.starts_with("__cf_chl")
+                || matches!(
+                    key.as_str(),
+                    "signature"
+                        | "sig"
+                        | "policy"
+                        | "key-pair-id"
+                        | "oauth_token"
+                        | "code"
+                        | "state"
+                        | "samlrequest"
+                        | "samlresponse"
+                )
+        })
+}
+
 /// Remove known tracking query parameters, preserving every other raw parameter and its order.
 pub fn strip_tracking_params(input: &str) -> Option<String> {
+    if is_sensitive_navigation(input) {
+        return None;
+    }
     let (before_fragment, fragment) = input
         .split_once('#')
         .map_or((input, ""), |(a, _)| (a, &input[a.len()..]));

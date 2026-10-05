@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capabilities for the Athanor shell UI and board windows. Web pages opened in tabs get none.",
-  "windows": ["main", "board-*"],
-  "webviews": ["shell", "board-*"],
+  "windows": ["board-*"],
+  "webviews": ["shell", "board-*", "notifications"],
   "permissions": ["core:default"]
 }

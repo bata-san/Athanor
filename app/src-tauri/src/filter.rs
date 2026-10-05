@@ -178,28 +178,43 @@ impl Filter {
                             .is_none_or(|t| now_secs().saturating_sub(t) > STALE_AFTER_SECS)
                 });
                 if stale {
-                    this.update_blocking();
-                    notify();
+                    this.update_blocking(|| notify());
                 }
             })
             .ok();
     }
 
     /// Download all enabled lists (blocking) and rebuild the engine.
-    pub fn update_blocking(&self) {
+    pub fn update_blocking(&self, notify: impl Fn()) {
         if self.updating.swap(true, Ordering::AcqRel) {
             return;
         }
+        notify();
         for r in self.blocker.update_lists(false) {
             if let Some(e) = r.error {
                 log::warn!("adblock list {}: {e}", r.id);
             }
         }
         self.updating.store(false, Ordering::Release);
+        notify();
     }
 
     pub fn is_updating(&self) -> bool {
         self.updating.load(Ordering::Acquire)
+    }
+
+    pub fn update_one_blocking(&self, id: &str, notify: impl Fn()) {
+        if self.updating.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        notify();
+        for report in self.blocker.update_list(id) {
+            if let Some(error) = report.error {
+                log::warn!("adblock list {}: {error}", report.id);
+            }
+        }
+        self.updating.store(false, Ordering::Release);
+        notify();
     }
 
     pub fn rebuild(&self) {
@@ -224,7 +239,13 @@ impl Filter {
             resource_type: kind.into(),
         }) {
             Decision::Allow => DetailedVerdict::Allow,
-            Decision::Rewrite(url) => DetailedVerdict::Rewrite { url },
+            Decision::Rewrite(rewritten) => {
+                if privacy::is_sensitive_navigation(url) {
+                    DetailedVerdict::Allow
+                } else {
+                    DetailedVerdict::Rewrite { url: rewritten }
+                }
+            }
             Decision::Block { .. } => DetailedVerdict::Block,
             Decision::Redirect { to } => data_url(&to)
                 .map_or(DetailedVerdict::Block, |(mime, body)| {
@@ -245,16 +266,33 @@ impl Filter {
         page: &PageContext,
         kind: Kind,
     ) -> DetailedVerdict {
-        match self.blocker.check_with_page_context(
+        self.verdict_with_page_context_and_method(url, page, kind, "get")
+    }
+
+    pub fn verdict_with_page_context_and_method(
+        &self,
+        url: &str,
+        page: &PageContext,
+        kind: Kind,
+        method: &str,
+    ) -> DetailedVerdict {
+        match self.blocker.check_with_page_context_and_method(
             &Request {
                 url,
                 source_url: page.source_url(),
                 resource_type: kind.into(),
             },
             page,
+            method,
         ) {
             Decision::Allow => DetailedVerdict::Allow,
-            Decision::Rewrite(url) => DetailedVerdict::Rewrite { url },
+            Decision::Rewrite(rewritten) => {
+                if !method.eq_ignore_ascii_case("get") || privacy::is_sensitive_navigation(url) {
+                    DetailedVerdict::Allow
+                } else {
+                    DetailedVerdict::Rewrite { url: rewritten }
+                }
+            }
             Decision::Block { .. } => DetailedVerdict::Block,
             Decision::Redirect { to } => data_url(&to)
                 .map_or(DetailedVerdict::Block, |(mime, body)| {
@@ -411,6 +449,17 @@ impl Filter {
     /// If the main-frame navigation to `url` should be rewritten (tracking-parameter stripping, https upgrade).
     pub fn rewrite_navigation(&self, url: &str) -> Option<String> {
         if !self.blocker.enabled() {
+            return None;
+        }
+        // Site-level recovery must cover URL transformations as well as request and cosmetic filtering.
+        let host = url::Url::parse(url)
+            .ok()
+            .and_then(|u| u.host_str().map(str::to_owned));
+        if host
+            .as_deref()
+            .is_some_and(|host| self.blocker.site_disabled(host))
+            || privacy::is_sensitive_navigation(url)
+        {
             return None;
         }
         let mut cur = url.to_string();

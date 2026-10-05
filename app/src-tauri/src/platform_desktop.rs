@@ -35,6 +35,15 @@ pub fn init(
     });
     #[cfg(not(windows))]
     let _ = shell;
+    let notification_app = app.handle().clone();
+    window.on_window_event(move |event| {
+        if matches!(
+            event,
+            tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. }
+        ) {
+            crate::notifications::resize(&notification_app);
+        }
+    });
     let engine = Arc::new(DesktopEngine::new(app.handle(), window, filter.clone()));
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     engine.set_sink(Arc::new(move |ev| {

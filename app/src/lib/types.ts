@@ -5,12 +5,13 @@ export interface Space { id: Id; name: string; icon: string; color: string; them
 export type SplitNode = { kind: 'leaf'; tab: Id } | { kind: 'split'; dir: 'row' | 'column'; ratio: number; a: SplitNode; b: SplitNode }
 export interface SplitState { root: SplitNode; focused: Id }
 export interface Workspace { spaces: Space[]; folders: Folder[]; tabs: Tab[]; activeSpace: Id; activeTab: Id | null; split: SplitState | null }
-export interface TabRuntime { loading: boolean; canGoBack: boolean; canGoForward: boolean; blocked: number; audible: boolean; secure: boolean }
+export interface TabRuntime { loading: boolean; canGoBack: boolean; canGoForward: boolean; blocked: number; audible: boolean; secure: boolean; failed?: boolean }
 export interface Settings { searchEngine: string; archiveAfterHours: number; httpsUpgrade: boolean; stripTracking: boolean; autoFile: boolean; restoreSession: boolean; sidebarSide: 'left' | 'right'; sidebarCompact: boolean; sidebarWidth: number; theme: string; adblockEnabled: boolean; homepage: string; youtubeAdSkip: boolean; blockDrm: boolean; onboarded: boolean; webFont: boolean; autoUpdate: boolean; siteZoom: Record<string, number>; sitePermissions: Record<string, boolean>; uiScale: number; reduceMotion: boolean; highContrast: boolean }
 export interface NavHistory { tab: Id; current: number; entries: { id: number; url: string; title: string }[] }
 export interface ScriptDialogEvent { type: 'scriptDialog'; tab: Id; kind: 'alert' | 'confirm' | 'prompt' | 'beforeunload'; message: string; defaultText: string; origin: string }
 export interface PermissionPrompt { tab: Id; id: number; origin: string; kind: string; host: string }
-export interface DownloadEvent { type: 'download'; tab: Id; id: number; name: string; path: string; state: 'started' | 'progress' | 'done' | 'failed' | 'cancelled'; received: number; total: number }
+export interface DownloadEvent { type: 'download'; tab: Id; id: number; name: string; path: string; state: 'started' | 'progress' | 'paused' | 'done' | 'failed' | 'cancelled'; received: number; total: number; error?: string | null; canResume?: boolean }
+export type Download = Omit<DownloadEvent, 'type'>
 export interface StatusTextEvent { type: 'statusText'; tab: Id; text: string }
 export interface UpdateInfo { version: string; current: string; notes: string | null; downloaded: boolean }
 export interface FilingRule { id: string; folder: string; host: string | null; pathPrefix: string | null; titleContains: string | null; enabled: boolean }
@@ -35,6 +36,9 @@ export interface Board { id: Id; name: string; items: BoardItem[]; view: { x: nu
 
 export interface SplitArgs { tab: Id; dir: 'row' | 'column'; newFirst?: boolean }
 export interface CommandArgs {
+  password_list: Record<string, never>; password_import: Record<string, never>; password_remove: { id: string }; password_fill: { id: string; tab: Id };
+  get_downloads: Record<string, never>; control_download: { id: number; action: 'pause' | 'resume' | 'cancel' };
+  page_media: { tab: Id; action: 'state' | 'toggle-play' };
   get_snapshot: Record<string, never>; get_shell_css: Record<string, never>; list_themes: Record<string, never>; set_theme: { id: string }; set_space_theme: { space: Id; theme: string | null };
   get_panels: Record<string, never>; get_commands: Record<string, never>; run_extension_command: { ext: string; id: string }; extension_rpc: { ext: string; method: string; params: unknown };
   open_tab: { url?: string; parent?: Id; folder?: Id; space?: Id; background?: boolean; pinned?: boolean }; navigate: { tab: Id; input: string }; activate_tab: { tab: Id }; close_tab: { tab: Id }; duplicate_tab: { tab: Id }; reload: { tab: Id }; stop: { tab: Id }; go_back: { tab: Id }; go_forward: { tab: Id }; set_pinned: { tab: Id; pinned: boolean }; set_muted: { tab: Id; muted: boolean }; move_tab: { tab: Id; space?: Id; folder?: Id | null; before?: Id | null; pinned?: boolean }; close_other_tabs: { tab: Id }; close_tabs_below: { tab: Id }; restore_tab: { tab: Id }; copy_url: { tab: Id };
@@ -63,3 +67,9 @@ export type ImportSource = { kind: 'browser'; browser: string; profile: string }
 export interface ImportRequest { source: ImportSource; bookmarks: boolean; history: boolean }
 export interface ImportReport { bookmarks: number; folders: number; history: number; skipped: number; space: Id | null; warnings: string[] }
 export interface CommandResult { auto_file_all: { tabs: number; folders: number; undo: number }; undo_file_all: number }
+export interface CommandResult { get_downloads: Download[] }
+export interface MediaState { available: boolean; paused?: boolean; ended?: boolean; error?: string | null }
+export interface CommandResult { page_media: MediaState }
+export interface PasswordInfo { id: string; origin: string; username: string }
+export interface PasswordImport { imported: number; updated: number; skipped: number }
+export interface CommandResult { password_list: PasswordInfo[]; password_import: PasswordImport | null }

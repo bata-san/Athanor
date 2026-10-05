@@ -27,7 +27,29 @@ shield, *My filters*). Automated end-to-end check: [`e2e/`](e2e/README.md).
 
 Not finished yet (contributions welcome): Brave-style privacy hardening (GPC/referrer trimming, fingerprint
 farbling, third-party storage), element picker / zapper, uBO-style dynamic filtering matrix, loading unpacked
-Chrome extensions, Android generic-cosmetic parity and release signing, downloads UI.
+Chrome extensions, Android generic-cosmetic parity and release signing.
+
+### Reliability and contextual toolbar changes
+
+The existing shadcn components and theme tokens are retained. The toolbar adds active download progress
+and pause/resume, and shows playback controls when the selected page has a media player. Downloads has
+a session history, cancellation, resumable interruptions, and actionable failure descriptions. Windows
+notifications render in a transparent native child view above page webviews; recent messages are also
+available from More → Notifications.
+
+Chrome, Edge and Firefox bookmarks/history use the existing browser importer. More → Passwords imports
+their exported password CSVs on Windows, encrypts stored values with user-scoped DPAPI, and fills only
+the matching origin without submitting the login form. Delete the readable export after importing it.
+
+Shield uses Brave's `adblock-rust` engine, Brave filter/resource subscriptions, cosmetic filtering,
+procedural filters, scriptlets, redirects and HTTP-method-aware request matching. This is content
+blocking integration; Brave's fingerprint farbling and Chromium privacy changes remain separate work.
+280blocker is an optional personal-use subscription under Settings → Privacy. It downloads the official
+monthly ABP list directly; Athanor never bundles or redistributes its rules. See the
+[publisher's terms](https://280blocker.net/download/). Failed updates retain previously cached rules.
+
+These changes require a fresh application build. Real-site playback and native runtime behavior have
+not yet been verified for this revision.
 
 ## Architecture in one picture
 

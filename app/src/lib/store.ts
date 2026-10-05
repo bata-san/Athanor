@@ -6,26 +6,42 @@ import { isMockMode, mockGetPlatformFromUrl, mockThemeDark } from './mock/backen
 import { applyShellCss } from './theme'
 
 interface AppState {
-  snapshot: Snapshot | null; panels: PanelInfo[]; commands: CommandInfo[]; servers: DevServer[]; adblock: AdblockStatus | null; isMock: boolean; ready: boolean
+  snapshot: Snapshot | null; panels: PanelInfo[]; commands: CommandInfo[]; servers: DevServer[]; adblock: AdblockStatus | null; isMock: boolean; ready: boolean; bootError: string | null
   setSnapshot: (snapshot: Snapshot) => void; setPanels: (panels: PanelInfo[]) => void; setCommands: (commands: CommandInfo[]) => void; setServers: (servers: DevServer[]) => void; setAdblock: (adblock: AdblockStatus) => void
 }
-export const useAppStore = create<AppState>((set) => ({ snapshot: null, panels: [], commands: [], servers: [], adblock: null, isMock: isMockMode(), ready: false,
+export const useAppStore = create<AppState>((set) => ({ snapshot: null, panels: [], commands: [], servers: [], adblock: null, isMock: isMockMode(), ready: false, bootError: null,
   setSnapshot: (snapshot) => set({ snapshot }), setPanels: (panels) => set({ panels }), setCommands: (commands) => set({ commands }), setServers: (servers) => set({ servers }), setAdblock: (adblock) => set({ adblock }),
 }))
 
 let bootPromise: Promise<void> | null = null
+let subscriptions: Promise<unknown> | null = null
+let snapshotRevision = 0
 export function bootStore() {
   if (bootPromise) return bootPromise
   bootPromise = (async () => {
+    useAppStore.setState({ ready: false, bootError: null })
     try {
-      const [snapshot, panels, commands, servers, adblock] = await Promise.all([api.getSnapshot(), api.getPanels(), api.getCommands(), api.listDevServers(), api.getAdblockStatus()])
+      subscriptions ??= Promise.allSettled([
+        listen('athanor://snapshot', (snapshot) => { snapshotRevision++; useAppStore.getState().setSnapshot(snapshot) }),
+        listen('athanor://adblock', (status) => useAppStore.getState().setAdblock(status)),
+        listen('athanor://shell-css', (css) => applyShellCss(css, mockThemeDark(useAppStore.getState().snapshot?.settings.theme))),
+      ]).then((results) => {
+        const failure = results.find((result) => result.status === 'rejected')
+        if (failure?.status === 'rejected') {
+          for (const result of results) if (result.status === 'fulfilled') result.value()
+          subscriptions = null
+          throw failure.reason
+        }
+      })
+      await subscriptions
+      const revision = snapshotRevision
+      const [snapshot, css, optional] = await Promise.all([api.getSnapshot(), api.getShellCss(), Promise.allSettled([api.getPanels(), api.getCommands(), api.listDevServers(), api.getAdblockStatus()])])
       const forced = mockGetPlatformFromUrl()
-      useAppStore.setState({ snapshot: forced ? { ...snapshot, platform: forced } : snapshot, panels, commands, servers, adblock, ready: true })
-      applyShellCss(await api.getShellCss(), mockThemeDark(snapshot.settings.theme))
-    } catch (error) { console.error('Athanor shell bootstrap failed', error); useAppStore.setState({ ready: true }) }
-    void listen('athanor://snapshot', (snapshot) => useAppStore.getState().setSnapshot(snapshot))
-    void listen('athanor://adblock', (status) => useAppStore.getState().setAdblock(status))
-    void listen('athanor://shell-css', (css) => applyShellCss(css, mockThemeDark(useAppStore.getState().snapshot?.settings.theme)))
+      const [panels, commands, servers, adblock] = optional
+      const current = revision === snapshotRevision ? snapshot : useAppStore.getState().snapshot ?? snapshot
+      applyShellCss(css, mockThemeDark(current.settings.theme))
+      useAppStore.setState({ snapshot: forced ? { ...current, platform: forced } : current, panels: panels.status === 'fulfilled' ? panels.value : [], commands: commands.status === 'fulfilled' ? commands.value : [], servers: servers.status === 'fulfilled' ? servers.value : [], adblock: useAppStore.getState().adblock ?? (adblock.status === 'fulfilled' ? adblock.value : null), ready: true })
+    } catch (error) { console.error('Athanor shell bootstrap failed', error); useAppStore.setState({ ready: true, bootError: String(error) }); bootPromise = null }
   })()
   return bootPromise
 }

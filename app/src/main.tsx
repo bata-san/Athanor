@@ -2,6 +2,7 @@ import React, { useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import { LazyMotion, MotionConfig, domMax } from 'motion/react'
 import { App } from './App'
+import { NotificationSurface } from './components/Notifications'
 import { useAppStore } from './lib/store'
 import './styles/app.css'
 
@@ -19,7 +20,7 @@ function Root() {
     if (reduce) root.dataset.reduceMotion = 'true'; else delete root.dataset.reduceMotion
     if (contrast) root.dataset.contrast = 'high'; else delete root.dataset.contrast
   }, [scale, reduce, contrast])
-  return <MotionConfig reducedMotion={reduce ? 'always' : 'user'}><App /></MotionConfig>
+  return <MotionConfig reducedMotion={reduce ? 'always' : 'user'}>{window.location.hash === '#/notifications' ? <NotificationSurface /> : <App />}</MotionConfig>
 }
 
 createRoot(document.getElementById('root')!).render(<React.StrictMode><LazyMotion features={domMax} strict><Root /></LazyMotion></React.StrictMode>)

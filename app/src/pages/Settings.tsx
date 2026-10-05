@@ -79,7 +79,10 @@ export default function SettingsPage() {
   useEffect(() => { if (snapshot) setRules(snapshot.filingRules) }, [snapshot?.filingRules])
   // The lists are refreshed in the background, so the result is read off the status the backend sends back.
   useEffect(() => {
-    if (updatingLists.current && !adblock?.updating) setListStatus('Filter lists updated')
+    if (updatingLists.current && !adblock?.updating) {
+      const failures = adblock?.lists.filter((list) => list.enabled && list.error) ?? []
+      setListStatus(failures.length ? `${failures.length} lists could not update. Previous rules are kept; see details below.` : 'Filter lists updated')
+    }
     updatingLists.current = Boolean(adblock?.updating)
   }, [adblock?.updating, adblock?.lists])
   // A rule that was just added takes the caret, so reading and typing carry on where the button left off.
@@ -196,8 +199,8 @@ export default function SettingsPage() {
               <h3 className="mb-2 text-[0.8667rem] font-medium text-muted-foreground">Filter lists</h3>
               <div className="divide-y divide-border">
                 {(adblock?.lists ?? []).map((list) => <div className="flex min-h-11 items-center justify-between gap-4 py-2 max-sm:items-start" key={list.id}>
-                  <div className="min-w-0"><p className="m-0 text-sm font-medium">{list.name}</p><p className="m-0 mt-0.5 text-[0.8667rem] text-muted-foreground">{list.ruleCount.toLocaleString()} rules · {list.updatedAt ? `Updated ${new Date(list.updatedAt).toLocaleDateString()}` : 'Not updated'}{list.error ? ` · ${list.error}` : ''}</p></div>
-                  <TouchSwitch label={`${list.name} filter list`} checked={list.enabled} onCheckedChange={(enabled) => void api.setAdblockListEnabled(list.id, enabled)} />
+                  <div className="min-w-0"><p className="m-0 text-sm font-medium">{list.name}</p><p className="m-0 mt-0.5 text-[0.8667rem] text-muted-foreground">{list.ruleCount.toLocaleString()} rules · {list.updatedAt ? `Updated ${new Date(list.updatedAt).toLocaleDateString()}` : 'Not updated'}{list.error ? ` · ${list.error}` : ''}</p>{list.id === '280blocker' && <p className="m-0 mt-1 text-xs text-muted-foreground">Enabling downloads the official monthly list for personal use. Commercial use and redistribution are prohibited. <a className="underline" href="https://280blocker.net/download/" target="_blank" rel="noreferrer">Publisher's terms</a></p>}</div>
+                  <TouchSwitch label={`${list.name} filter list`} checked={list.enabled} disabled={adblock?.updating} onCheckedChange={(enabled) => void api.setAdblockListEnabled(list.id, enabled).catch((error) => setListStatus(String(error)))} />
                 </div>)}
                 {adblock?.lists.length === 0 && <p className="m-0 py-2 text-[0.8667rem] text-muted-foreground">No filter lists are available.</p>}
               </div>
@@ -207,7 +210,7 @@ export default function SettingsPage() {
             <MyFiltersEditor />
           </Section>
           <Section title="Protection preferences">
-            <Row title="Skip YouTube ads" description="Removes ad data, hides ad slots and fast-forwards any ad that still plays. Applies to pages you open next.">
+            <Row title="Skip YouTube ads" description="Removes ad data and uses available skip buttons. Reload an open YouTube page after changing this setting.">
               <TouchSwitch label="Skip YouTube ads" checked={settings.youtubeAdSkip} onCheckedChange={(youtubeAdSkip) => patch({ youtubeAdSkip })} />
             </Row>
             <Row title="Turn off DRM" description="Tells sites that encrypted media (Widevine) is unavailable, so protected video will not play. Applies to pages you open next.">
@@ -374,8 +377,8 @@ function MyFiltersEditor() {
 }
 
 /** A switch sized for touch; the name lives on the switch itself, so the wrapper only pads the target. */
-function TouchSwitch({ label, checked, onCheckedChange }: { label: string; checked: boolean; onCheckedChange: (checked: boolean) => void }) {
-  return <div className="grid place-items-center max-md:size-11"><Switch aria-label={label} checked={checked} onCheckedChange={onCheckedChange} /></div>
+function TouchSwitch({ label, checked, disabled, onCheckedChange }: { label: string; checked: boolean; disabled?: boolean; onCheckedChange: (checked: boolean) => void }) {
+  return <div className="grid place-items-center max-md:size-11"><Switch aria-label={label} checked={checked} disabled={disabled} onCheckedChange={onCheckedChange} /></div>
 }
 
 function SettingsExtensionRow({ extension, onRefresh }: { extension: ExtensionInfo; onRefresh: () => void }) {

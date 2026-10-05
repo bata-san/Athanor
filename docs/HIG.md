@@ -1,5 +1,25 @@
 # Apple's Human Interface Guidelines, applied
 
+## Reliability review (2026-10-05)
+
+The [progress guidance](https://developer.apple.com/design/human-interface-guidelines/progress-indicators?changes=_4_6)
+informs the persistent toolbar transfer indicator: report a percentage only when the total is known;
+otherwise show an indeterminate indicator with received bytes. Keep the same location through progress,
+pause and interruption, with explicit actions. Import no longer claims fictional processing stages based on a timer.
+
+The [notification guidance](https://developer.apple.com/design/human-interface-guidelines/notifications?changes=_4)
+informs brief contextual messages with meaningful recovery actions. Transfers update the toolbar rather than
+creating a toast for every progress event. On Windows a transparent native child view solves the stacking
+problem between DOM notifications and native page webviews. Notifications can also be read in a session history.
+
+The [Touch Bar's contextual controls](https://developer.apple.com/documentation/appkit/nstouchbar)
+inform the toolbar behavior: selected-page media controls and active-transfer controls appear when relevant.
+Navigation, the address field, split view and overview retain their established positions and shadcn primitives.
+Playback changes only in response to a user's action. Protection never seeks, speeds up or mutes the shared
+YouTube video element to skip an ad. Full runtime validation of this revision remains outstanding.
+
+---
+
 Athanor is not a clone of an Apple app, but it borrows Apple's habits of care. This page records which guidance from the
 [Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines) we followed and where it lives
 in the code, so later changes keep the spirit. (Pages read: Motion, Accessibility, Feedback, Loading, Menus, Context menus,
@@ -26,7 +46,7 @@ Toolbars, Sidebars, Buttons, Layout, Materials, Color, Typography, Windows, Sear
 
 ## Feedback
 
-* Status is shown where it belongs: loading as a hairline along the address pill, blocked trackers in the pill, zoom as a badge, the link under the pointer in the pill, downloads as a toast with *Show in folder*.
+* Status is shown where it belongs: loading as a hairline along the address pill, blocked trackers in the pill, zoom as a badge, and the link under the pointer in the pill. Active downloads show their filename, received bytes or percentage, progress, and pause/resume control in the toolbar. Clicking this activity opens Downloads (`Ctrl+J`), including interrupted transfers and recovery actions.
 * **Undo instead of confirm** for cheap, reversible things: closing a tab (or several) shows *Closed "title" - Undo* for 7 s. Confirmations are kept for deleting a folder, a space or a board.
 * Alerts are for things that need an answer: page dialogs and permission requests.
 * When a command cannot run, say why: *Find isn't available on Athanor pages*, *Open another tab to use Split View*.

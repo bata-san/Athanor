@@ -8,6 +8,9 @@ async function call<K extends keyof CommandArgs>(name: K, args: CommandArgs[K]):
 }
 
 export const api = {
+  pageMedia: (tab: Id, action: 'state' | 'toggle-play' = 'state') => call('page_media', { tab, action }),
+  passwordList: () => call('password_list', {}), passwordImport: () => call('password_import', {}), passwordRemove: (id: string) => call('password_remove', { id }), passwordFill: (id: string, tab: Id) => call('password_fill', { id, tab }),
+  getDownloads: () => call('get_downloads', {}), controlDownload: (id: number, action: 'pause' | 'resume' | 'cancel') => call('control_download', { id, action }),
   getSnapshot: () => call('get_snapshot', {}), getShellCss: () => call('get_shell_css', {}),
   listThemes: () => call('list_themes', {}), setTheme: (id: string) => call('set_theme', { id }), setSpaceTheme: (space: Id, theme: string | null) => call('set_space_theme', { space, theme }),
   getPanels: () => call('get_panels', {}), getCommands: () => call('get_commands', {}), runExtensionCommand: (ext: string, id: string) => call('run_extension_command', { ext, id }), extensionRpc: (ext: string, method: string, params: unknown) => call('extension_rpc', { ext, method, params }),

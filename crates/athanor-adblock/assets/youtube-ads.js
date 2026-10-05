@@ -4,8 +4,8 @@
 //  1. Strip ad data from the player responses YouTube itself loads (JSON.parse, fetch/Response.json, and the
 //     initial `ytInitialPlayerResponse` global), so most ads are never scheduled.
 //  2. Hide ad containers with CSS.
-//  3. Whatever slips through: when the player enters an ad state, mute it, fast-forward it to the end and press
-//     "Skip"; restore volume/speed afterwards. Also dismisses the "ad blockers are not allowed" interstitial.
+//  3. Press a visible Skip button when available. The ad and content share a video element: changing its time,
+//     speed or mute state can seek the actual video to its end during a midroll or an SPA transition.
 // Written for this project (clean-room): no code from other blockers.
 (() => {
   'use strict';
@@ -53,7 +53,7 @@
 
   // 1c. The response embedded in the page HTML is assigned to this global.
   try {
-    let initial;
+    let initial = prune(globalThis.ytInitialPlayerResponse);
     Object.defineProperty(globalThis, 'ytInitialPlayerResponse', {
       configurable: true,
       get() { return initial; },
@@ -87,43 +87,25 @@
     '.ytp-skip-ad-button', '.ytp-ad-skip-button', '.ytp-ad-skip-button-modern', '.ytp-ad-skip-button-container button',
     '.ytp-ad-overlay-close-button', '.ytp-ad-survey-skip-button',
   ];
-  let savedRate = null;
-  let savedMuted = null;
+  const clicked = new WeakMap();
   const handleAdState = () => {
     try {
       const player = document.querySelector('.html5-video-player');
-      const video = player && (player.querySelector('video.html5-main-video') || player.querySelector('video'));
-      if (player && video) {
+      if (player) {
         const inAd = player.classList.contains('ad-showing') || player.classList.contains('ad-interrupting');
         if (inAd) {
-          if (savedRate === null) { savedRate = video.playbackRate; savedMuted = video.muted; }
-          video.muted = true;
-          try { video.playbackRate = 16; } catch (_e) { /* ignore */ }
-          if (Number.isFinite(video.duration) && video.duration > 0 && video.currentTime < video.duration - 0.1) {
-            try { video.currentTime = video.duration; } catch (_e) { /* ignore */ }
-          }
           for (const selector of SKIP_BUTTONS) {
             const button = player.querySelector(selector) || document.querySelector(selector);
-            if (button) button.click();
+            if (button && !button.disabled && button.getAttribute('aria-disabled') !== 'true'
+                && !button.hidden && (clicked.get(button) || 0) + 1000 < Date.now()) {
+              clicked.set(button, Date.now());
+              button.click();
+            }
           }
-        } else if (savedRate !== null) {
-          try { video.playbackRate = savedRate; } catch (_e) { /* ignore */ }
-          video.muted = Boolean(savedMuted);
-          savedRate = null;
-          savedMuted = null;
         }
       }
-      // "Ad blockers are not allowed" interstitial: remove it and let the video go on.
-      const enforcement = document.querySelector('ytd-enforcement-message-view-model');
-      if (enforcement) {
-        const dialog = enforcement.closest('tp-yt-paper-dialog') || enforcement;
-        dialog.remove();
-        const backdrop = document.querySelector('tp-yt-iron-overlay-backdrop');
-        if (backdrop) backdrop.remove();
-        if (document.body) document.body.style.removeProperty('overflow');
-        const main = document.querySelector('video.html5-main-video');
-        if (main && main.paused) { const play = main.play(); if (play && play.catch) play.catch(() => {}); }
-      }
+      // Keep server-side enforcement visible. Removing its dialog doesn't restore permission to play and
+      // leaves a silently paused video; the site shield gives the person a working recovery path instead.
     } catch (_e) { /* never break the page */ }
   };
   const start = () => {

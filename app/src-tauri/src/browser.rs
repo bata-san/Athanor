@@ -91,6 +91,7 @@ struct Inner {
     filing_serial: u64,
     /// The address each tab last really arrived at (a typed address that turns out to be a download is not one).
     committed: HashMap<String, String>,
+    downloads: crate::downloads::Downloads,
     /// Cookies waiting for a tab that is being recreated in the other rendering mode.
     cookie_seed: HashMap<String, String>,
     had_split: bool,
@@ -200,6 +201,7 @@ impl Browser {
             filing_undo: None,
             filing_serial: 0,
             committed: HashMap::new(),
+            downloads: Default::default(),
             cookie_seed: HashMap::new(),
             had_split: false,
         };
@@ -391,6 +393,8 @@ impl Browser {
         if let Some(id) = &plan.focus {
             let _ = self.engine.focus(id);
         }
+        #[cfg(desktop)]
+        crate::notifications::raise(&self.app);
     }
 
     fn sync(&self) {
@@ -400,6 +404,45 @@ impl Browser {
 
     // ---------- engine events ----------
 
+    pub fn downloads(&self) -> Vec<crate::downloads::Download> {
+        self.inner.lock().downloads.list()
+    }
+
+    pub fn evaluate_page(
+        &self,
+        tab: &str,
+        script: &str,
+        reply: Box<dyn FnOnce(String) + Send>,
+    ) -> Result<(), String> {
+        self.engine
+            .eval_json(tab, script, reply)
+            .map_err(|e| e.to_string())
+    }
+
+    pub fn control_download(&self, id: u32, action: &str) -> Result<(), String> {
+        let g = self.inner.lock();
+        let record = g
+            .downloads
+            .get(id)
+            .ok_or("This download is no longer available")?;
+        let allowed = match action {
+            "pause" => matches!(record.state.as_str(), "started" | "progress"),
+            "resume" => record.can_resume || record.state == "paused",
+            "cancel" => {
+                matches!(record.state.as_str(), "started" | "progress" | "paused")
+                    || record.can_resume
+            }
+            _ => false,
+        };
+        if !allowed {
+            return Err("This action is not available for this download".into());
+        }
+        drop(g);
+        self.engine
+            .control_download(id, action)
+            .map_err(|e| e.to_string())
+    }
+
     pub fn handle_event(self: &Arc<Self>, ev: EngineEvent) {
         match ev {
             EngineEvent::NavigationStarted { tab, url } => {
@@ -408,7 +451,9 @@ impl Browser {
                 }
                 let mut g = self.inner.lock();
                 // The error page is itself a navigation (to a data: document); it is not a place the tab went to.
-                if url.starts_with("data:") && g.runtime.get(&tab).is_some_and(|r| r.failed) {
+                if (url.starts_with("data:") || url == "about:blank")
+                    && g.runtime.get(&tab).is_some_and(|r| r.failed)
+                {
                     return;
                 }
                 if let Some(r) = g.runtime.get_mut(&tab) {
@@ -462,6 +507,7 @@ impl Browser {
             EngineEvent::Download {
                 ref tab, ref state, ..
             } => {
+                self.inner.lock().downloads.update(&ev);
                 if state == "started" {
                     // The address that was typed turned out to be a file: the tab stays where it was.
                     let mut g = self.inner.lock();
@@ -470,12 +516,13 @@ impl Browser {
                         if g.ws.tab(tab).is_some_and(|t| t.url != url) {
                             g.ws.update_tab(tab, Some(&url), None, None);
                         }
-                        if let Some(r) = g.runtime.get_mut(tab) {
-                            r.loading = false;
-                        }
-                        drop(g);
-                        self.changed();
                     }
+                    if let Some(r) = g.runtime.get_mut(tab) {
+                        r.loading = false;
+                        r.failed = false;
+                    }
+                    drop(g);
+                    self.changed();
                 }
                 let _ = self.app.emit("athanor://download", &ev);
             }
@@ -1069,7 +1116,7 @@ impl Browser {
             let busy: Vec<Id> = g
                 .runtime
                 .iter()
-                .filter(|(_, r)| r.audible)
+                .filter(|(tab, r)| r.audible || g.downloads.busy(tab))
                 .map(|(id, _)| id.clone())
                 .collect();
             let n = g.ws.archive_inactive(now(), ttl, &busy).len();

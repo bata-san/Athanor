@@ -127,7 +127,15 @@ pub unsafe fn show_error_page(
 /// A path next to `path` that does not exist yet (`name (1).ext`, `name (2).ext`, ...).
 fn unique_path(path: &str) -> String {
     let p = std::path::Path::new(path);
-    if !p.exists() {
+    let reserved = |candidate: &std::path::Path| {
+        DOWNLOADS.with(|downloads| {
+            downloads.borrow().values().any(|op| unsafe {
+                pw(|p| op.ResultFilePath(p))
+                    .is_ok_and(|name| std::path::Path::new(&name) == candidate)
+            })
+        })
+    };
+    if !p.exists() && !reserved(p) {
         return path.to_owned();
     }
     let (stem, ext) = (
@@ -140,11 +148,49 @@ fn unique_path(path: &str) -> String {
             None => format!("{stem} ({n})"),
         };
         let candidate = p.with_file_name(name);
-        if !candidate.exists() {
+        if !candidate.exists() && !reserved(&candidate) {
             return candidate.to_string_lossy().into_owned();
         }
     }
-    path.to_owned()
+    p.with_file_name(format!(
+        "{stem}-{}.{}",
+        NEXT_DOWNLOAD.load(Ordering::Relaxed),
+        ext.unwrap_or("bin")
+    ))
+    .to_string_lossy()
+    .into_owned()
+}
+
+/// UI thread only; resume the original operation rather than issuing a new request.
+pub fn control_download(id: u32, action: &str) -> std::result::Result<(), String> {
+    let operation = DOWNLOADS
+        .with(|d| d.borrow().get(&id).cloned())
+        .ok_or("This transfer is no longer available. Download it again from the original page.")?;
+    unsafe {
+        match action {
+            "pause" => operation.Pause(),
+            "cancel" => operation.Cancel(),
+            "resume" => {
+                let mut can = Default::default();
+                operation.CanResume(&mut can).map_err(|e| e.to_string())?;
+                if !can.as_bool() { return Err("This transfer cannot be resumed. Download it again from the original page.".into()); }
+                operation.Resume()
+            }
+            _ => return Err("Unknown download action".into()),
+        }.map_err(|e| e.to_string())
+    }
+}
+
+fn download_error(reason: COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON) -> &'static str {
+    match reason {
+        COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_FILE_NO_SPACE => "There is not enough disk space. Free up space and resume the download.",
+        COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_FILE_ACCESS_DENIED => "Athanor could not write to the download folder. Check the folder's permissions.",
+        COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_NETWORK_DISCONNECTED | COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED | COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_NETWORK_TIMEOUT => "The connection was interrupted. Check your network connection and resume if available.",
+        COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_SERVER_UNAUTHORIZED | COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_SERVER_FORBIDDEN => "The server refused this download. Sign in or request a new download link from the original page.",
+        COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_FILE_MALICIOUS | COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_FILE_BLOCKED_BY_POLICY | COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_FILE_SECURITY_CHECK_FAILED => "The download was blocked by a security check or device policy.",
+        COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_SERVER_CERTIFICATE_PROBLEM => "The download server's certificate could not be verified.",
+        _ => "The transfer could not finish. Resume if available, or download it again from the original page.",
+    }
 }
 
 /// Wire up everything above for one tab.
@@ -315,6 +361,10 @@ pub unsafe fn attach_ui(
                         let (mut received, mut total) = (0i64, 0i64);
                         let _ = operation.BytesReceived(&mut received);
                         let _ = operation.TotalBytesToReceive(&mut total);
+                        let mut can_resume = Default::default();
+                        let _ = operation.CanResume(&mut can_resume);
+                        let mut reason = COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_NONE;
+                        let _ = operation.InterruptReason(&mut reason);
                         sink(EngineEvent::Download {
                             tab: tab.clone(),
                             id,
@@ -323,6 +373,8 @@ pub unsafe fn attach_ui(
                             state: state.to_owned(),
                             received: received.max(0) as u64,
                             total: total.max(0) as u64,
+                            error: (state == "failed").then(|| download_error(reason).into()),
+                            can_resume: can_resume.as_bool(),
                         });
                     }
                 };
@@ -357,10 +409,25 @@ pub unsafe fn attach_ui(
                                     DOWNLOADS.with(|d| d.borrow_mut().remove(&id));
                                 }
                                 COREWEBVIEW2_DOWNLOAD_STATE_INTERRUPTED => {
-                                    report(&op, "failed");
-                                    DOWNLOADS.with(|d| d.borrow_mut().remove(&id));
+                                    let mut reason = COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_NONE;
+                                    let _ = op.InterruptReason(&mut reason);
+                                    let state = match reason {
+                                        COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_USER_CANCELED => {
+                                            "cancelled"
+                                        }
+                                        COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_USER_PAUSED => {
+                                            "paused"
+                                        }
+                                        _ => "failed",
+                                    };
+                                    report(&op, state);
+                                    let mut resumable = Default::default();
+                                    let _ = op.CanResume(&mut resumable);
+                                    if state == "cancelled" || !resumable.as_bool() {
+                                        DOWNLOADS.with(|d| d.borrow_mut().remove(&id));
+                                    }
                                 }
-                                _ => {}
+                                _ => report(&op, "progress"),
                             }
                         }
                         Ok(())
