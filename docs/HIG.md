@@ -1,5 +1,20 @@
 # Apple's Human Interface Guidelines, applied
 
+## Navigation hang correction (2026-10-05, v0.1.19)
+
+The official [progress indicators guidance](https://developer.apple.com/design/human-interface-guidelines/progress-indicators)
+was read again: activity indicators describe ongoing work and disappear when it ends. Native navigation
+completion now clears loading before recovery navigation and independently of history-state queries.
+The existing shadcn appearance and indicator location are unchanged.
+
+The document-request deferral introduced in v0.1.18 had no deadline and could leave navigation waiting
+for asynchronous script registration. It has been removed, together with script-registration navigation
+cancellation/replay. Scripts register without holding requests; ContentLoading remains a fallback.
+Script-ID locks are released before native COM removal calls to avoid callback reentrancy deadlocks.
+This supersedes the request-holding approach described below. Compilation and static analysis do not
+establish that Google or signed-in YouTube works in the affected running profile; runtime observation
+remains outstanding, including the timing of early YouTube protection.
+
 ## YouTube preroll correction (2026-10-05)
 
 The existing playback and shadcn interface remain unchanged. Protection must be ready before the

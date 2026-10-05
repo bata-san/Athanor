@@ -8,7 +8,7 @@
 use crate::filter::{DetailedVerdict, Filter, Kind};
 use athanor_core::engine::{ContextItem, ContextTarget, EngineEvent, EventSink};
 use parking_lot::Mutex;
-use std::{collections::HashSet, sync::Arc, time::Instant};
+use std::{sync::Arc, time::Instant};
 use webview2_com::{take_pwstr, Microsoft::Web::WebView2::Win32::*, *};
 use windows::{
     core::{Interface, HSTRING, PWSTR},
@@ -242,25 +242,27 @@ fn document_start_payload(filter: &Filter, url: &str) -> Option<String> {
     ))
 }
 
-/// Hold the original document request until script registration completes. User clicks, POSTs and
-/// redirects cannot be cancelled and replayed as GET just to install document-start protection.
-unsafe fn prepare_requested_document(
+/// Bot-check pages must retain their original requests and verification scripts.
+fn is_challenge_navigation(url: &str) -> bool {
+    url.contains("__cf_chl") || url.contains("/cdn-cgi/") || is_challenge_frame(url)
+}
+
+/// Register protection without holding a network request or cancelling/replaying navigation.
+/// Cached navigations also have a ContentLoading fallback. A delayed callback must not affect a newer page.
+unsafe fn register_document_start(
     core: &ICoreWebView2,
-    args: &ICoreWebView2WebResourceRequestedEventArgs,
     filter: &Filter,
     url: &str,
     script_ids: Arc<Mutex<Vec<String>>>,
     generation: Arc<std::sync::atomic::AtomicU64>,
 ) -> windows::core::Result<()> {
-    if is_challenge_navigation(url) {
+    if !(filter.enabled() || filter.block_drm()) || !is_web(url) || is_challenge_navigation(url) {
         return Ok(());
     }
     let Some(script) = document_start_payload(filter, url) else {
         return Ok(());
     };
     let ticket = generation.load(std::sync::atomic::Ordering::SeqCst);
-    let deferral = unsafe { args.GetDeferral()? };
-    let completion_deferral = deferral.clone();
     let cleanup_core = core.clone();
     let handler =
         AddScriptToExecuteOnDocumentCreatedCompletedHandler::create(Box::new(move |result, id| {
@@ -273,77 +275,24 @@ unsafe fn prepare_requested_document(
                     };
                 }
             } else {
-                log::warn!("document request script registration failed");
+                log::warn!("document-start script registration failed");
             }
-            // Always release the request, including errors and superseded navigations.
-            unsafe { completion_deferral.Complete() }
+            Ok(())
         }));
     if let Err(error) =
         unsafe { core.AddScriptToExecuteOnDocumentCreated(&HSTRING::from(script), &handler) }
     {
-        let _ = unsafe { deferral.Complete() };
-        log::warn!("document request script registration failed: {error}");
+        log::warn!("document-start script registration failed: {error}");
     }
     Ok(())
 }
 
-/// Bot-check pages (Cloudflare's `__cf_chl_*` / `/cdn-cgi/` flow, and the CAPTCHA hosts) verify with a form POST and
-/// a redirect back; cancelling that navigation and replaying it as a plain GET makes the check fail.
-fn is_challenge_navigation(url: &str) -> bool {
-    url.contains("__cf_chl") || url.contains("/cdn-cgi/") || is_challenge_frame(url)
-}
-
-unsafe fn register_main_document_start(
-    core: &ICoreWebView2,
-    filter: Arc<Filter>,
-    url: &str,
-    armed: Arc<Mutex<HashSet<String>>>,
-    script_ids: Arc<Mutex<Vec<String>>>,
-    generation: Arc<std::sync::atomic::AtomicU64>,
-    ticket: u64,
-) -> windows::core::Result<bool> {
-    if armed.lock().remove(url) {
-        return Ok(false);
+/// Never call COM while holding the ID lock: a synchronous call may reenter a registration callback.
+unsafe fn clear_document_scripts(core: &ICoreWebView2, script_ids: &Mutex<Vec<String>>) {
+    let ids = std::mem::take(&mut *script_ids.lock());
+    for id in ids {
+        let _ = unsafe { core.RemoveScriptToExecuteOnDocumentCreated(&HSTRING::from(id)) };
     }
-    if !(filter.enabled() || filter.block_drm()) || !is_web(url) || is_challenge_navigation(url) {
-        return Ok(false);
-    }
-    let Some(script) = document_start_payload(&filter, url) else {
-        return Ok(false);
-    };
-    let registration_core = core.clone();
-    let navigation_core = core.clone();
-    let next_url = url.to_owned();
-    let next_armed = armed.clone();
-    let handler =
-        AddScriptToExecuteOnDocumentCreatedCompletedHandler::create(Box::new(move |result, id| {
-            if generation.load(std::sync::atomic::Ordering::SeqCst) != ticket {
-                if result.is_ok() && !id.is_empty() {
-                    let _ = unsafe {
-                        navigation_core.RemoveScriptToExecuteOnDocumentCreated(&HSTRING::from(id))
-                    };
-                }
-                return Ok(());
-            }
-            if result.is_ok() && !id.is_empty() {
-                script_ids.lock().push(id);
-            }
-            if result.is_err() {
-                log::debug!("document-start script registration completed with an error");
-            }
-            next_armed.lock().insert(next_url.clone());
-            if let Err(error) = unsafe { navigation_core.Navigate(&HSTRING::from(next_url)) } {
-                log::debug!("document-start adblock re-navigation failed: {error}");
-            }
-            Ok(())
-        }));
-    if let Err(error) = unsafe {
-        registration_core.AddScriptToExecuteOnDocumentCreated(&HSTRING::from(script), &handler)
-    } {
-        log::debug!("document-start adblock registration failed: {error}");
-        return Ok(false);
-    }
-    Ok(true)
 }
 
 unsafe fn register_frame_message_handler(
@@ -416,68 +365,6 @@ unsafe fn replay_is_safe(args: &ICoreWebView2NavigationStartingEventArgs) -> boo
     true
 }
 
-unsafe fn register_frame_document_start(
-    core: ICoreWebView2,
-    frame: ICoreWebView2Frame,
-    filter: Arc<Filter>,
-    url: String,
-    armed: Arc<Mutex<HashSet<(usize, String)>>>,
-    script_ids: Arc<Mutex<Vec<String>>>,
-    generation: (Arc<std::sync::atomic::AtomicU64>, u64),
-) -> windows::core::Result<bool> {
-    let (generation, ticket) = generation;
-    let key = (frame.as_raw() as usize, url.clone());
-    if armed.lock().remove(&key) {
-        return Ok(false);
-    }
-    if !filter.enabled() || !is_web(&url) || is_challenge_frame(&url) {
-        return Ok(false);
-    }
-    let Some(script) = document_start_payload(&filter, &url) else {
-        return Ok(false);
-    };
-    let frame2 = frame.cast::<ICoreWebView2Frame2>()?;
-    let next_armed = armed.clone();
-    let script_url = url.clone();
-    let frame_for_resume = frame2.clone();
-    let resume = serde_json::to_string(&url).ok();
-    let registration_core = core.clone();
-    let handler =
-        AddScriptToExecuteOnDocumentCreatedCompletedHandler::create(Box::new(move |result, id| {
-            if generation.load(std::sync::atomic::Ordering::SeqCst) != ticket {
-                if result.is_ok() && !id.is_empty() {
-                    let _ =
-                        unsafe { core.RemoveScriptToExecuteOnDocumentCreated(&HSTRING::from(id)) };
-                }
-                return Ok(());
-            }
-            if result.is_ok() && !id.is_empty() {
-                script_ids.lock().push(id);
-            }
-            if result.is_err() {
-                log::debug!("frame document-start script registration completed with an error");
-            }
-            next_armed.lock().insert(key);
-            if let Some(url) = resume {
-                let js = format!("location.replace({url});");
-                let _ = unsafe {
-                    frame_for_resume.ExecuteScript(
-                        &HSTRING::from(js),
-                        &ExecuteScriptCompletedHandler::create(Box::new(|_, _| Ok(()))),
-                    )
-                };
-            }
-            Ok(())
-        }));
-    if let Err(error) = unsafe {
-        registration_core.AddScriptToExecuteOnDocumentCreated(&HSTRING::from(script), &handler)
-    } {
-        log::debug!("frame document-start adblock registration failed for {script_url}: {error}");
-        return Ok(false);
-    }
-    Ok(true)
-}
-
 /// Map a key press to an Athanor combo string. `None` = not ours, let the page have it.
 fn combo(vk: u32, ctrl: bool, shift: bool, alt: bool) -> Option<&'static str> {
     Some(match (vk, ctrl, shift, alt) {
@@ -539,7 +426,7 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
     )));
 
     // The small generic-cosmetic collector runs at document creation in every frame. Site
-    // resources are registered separately before each matching navigation is resumed.
+    // resources are registered without blocking or replaying the original navigation.
     if let Ok(settings) = core.Settings() {
         let _ = settings.SetIsWebMessageEnabled(true);
     }
@@ -571,10 +458,8 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
         )?;
     }
     {
-        let frame_armed = Arc::new(Mutex::new(HashSet::<(usize, String)>::new()));
         let filter_for_frames = ctx.filter.clone();
         let main_core = core.clone();
-        let frame_armed_for_events = frame_armed.clone();
         let budget_for_frames = cosmetic_budget.clone();
         if let Ok(core4) = core.cast::<ICoreWebView2_4>() {
             core4.add_FrameCreated(
@@ -591,7 +476,6 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
                     let frame2 = frame.cast::<ICoreWebView2Frame2>()?;
                     let core_for_nav = main_core.clone();
                     let filter_for_nav = filter_for_frames.clone();
-                    let armed = frame_armed_for_events.clone();
                     let script_ids = Arc::new(Mutex::new(Vec::<String>::new()));
                     let cleanup_ids = script_ids.clone();
                     let cleanup_core = main_core.clone();
@@ -599,45 +483,24 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
                     let destroy_generation = generation.clone();
                     let destroy_ids = script_ids.clone();
                     let destroy_core = main_core.clone();
-                    let destroy_armed = armed.clone();
-                    let frame_id = frame.as_raw() as usize;
                     let mut frame_token = 0i64;
                     frame2.add_NavigationStarting(
                         &FrameNavigationStartingEventHandler::create(Box::new(
                             move |sender, args| {
-                                let (Some(frame), Some(args)) = (sender, args) else {
+                                let (Some(_frame), Some(args)) = (sender, args) else {
                                     return Ok(());
                                 };
                                 let url = pw(|p| args.Uri(p))?;
-                                if !armed
-                                    .lock()
-                                    .contains(&(frame.as_raw() as usize, url.clone()))
-                                {
-                                    for id in script_ids.lock().drain(..) {
-                                        let _ = unsafe {
-                                            core_for_nav.RemoveScriptToExecuteOnDocumentCreated(
-                                                &HSTRING::from(id),
-                                            )
-                                        };
-                                    }
-                                }
-                                let ticket = generation
-                                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
-                                    + 1;
-                                if unsafe { replay_is_safe(&args) }
-                                    && unsafe {
-                                        register_frame_document_start(
-                                            core_for_nav.clone(),
-                                            frame,
-                                            filter_for_nav.clone(),
-                                            url,
-                                            armed.clone(),
-                                            script_ids.clone(),
-                                            (generation.clone(), ticket),
-                                        )?
-                                    }
-                                {
-                                    args.SetCancel(true)?;
+                                generation.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                                unsafe { clear_document_scripts(&core_for_nav, &script_ids) };
+                                unsafe {
+                                    register_document_start(
+                                        &core_for_nav,
+                                        &filter_for_nav,
+                                        &url,
+                                        script_ids.clone(),
+                                        generation.clone(),
+                                    )?;
                                 }
                                 Ok(())
                             },
@@ -646,12 +509,7 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
                     )?;
                     frame2.add_DOMContentLoaded(
                         &FrameDOMContentLoadedEventHandler::create(Box::new(move |_, _| {
-                            for id in cleanup_ids.lock().drain(..) {
-                                let _ = unsafe {
-                                    cleanup_core
-                                        .RemoveScriptToExecuteOnDocumentCreated(&HSTRING::from(id))
-                                };
-                            }
+                            unsafe { clear_document_scripts(&cleanup_core, &cleanup_ids) };
                             Ok(())
                         })),
                         &mut frame_token,
@@ -659,13 +517,7 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
                     frame.add_Destroyed(
                         &FrameDestroyedEventHandler::create(Box::new(move |_, _| {
                             destroy_generation.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                            destroy_armed.lock().retain(|(id, _)| *id != frame_id);
-                            for id in destroy_ids.lock().drain(..) {
-                                let _ = unsafe {
-                                    destroy_core
-                                        .RemoveScriptToExecuteOnDocumentCreated(&HSTRING::from(id))
-                                };
-                            }
+                            unsafe { clear_document_scripts(&destroy_core, &destroy_ids) };
                             Ok(())
                         })),
                         &mut frame_token,
@@ -752,8 +604,6 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
         );
         let page_context_for_nav = page_context.clone();
         let latest_navigation = latest_navigation.clone();
-        let start_armed = Arc::new(Mutex::new(HashSet::<String>::new()));
-        let armed = start_armed.clone();
         let script_ids = main_script_ids.clone();
         let generation = main_generation.clone();
         core.add_NavigationStarting(
@@ -762,14 +612,8 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
                     return Ok(());
                 };
                 let uri = pw(|p| args.Uri(p))?;
-                if !armed.lock().contains(&uri) {
-                    for id in script_ids.lock().drain(..) {
-                        let _ = unsafe {
-                            core.RemoveScriptToExecuteOnDocumentCreated(&HSTRING::from(id))
-                        };
-                    }
-                }
-                let ticket = generation.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+                generation.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                unsafe { clear_document_scripts(&core, &script_ids) };
                 if is_web(&uri) {
                     if unsafe { replay_is_safe(&args) } {
                         if let Some(new_uri) = filter.rewrite_navigation(&uri) {
@@ -778,21 +622,14 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
                             return Ok(());
                         }
                     }
-                    if unsafe { replay_is_safe(&args) }
-                        && unsafe {
-                            register_main_document_start(
-                                &core,
-                                filter.clone(),
-                                &uri,
-                                armed.clone(),
-                                script_ids.clone(),
-                                generation.clone(),
-                                ticket,
-                            )?
-                        }
-                    {
-                        args.SetCancel(true)?;
-                        return Ok(());
+                    unsafe {
+                        register_document_start(
+                            &core,
+                            &filter,
+                            &uri,
+                            script_ids.clone(),
+                            generation.clone(),
+                        )?;
                     }
                 }
                 let mut navigation_id = 0u64;
@@ -835,15 +672,17 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
                     if stale {
                         return Ok(());
                     }
+                    // Completion must reach the shell even if cleanup or a subsequent COM query fails.
+                    // Emit before starting any recovery navigation so its loading state can take over.
+                    sink(EngineEvent::LoadingChanged {
+                        tab: tab.clone(),
+                        loading: false,
+                    });
                     // Also clean up on downloads and failed loads, which never reach DOMContentLoaded.
                     let mut cleanup_status = COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN;
                     let _ = args.WebErrorStatus(&mut cleanup_status);
                     if cleanup_status != COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED {
-                        for id in script_ids.lock().drain(..) {
-                            let _ = unsafe {
-                                core.RemoveScriptToExecuteOnDocumentCreated(&HSTRING::from(id))
-                            };
-                        }
+                        unsafe { clear_document_scripts(core, &script_ids) };
                     }
                     if !stale && args.IsSuccess(&mut ok).is_ok() && !ok.as_bool() {
                         let failed = page_url.lock().clone();
@@ -879,17 +718,13 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
                 }
                 if let Some(core) = sender {
                     let (mut back, mut fwd) = (Default::default(), Default::default());
-                    core.CanGoBack(&mut back)?;
-                    core.CanGoForward(&mut fwd)?;
-                    sink(EngineEvent::LoadingChanged {
-                        tab: tab.clone(),
-                        loading: false,
-                    });
-                    sink(EngineEvent::HistoryChanged {
-                        tab: tab.clone(),
-                        can_go_back: back.as_bool(),
-                        can_go_forward: fwd.as_bool(),
-                    });
+                    if core.CanGoBack(&mut back).is_ok() && core.CanGoForward(&mut fwd).is_ok() {
+                        sink(EngineEvent::HistoryChanged {
+                            tab: tab.clone(),
+                            can_go_back: back.as_bool(),
+                            can_go_forward: fwd.as_bool(),
+                        });
+                    }
                 }
                 Ok(())
             })),
@@ -948,11 +783,7 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
                         if id != 0 && id != latest.load(std::sync::atomic::Ordering::SeqCst) {
                             return Ok(());
                         }
-                        for id in script_ids.lock().drain(..) {
-                            let _ = unsafe {
-                                core.RemoveScriptToExecuteOnDocumentCreated(&HSTRING::from(id))
-                            };
-                        }
+                        unsafe { clear_document_scripts(&core, &script_ids) };
                         let _ = end(&core);
                     }
                     Ok(())
@@ -1115,10 +946,8 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
             ctx.filter.clone(),
             page_context.clone(),
         );
-        let document_script_ids = main_script_ids.clone();
-        let document_generation = main_generation.clone();
         core.add_WebResourceRequested(
-            &WebResourceRequestedEventHandler::create(Box::new(move |sender, args| {
+            &WebResourceRequestedEventHandler::create(Box::new(move |_, args| {
                 let Some(args) = args else { return Ok(()) };
                 if !filter.enabled() {
                     return Ok(());
@@ -1140,20 +969,7 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
                     kind_of(rc)
                 };
                 match filter.verdict_with_page_context_and_method(&uri, &page, kind, &method.to_ascii_lowercase()) {
-                    DetailedVerdict::Allow => {
-                        if kind == Kind::Document {
-                            if let Some(core) = sender {
-                                prepare_requested_document(
-                                    &core,
-                                    &args,
-                                    &filter,
-                                    &uri,
-                                    document_script_ids.clone(),
-                                    document_generation.clone(),
-                                )?;
-                            }
-                        }
-                    }
+                    DetailedVerdict::Allow => {}
                     DetailedVerdict::Block => {
                         let body = if kind == Kind::Document {
                             Some(b"<!doctype html><meta charset=utf-8><title>Page blocked</title><main style='font:16px system-ui;max-width:38rem;margin:12vh auto;padding:24px'><h1>Page blocked by your filter lists</h1><p>To open this page, turn off protection for this site using the shield in the address bar, then reload.</p></main>".as_slice())
