@@ -378,9 +378,9 @@ unsafe fn register_frame_document_start(
     url: String,
     armed: Arc<Mutex<HashSet<(usize, String)>>>,
     script_ids: Arc<Mutex<Vec<String>>>,
-    generation: Arc<std::sync::atomic::AtomicU64>,
-    ticket: u64,
+    generation: (Arc<std::sync::atomic::AtomicU64>, u64),
 ) -> windows::core::Result<bool> {
+    let (generation, ticket) = generation;
     let key = (frame.as_raw() as usize, url.clone());
     if armed.lock().remove(&key) {
         return Ok(false);
@@ -588,8 +588,7 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
                                             url,
                                             armed.clone(),
                                             script_ids.clone(),
-                                            generation.clone(),
-                                            ticket,
+                                            (generation.clone(), ticket),
                                         )?
                                     }
                                 {

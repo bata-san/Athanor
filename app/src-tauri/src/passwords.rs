@@ -247,6 +247,6 @@ pub fn fill_script(
     let data = Zeroizing::new(serde_json::to_string(&serde_json::json!({ "origin": site, "username": entry.username, "password": entry.password })).map_err(|_| "Password could not be filled")?);
     Ok(Zeroizing::new(format!(
         r#"(()=>{{const saved={data};if(location.origin!==saved.origin)return 'wrong-site';const visible=e=>!e.disabled&&!e.readOnly&&e.getClientRects().length>0;const password=[...document.querySelectorAll('input[type=password]')].find(e=>visible(e)&&e.autocomplete!=='new-password');if(!password)return 'no-form';const form=password.form||document;const fields=[...form.querySelectorAll('input')];const user=fields.find(e=>visible(e)&&(e.autocomplete==='username'||e.type==='email'))||fields.find(e=>visible(e)&&e.type==='text');const put=(field,value)=>{{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(field,value);field.dispatchEvent(new Event('input',{{bubbles:true}}));field.dispatchEvent(new Event('change',{{bubbles:true}}))}};if(user)put(user,saved.username);put(password,saved.password);saved.password='';password.focus();return 'filled';}})()"#,
-        data = &*data
+        data = *data
     )))
 }
