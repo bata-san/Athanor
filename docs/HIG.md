@@ -1,5 +1,15 @@
 # Apple's Human Interface Guidelines, applied
 
+## YouTube preroll correction (2026-10-05)
+
+The existing playback and shadcn interface remain unchanged. Protection must be ready before the
+player consumes its first response, including link-click navigation. Windows now holds the original
+document request while registering its scripts instead of replaying a click or POST as GET. A content
+event fallback covers paths without a native request event. The YouTube handler also covers XHR JSON,
+response text, response arrays and inline player configuration, retaining existing accessors and video
+state. Syntax checks, compilation and static analysis do not establish that real-site ads are absent;
+that outcome still needs observation for the affected account and video.
+
 ## Reliability review (2026-10-05)
 
 The [progress guidance](https://developer.apple.com/design/human-interface-guidelines/progress-indicators?changes=_4_6)

@@ -242,6 +242,51 @@ fn document_start_payload(filter: &Filter, url: &str) -> Option<String> {
     ))
 }
 
+/// Hold the original document request until script registration completes. User clicks, POSTs and
+/// redirects cannot be cancelled and replayed as GET just to install document-start protection.
+unsafe fn prepare_requested_document(
+    core: &ICoreWebView2,
+    args: &ICoreWebView2WebResourceRequestedEventArgs,
+    filter: &Filter,
+    url: &str,
+    script_ids: Arc<Mutex<Vec<String>>>,
+    generation: Arc<std::sync::atomic::AtomicU64>,
+) -> windows::core::Result<()> {
+    if is_challenge_navigation(url) {
+        return Ok(());
+    }
+    let Some(script) = document_start_payload(filter, url) else {
+        return Ok(());
+    };
+    let ticket = generation.load(std::sync::atomic::Ordering::SeqCst);
+    let deferral = unsafe { args.GetDeferral()? };
+    let completion_deferral = deferral.clone();
+    let cleanup_core = core.clone();
+    let handler =
+        AddScriptToExecuteOnDocumentCreatedCompletedHandler::create(Box::new(move |result, id| {
+            if result.is_ok() && !id.is_empty() {
+                if generation.load(std::sync::atomic::Ordering::SeqCst) == ticket {
+                    script_ids.lock().push(id);
+                } else {
+                    let _ = unsafe {
+                        cleanup_core.RemoveScriptToExecuteOnDocumentCreated(&HSTRING::from(id))
+                    };
+                }
+            } else {
+                log::warn!("document request script registration failed");
+            }
+            // Always release the request, including errors and superseded navigations.
+            unsafe { completion_deferral.Complete() }
+        }));
+    if let Err(error) =
+        unsafe { core.AddScriptToExecuteOnDocumentCreated(&HSTRING::from(script), &handler) }
+    {
+        let _ = unsafe { deferral.Complete() };
+        log::warn!("document request script registration failed: {error}");
+    }
+    Ok(())
+}
+
 /// Bot-check pages (Cloudflare's `__cf_chl_*` / `/cdn-cgi/` flow, and the CAPTCHA hosts) verify with a form POST and
 /// a redirect back; cancelling that navigation and replaying it as a plain GET makes the check fail.
 fn is_challenge_navigation(url: &str) -> bool {
@@ -860,6 +905,16 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
                 if !is_web(&url) {
                     return Ok(());
                 }
+                // Cache/service-worker paths may not raise a native document request. Repair missing
+                // hooks at the first content event; the marker avoids wrapping an already protected page.
+                if phase == 0 {
+                    if let Some(js) = document_start_payload(&filter, &url) {
+                        core.ExecuteScript(
+                            &HSTRING::from(js),
+                            None::<&ICoreWebView2ExecuteScriptCompletedHandler>,
+                        )?;
+                    }
+                }
                 for js in filter.page_script_injections(&url, phase) {
                     core.ExecuteScript(
                         &HSTRING::from(js),
@@ -1060,8 +1115,10 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
             ctx.filter.clone(),
             page_context.clone(),
         );
+        let document_script_ids = main_script_ids.clone();
+        let document_generation = main_generation.clone();
         core.add_WebResourceRequested(
-            &WebResourceRequestedEventHandler::create(Box::new(move |_, args| {
+            &WebResourceRequestedEventHandler::create(Box::new(move |sender, args| {
                 let Some(args) = args else { return Ok(()) };
                 if !filter.enabled() {
                     return Ok(());
@@ -1083,7 +1140,20 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
                     kind_of(rc)
                 };
                 match filter.verdict_with_page_context_and_method(&uri, &page, kind, &method.to_ascii_lowercase()) {
-                    DetailedVerdict::Allow => {}
+                    DetailedVerdict::Allow => {
+                        if kind == Kind::Document {
+                            if let Some(core) = sender {
+                                prepare_requested_document(
+                                    &core,
+                                    &args,
+                                    &filter,
+                                    &uri,
+                                    document_script_ids.clone(),
+                                    document_generation.clone(),
+                                )?;
+                            }
+                        }
+                    }
                     DetailedVerdict::Block => {
                         let body = if kind == Kind::Document {
                             Some(b"<!doctype html><meta charset=utf-8><title>Page blocked</title><main style='font:16px system-ui;max-width:38rem;margin:12vh auto;padding:24px'><h1>Page blocked by your filter lists</h1><p>To open this page, turn off protection for this site using the shield in the address bar, then reload.</p></main>".as_slice())
