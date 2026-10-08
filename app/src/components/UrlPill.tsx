@@ -62,7 +62,7 @@ export function UrlPill({ snapshot, activeTab, onOpen, onSettings, className }: 
 
   return <Popover open={shieldOpen} onOpenChange={setShieldOpen}>
     <PopoverAnchor asChild>
-      <div className={cn('group/pill relative flex h-8 min-w-0 items-center overflow-hidden rounded-full bg-foreground/[0.055] text-[0.8333rem] shadow-[inset_0_0_0_1px_oklch(0_0_0/0.04)] transition-colors hover:bg-foreground/[0.085] max-md:h-11 dark:shadow-[inset_0_0_0_1px_oklch(1_0_0/0.05)]', className)} data-part="omnibox">
+      <div className={cn('group/pill relative flex h-8 min-w-0 items-center overflow-hidden rounded-full bg-foreground/[0.055] text-[0.8333rem] shadow-[inset_0_0_0_1px_oklch(0_0_0/0.04)] transition-colors hover:bg-foreground/[0.085] max-md:h-11 dark:shadow-[inset_0_0_0_1px_oklch(1_0_0/0.05)]', className)} data-part="omnibox" data-no-drag>
         <Tip label="Search or enter address" shortcut="Ctrl+L" side="right">
           <button type="button" className="relative flex h-full min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full px-7 outline-none focus-visible:ring-2 focus-visible:ring-ring/40" data-part="omnibox-input" aria-label="Address and search" aria-describedby={describedBy} aria-busy={loading} onClick={onOpen}>
             <Lead aria-hidden="true" className="absolute start-2 size-[0.9333rem] shrink-0 text-muted-foreground" />

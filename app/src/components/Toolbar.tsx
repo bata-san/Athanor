@@ -100,7 +100,7 @@ export function StageBar({ snapshot, activeTab, openBar, openPage, toggleDev, op
   return <div className="flex h-9 shrink-0 items-center gap-1 ps-1.5" style={{ containerType: 'inline-size', containerName: 'ath-toolbar' }} data-part="toolbar" onPointerDown={dragWindow} onDoubleClick={toggleWindow}>
     <NavCluster snapshot={snapshot} activeTab={activeTab} className="shrink-0" />
     {/* The address and what the page is doing right now share one row: the pill is the place, the hub is its live status. */}
-    <div className="flex min-w-0 flex-1 items-center justify-center gap-1.5 px-1" data-no-drag>
+    <div className="flex min-w-0 flex-1 items-center justify-center gap-1.5 px-1">
       <UrlPill snapshot={snapshot} activeTab={activeTab} onOpen={openBar} onSettings={() => openPage('settings')} className="min-w-[9rem] max-w-[44rem] flex-1" />
       <ActivityHub snapshot={snapshot} activeTab={activeTab} media={media} onOpenDownloads={openDownloads} />
     </div>
