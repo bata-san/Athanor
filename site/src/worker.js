@@ -1,10 +1,13 @@
-// Static assets serve whole files; video players (Safari in particular) need byte ranges to start and seek.
-// Only the film requests come here first: everything else is served straight from the assets binding.
+// Media requests come here first; the page itself is served straight from the assets binding.
+// - The film: static assets serve whole files, but video players (Safari in particular) need byte ranges.
+// - Anything missing under /media must not inherit the week-long cache that _headers gives media files.
 export default {
   async fetch(request, env) {
     const res = await env.ASSETS.fetch(request);
+    if (res.status !== 200) return uncached(res);
     const range = request.headers.get('Range');
-    if (!range || res.status !== 200) return withRanges(res);
+    if (!new URL(request.url).pathname.endsWith('.mp4')) return res;
+    if (!range) return withRanges(res);
     const m = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
     const body = await res.arrayBuffer();
     const size = body.byteLength;
@@ -19,6 +22,12 @@ export default {
     return new Response(request.method === 'HEAD' ? null : body.slice(start, end + 1), { status: 206, headers });
   },
 };
+
+function uncached(res) {
+  const headers = new Headers(res.headers);
+  headers.set('Cache-Control', 'no-store');
+  return new Response(res.body, { status: res.status, headers });
+}
 
 function withRanges(res) {
   const headers = new Headers(res.headers);

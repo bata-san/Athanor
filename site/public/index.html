@@ -67,6 +67,13 @@
   header .wrap { display: flex; align-items: center; gap: 28px; height: 64px; }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: -0.03em; font-size: 18px; }
   .brand img { width: 28px; height: 28px; }
+  .crumb { display: flex; align-items: center; gap: 12px; }
+  .org { display: flex; align-items: center; gap: 8px; font-weight: 600; letter-spacing: -0.02em; font-size: 16px; color: #52525b; transition: color 150ms; }
+  .org:hover { color: #09090b; }
+  .org .u-mark { width: 28px; height: auto; }
+  .crumb .slash { color: #d4d4d8; font-size: 22px; font-weight: 300; }
+  header.dark .org { color: #a1a1aa; } header.dark .org:hover { color: #fafafa; } header.dark .org .u-mark { content: url(/media/unitze-light.png); } header.dark .crumb .slash { color: #3f3f46; }
+  @media (max-width: 520px) { .org span { display: none; } }
   nav.links { display: flex; gap: 24px; font-size: 15px; color: #52525b; }
   nav.links a:hover { color: #09090b; }
   .spacer { flex: 1; }
@@ -130,7 +137,9 @@
   .row.flying { background: #fff; box-shadow: 0 0 0 1px #e4e4e7, 0 12px 24px -12px rgb(0 0 0 / 0.3); z-index: 4; }
   .row .t { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: #ebebed; color: #3f3f46; font: 600 11px/1 var(--mono); flex: none; }
   .row .count { margin-left: auto; font: 500 13px/1 var(--mono); color: #a1a1aa; transition: transform 200ms; }
-  .toast { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 8px 0 14px; border-radius: 12px; background: #fff; box-shadow: 0 0 0 1px #e4e4e7, 0 16px 34px -14px rgb(0 0 0 / 0.35); font: 500 15px/1 var(--sans); color: #18181b; white-space: nowrap; opacity: 0; }
+  .toast { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 8px 0 14px; max-width: calc(100% - 24px); border-radius: 12px; background: #fff; box-shadow: 0 0 0 1px #e4e4e7, 0 16px 34px -14px rgb(0 0 0 / 0.35); font: 500 15px/1 var(--sans); color: #18181b; white-space: nowrap; opacity: 0; }
+  .toast > span:nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .toast .ok, .toast .u { flex: none; }
   .toast .ok { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #18181b; color: #fff; }
   .toast .ok svg { width: 13px; height: 13px; }
   .toast .u { height: 30px; padding: 0 12px; border-radius: 8px; background: #18181b; color: #fafafa; font-weight: 600; font-size: 13.5px; display: inline-flex; align-items: center; }
@@ -194,6 +203,8 @@
   footer { border-top: 1px solid #e4e4e7; padding: 32px 0 48px; color: #71717a; font-size: 14px; background: #fff; }
   footer .wrap { display: flex; flex-wrap: wrap; gap: 16px 28px; align-items: center; }
   footer a:hover { color: #09090b; }
+  footer .by { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 12px; border: 1px solid #e4e4e7; border-radius: 999px; color: #52525b; }
+  footer .by img { width: 22px; height: auto; } footer .by b { color: #09090b; font-weight: 600; letter-spacing: -0.02em; }
 
   @media (prefers-reduced-motion: reduce) {
     .rv, .ln > span { transition: none !important; opacity: 1 !important; transform: none !important; }
@@ -204,7 +215,7 @@
 <body>
 <header id="top">
   <div class="wrap">
-    <a class="brand" href="#top"><img src="/media/mark-dark.svg" alt="">Athanor</a>
+    <div class="crumb"><a class="org unitze-link" href="https://unitze.net/en" aria-label="Unitze"><img class="u-mark" src="/media/unitze-dark.png" alt="" width="28" height="22"><span>Unitze</span></a><span class="slash" aria-hidden="true">/</span><a class="brand" href="#top"><img src="/media/mark-dark.svg" alt="">Athanor</a></div>
     <nav class="links"><a href="#film" data-i18n="nav.film">Film</a><a href="#features" data-i18n="nav.features">Features</a><a href="#download" data-i18n="nav.download">Download</a><a href="https://github.com/bata-san/Athanor">GitHub</a></nav>
     <span class="spacer"></span>
     <div class="lang" role="group" aria-label="Language"><button type="button" data-lang="en" aria-pressed="true">EN</button><button type="button" data-lang="ja" aria-pressed="false">日本語</button></div>
@@ -319,6 +330,7 @@
 <footer>
   <div class="wrap">
     <a class="brand" href="#top" style="font-size:15px;color:#09090b"><img src="/media/mark-dark.svg" alt="" style="width:22px;height:22px">Athanor</a>
+    <a class="by unitze-link" href="https://unitze.net/en"><span data-i18n="foot.by">A project by</span><img src="/media/unitze-dark.png" alt="" width="24" height="19"><b>Unitze</b></a>
     <span data-i18n="foot.made">Made with Rust, Tauri and shadcn/ui.</span>
     <span class="spacer"></span>
     <a href="https://github.com/bata-san/Athanor">GitHub</a><a href="https://github.com/bata-san/Athanor/releases" data-i18n="foot.releases">Releases</a><a href="https://github.com/bata-san/Athanor/blob/main/LICENSE" data-i18n="foot.license">License</a>
@@ -347,8 +359,8 @@ const T = {
     'light.eyebrow': '軽さの設計', 'light.l1': 'Chromium を同梱しない。', 'light.l2': 'タブは、<em>開いたときに読み込む。</em>', 'light.l3': '使わないタブは、<em>そっと退く。</em>',
     'get.h': 'Athanor を手に入れる。', 'get.lead': '無料のオープンソース。アップデートは署名付きで、アプリの中から。',
     'get.f1': '署名付き Windows インストーラー', 'get.f2': 'アプリ内アップデート', 'get.f3': 'Android APK（未署名）',
-    'foot.made': 'Rust、Tauri、shadcn/ui でつくっています。', 'foot.releases': 'リリース', 'foot.license': 'ライセンス',
-    'meter.loaded': '読み込み済み', 'meter.archived': 'アーカイブ', 'toast': '5 個のタブを 2 つのフォルダに整理しました', 'undo': '元に戻す',
+    'foot.made': 'Rust、Tauri、shadcn/ui でつくっています。', 'foot.by': 'つくっているのは', 'foot.releases': 'リリース', 'foot.license': 'ライセンス',
+    'meter.loaded': '読み込み済み', 'meter.archived': 'アーカイブ', 'toast': '5 個のタブを整理しました', 'undo': '元に戻す',
     'cmd.ph': '検索またはアドレスを入力…', 'cmd.web': 'Web で検索:', 'cmd.tools': '開発者ツール', 'cmd.decode': 'JWT をデコード', 'cmd.token': 'トークン', 'cmd.header': 'ヘッダー', 'cmd.payload': 'ペイロード',
     'sh.reqs': 'リクエスト', 'sh.b': 'ブロック', 'sh.a': '許可', 'rel': (v) => `最新版 ${v}`,
   },
@@ -366,6 +378,7 @@ function setLang(lang) {
     el.innerHTML = v !== undefined ? v : originals.get(el);
   });
   document.querySelectorAll('.lang button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
+  document.querySelectorAll('.unitze-link').forEach((a) => (a.href = `https://unitze.net/${lang}`));
   const v = document.getElementById('film-video'); const playing = !v.paused;
   v.poster = `/media/poster-${lang}.jpg`; const src = `/media/athanor-intro-${lang}.mp4`;
   if (!v.currentSrc.endsWith(src)) { v.querySelector('source').src = src; v.load(); if (playing) v.play().catch(() => {}); }
