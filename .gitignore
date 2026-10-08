@@ -25,4 +25,5 @@ public/fonts/
 e2e/ui/.run-*.cjs
 
 # Website film files are rendered locally (see site/README.md)
-site/media/*.mp4
+site/public/media/*.mp4
+site/.wrangler/
