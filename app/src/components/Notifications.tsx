@@ -136,10 +136,26 @@ export function NotificationSurface() {
       const height = visible.length ? Math.ceil(window.innerHeight - Math.min(...visible.map((element) => element.getBoundingClientRect().top)) + 8) : 64
       if (Math.abs(height - last) > 2) { last = height; void invoke('notification_height', { height }).catch(console.error) }
     }) }
-    const observer = new MutationObserver(measure)
+    // Sonner slides each toast with transforms that do not touch the DOM, so a reading taken once is often too low, and
+    // the view then cuts off the top of the stack. Follow the motion frame by frame while it runs, then measure once more.
+    let followUntil = 0
+    const follow = () => {
+      followUntil = Math.max(followUntil, performance.now() + 700)
+      if (followFrame) return
+      const tick = () => { measure(); followFrame = performance.now() < followUntil ? requestAnimationFrame(tick) : 0 }
+      followFrame = requestAnimationFrame(tick)
+    }
+    let followFrame = 0
+    const observer = new MutationObserver(follow)
     observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['style', 'data-expanded', 'data-visible', 'data-removed'] })
+    document.addEventListener('transitionend', follow, true)
+    document.addEventListener('animationend', follow, true)
     window.addEventListener('resize', measure)
-    return () => { observer.disconnect(); cancelAnimationFrame(frame); window.removeEventListener('resize', measure) }
+    return () => {
+      observer.disconnect(); cancelAnimationFrame(frame); cancelAnimationFrame(followFrame)
+      document.removeEventListener('transitionend', follow, true); document.removeEventListener('animationend', follow, true)
+      window.removeEventListener('resize', measure)
+    }
   }, [])
   return <StyledToaster dark={payload?.dark} />
 }
