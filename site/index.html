@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Athanor — a quiet, fast browser</title>
+<meta name="description" content="Athanor is a quiet, fast browser for people who keep a lot open. Vertical tabs, spaces and folders, a command bar, split view and built-in blocking. Free and open source for Windows and Android.">
+<meta property="og:title" content="Athanor — a quiet, fast browser">
+<meta property="og:description" content="For people who keep a lot open. Free and open source for Windows and Android.">
+<meta property="og:image" content="/media/poster-en.jpg">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#ffffff">
+<link rel="icon" href="/media/mark-dark.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=IBM+Plex+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #ffffff; --fg: #09090b; --muted: #71717a; --line: #e4e4e7; --soft: #f4f4f5; --card: #ffffff; --chip: #ffffff; --grid: rgb(9 9 11 / 0.05);
+    --sans: 'Geist', 'IBM Plex Sans JP', system-ui, sans-serif; --mono: 'Geist Mono', ui-monospace, monospace; --jp: 'IBM Plex Sans JP', 'Geist', sans-serif;
+    --ease: cubic-bezier(0.2, 0.9, 0.25, 1); --r: 16px;
+  }
+  .ink { --bg: #09090b; --fg: #fafafa; --muted: #a1a1aa; --line: rgb(255 255 255 / 0.1); --soft: rgb(255 255 255 / 0.04); --card: #111113; --chip: rgb(255 255 255 / 0.03); --grid: rgb(255 255 255 / 0.05); }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 400 17px/1.6 var(--sans); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  html[lang='ja'] body { font-family: var(--jp); }
+  a { color: inherit; text-decoration: none; }
+  img, video { display: block; max-width: 100%; }
+  .wrap { width: min(1200px, calc(100% - 32px)); margin: 0 auto; }
+  section { position: relative; background: var(--bg); color: var(--fg); }
+  .grid-bg { position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(to right, var(--grid) 1px, transparent 1px), linear-gradient(to bottom, var(--grid) 1px, transparent 1px); background-size: 72px 72px; -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 30%, transparent 85%); mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 30%, transparent 85%); }
+
+  /* shadcn-like parts */
+  .pill { display: inline-flex; align-items: center; gap: 10px; height: 36px; padding: 0 14px 0 5px; border: 1px solid var(--line); border-radius: 999px; background: var(--chip); font-size: 15px; font-weight: 500; box-shadow: 0 1px 2px rgb(0 0 0 / 0.04); }
+  @media (max-width: 420px) { .pill { font-size: 13.5px; white-space: nowrap; } }
+  .pill b { display: inline-grid; place-items: center; height: 26px; min-width: 26px; padding: 0 9px; border-radius: 999px; background: var(--fg); color: var(--bg); font: 600 12.5px/1 var(--mono); }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 48px; padding: 0 22px; border-radius: 12px; font-weight: 600; font-size: 16px; border: 1px solid transparent; transition: transform 160ms var(--ease), background 160ms, box-shadow 160ms; white-space: nowrap; }
+  .btn:active { transform: scale(0.98); }
+  .btn.primary { background: var(--fg); color: var(--bg); box-shadow: 0 1px 2px rgb(0 0 0 / 0.1), inset 0 1px 0 rgb(255 255 255 / 0.12); }
+  .btn.primary:hover { box-shadow: 0 8px 24px -10px rgb(0 0 0 / 0.5); }
+  .btn.outline { border-color: var(--line); background: var(--chip); }
+  .btn.outline:hover { background: var(--soft); }
+  .btn svg { width: 18px; height: 18px; }
+  .kbd { display: inline-flex; align-items: center; justify-content: center; height: 28px; min-width: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--soft); font: 500 13px/1 var(--mono); box-shadow: 0 1px 0 var(--line); }
+  .keys { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font: 400 13px/1 var(--mono); }
+  .eyebrow { font: 500 14px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  h1, h2, h3 { margin: 0; letter-spacing: -0.045em; font-weight: 600; }
+  html[lang='ja'] h1, html[lang='ja'] h2, html[lang='ja'] h3 { letter-spacing: -0.01em; font-weight: 700; }
+  h1 { font-size: clamp(48px, 8.2vw, 112px); line-height: 1.0; }
+  html[lang='ja'] h1 { font-size: clamp(40px, 6.6vw, 88px); line-height: 1.22; }
+  h2 { font-size: clamp(36px, 5vw, 64px); line-height: 1.05; }
+  html[lang='ja'] h2 { font-size: clamp(30px, 4.2vw, 52px); line-height: 1.3; }
+  h1 em, h2 em { font-style: normal; color: var(--muted); }
+  .lead { font-size: clamp(18px, 1.6vw, 21px); color: var(--muted); max-width: 640px; letter-spacing: -0.01em; }
+  svg.ic { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+  /* Header */
+  header { position: sticky; top: 0; z-index: 50; background: rgb(255 255 255 / 0.78); -webkit-backdrop-filter: saturate(180%) blur(16px); backdrop-filter: saturate(180%) blur(16px); border-bottom: 1px solid transparent; transition: border-color 200ms; }
+  header.scrolled { border-bottom-color: #e4e4e7; }
+  header.dark { background: rgb(9 9 11 / 0.72); color: #fafafa; border-bottom-color: rgb(255 255 255 / 0.08); }
+  header.dark nav.links { color: #a1a1aa; } header.dark nav.links a:hover { color: #fafafa; }
+  header.dark .lang { background: #111113; border-color: rgb(255 255 255 / 0.12); } header.dark .lang button[aria-pressed='true'] { background: #fafafa; color: #09090b; }
+  header.dark .btn.primary { background: #fafafa; color: #09090b; } header.dark .brand img { content: url(/media/mark-light.svg); }
+  header { transition: border-color 200ms, background 300ms, color 300ms; }
+  header .wrap { display: flex; align-items: center; gap: 28px; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: -0.03em; font-size: 18px; }
+  .brand img { width: 28px; height: 28px; }
+  nav.links { display: flex; gap: 24px; font-size: 15px; color: #52525b; }
+  nav.links a:hover { color: #09090b; }
+  .spacer { flex: 1; }
+  .lang { display: inline-flex; padding: 3px; border: 1px solid #e4e4e7; border-radius: 10px; background: #fff; }
+  .lang button { all: unset; cursor: pointer; padding: 5px 10px; border-radius: 7px; font: 500 13px/1 var(--sans); color: #71717a; }
+  .lang button[aria-pressed='true'] { background: #09090b; color: #fff; }
+  header .btn { height: 38px; padding: 0 14px; font-size: 14px; border-radius: 10px; }
+  @media (max-width: 760px) { nav.links { display: none; } header .btn.get { display: none; } }
+
+  /* Hero */
+  .hero { padding: clamp(56px, 9vw, 120px) 0 0; overflow: hidden; }
+  .hero .wrap { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .hero h1 { margin-top: 28px; }
+  .hero .lead { margin: 26px auto 0; }
+  .ctas { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 36px; }
+  .meta { margin-top: 18px; font-size: 14px; color: var(--muted); }
+  .window { position: relative; margin-top: clamp(48px, 7vw, 88px); width: 100%; border-radius: 18px; overflow: hidden; background: #fff; box-shadow: 0 0 0 1px #e4e4e7, 0 2px 4px rgb(0 0 0 / 0.04), 0 60px 120px -50px rgb(0 0 0 / 0.45); transform-origin: 50% 0; }
+  .window img { width: 100%; height: auto; aspect-ratio: 1584 / 992; }
+  .hero-fade { position: absolute; left: 0; right: 0; bottom: 0; height: 160px; background: linear-gradient(transparent, var(--bg)); pointer-events: none; }
+  .tabs-rain { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+  .tab-chip { position: absolute; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px 0 7px; border-radius: 11px; background: #fff; box-shadow: 0 0 0 1px #e4e4e7, 0 10px 24px -12px rgb(0 0 0 / 0.3); font: 400 15px/1 var(--sans); color: #27272a; white-space: nowrap; will-change: transform, opacity; }
+  .tab-chip i { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 7px; background: #ebebed; color: #3f3f46; font: 600 12px/1 var(--mono); font-style: normal; }
+
+  /* Reveal */
+  .rv { opacity: 0; transform: translateY(24px); transition: opacity 900ms var(--ease), transform 900ms var(--ease); }
+  .rv.in { opacity: 1; transform: none; }
+  .ln { display: block; overflow: hidden; padding-bottom: 0.1em; margin-bottom: -0.1em; }
+  .ln > span { display: inline-block; transform: translateY(110%); transition: transform 1000ms var(--ease); }
+  .in .ln > span, .ln.in > span { transform: none; }
+  .ln:nth-child(2) > span { transition-delay: 120ms; }
+  .ln:nth-child(3) > span { transition-delay: 240ms; }
+
+  /* Film */
+  .film { padding: clamp(80px, 10vw, 140px) 0; }
+  .film .head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 40px; }
+  .player { position: relative; border-radius: 18px; overflow: hidden; background: #000; box-shadow: 0 0 0 1px rgb(255 255 255 / 0.1), 0 60px 140px -50px rgb(0 0 0 / 0.95); }
+  .player video { width: 100%; aspect-ratio: 16 / 9; }
+
+  /* Features */
+  .features { padding: clamp(80px, 10vw, 140px) 0; }
+  .features .head { max-width: 900px; margin-bottom: 48px; }
+  h1, h2, .lead, .card p { word-break: auto-phrase; }
+  .features .head .lead { margin-top: 18px; }
+  .bento { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; }
+  .card { position: relative; display: flex; flex-direction: column; border-radius: var(--r); background: var(--card); box-shadow: 0 0 0 1px var(--line), 0 1px 2px rgb(0 0 0 / 0.04); overflow: hidden; }
+  .card .txt { padding: 26px 26px 0; }
+  .card .txt:last-child { padding-bottom: 26px; }
+  .card h3 { font-size: 24px; line-height: 1.15; letter-spacing: -0.03em; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  html[lang='ja'] .card h3 { font-size: 21px; }
+  .card p { margin: 8px 0 0; color: var(--muted); font-size: 16px; }
+  .card .stage { position: relative; flex: 1; min-height: 300px; margin-top: 22px; background: var(--soft); border-top: 1px solid var(--line); overflow: hidden; }
+  .span-4 { grid-column: span 4; } .span-3 { grid-column: span 3; } .span-2 { grid-column: span 2; }
+  @media (max-width: 960px) { .span-4, .span-3, .span-2 { grid-column: span 6; } }
+  .shot { position: absolute; left: 22px; top: 22px; width: 900px; max-width: none; border-radius: 12px; box-shadow: 0 0 0 1px #e4e4e7, 0 20px 40px -20px rgb(0 0 0 / 0.35); }
+
+  /* Demo pieces (drawn with Athanor's own Chalk tokens) */
+  .side { position: absolute; left: 50%; top: 22px; width: min(380px, 86%); transform: translateX(-50%); border-radius: 16px; background: #f5f5f6; box-shadow: 0 0 0 1px #e4e4e7, 0 24px 50px -28px rgb(0 0 0 / 0.35); height: 432px; overflow: hidden; color: #18181b; }
+  .row { position: absolute; left: 12px; right: 12px; height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-radius: 10px; font: 400 15.5px/1 var(--sans); white-space: nowrap; color: #27272a; transform-origin: left center; }
+  .row.folder { font-weight: 500; }
+  .row.active { background: #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.06), 0 1px 3px rgb(0 0 0 / 0.08); }
+  .row.flying { background: #fff; box-shadow: 0 0 0 1px #e4e4e7, 0 12px 24px -12px rgb(0 0 0 / 0.3); z-index: 4; }
+  .row .t { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: #ebebed; color: #3f3f46; font: 600 11px/1 var(--mono); flex: none; }
+  .row .count { margin-left: auto; font: 500 13px/1 var(--mono); color: #a1a1aa; transition: transform 200ms; }
+  .toast { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 8px 0 14px; border-radius: 12px; background: #fff; box-shadow: 0 0 0 1px #e4e4e7, 0 16px 34px -14px rgb(0 0 0 / 0.35); font: 500 15px/1 var(--sans); color: #18181b; white-space: nowrap; opacity: 0; }
+  .toast .ok { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #18181b; color: #fff; }
+  .toast .ok svg { width: 13px; height: 13px; }
+  .toast .u { height: 30px; padding: 0 12px; border-radius: 8px; background: #18181b; color: #fafafa; font-weight: 600; font-size: 13.5px; display: inline-flex; align-items: center; }
+  .palette { position: absolute; left: 50%; top: 26px; width: min(560px, 90%); transform: translateX(-50%); border-radius: 16px; background: #fff; color: #18181b; box-shadow: 0 0 0 1px #e4e4e7, 0 30px 60px -30px rgb(0 0 0 / 0.4); overflow: hidden; }
+  .palette .in-row { display: flex; align-items: center; gap: 12px; height: 58px; padding: 0 20px; border-bottom: 1px solid #e4e4e7; font-size: 19px; }
+  .caret { display: inline-block; width: 2px; height: 22px; background: #18181b; margin-left: -8px; }
+  .palette .item { display: flex; align-items: center; gap: 12px; height: 46px; margin: 5px 8px; padding: 0 12px; border-radius: 10px; font-size: 16px; }
+  .palette .item.sel { background: #f4f4f5; }
+  .palette .grp { padding: 10px 20px 2px; font: 600 11.5px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: #a1a1aa; }
+  .palette .out { border-top: 1px solid #e4e4e7; padding: 0 20px; overflow: hidden; font: 400 13.5px/1.6 var(--mono); color: #3f3f46; max-height: 0; }
+  .palette .out .lab { font: 600 11px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: #a1a1aa; padding-top: 14px; }
+  .palette .out .tok { margin: 8px 0 12px; padding: 8px 12px; border: 1px solid #e4e4e7; border-radius: 8px; white-space: nowrap; overflow: hidden; min-height: 34px; }
+  .palette .out .js { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; padding-bottom: 14px; }
+  .tile { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: #f4f4f5; color: #71717a; flex: none; }
+  .tile svg { width: 16px; height: 16px; }
+  .log { position: absolute; left: 22px; right: 22px; top: 22px; bottom: 22px; display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; }
+  .log .list { border-radius: 14px; background: #fff; box-shadow: 0 0 0 1px #e4e4e7; color: #18181b; overflow: hidden; padding: 12px 14px; }
+  .log .hd { display: flex; font: 600 11.5px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: #a1a1aa; padding: 4px 2px 10px; }
+  .log .rq { display: flex; align-items: center; gap: 10px; height: 34px; border-bottom: 1px solid #f0f0f2; font: 400 13px/1 var(--mono); color: #3f3f46; opacity: 0; }
+  .log .rq span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .log .tag { flex: none; height: 22px; padding: 0 9px; border-radius: 999px; display: inline-flex; align-items: center; font: 600 12px/1 var(--sans); opacity: 0; transform: scale(0.6); transition: opacity 250ms, transform 300ms var(--ease); }
+  .log .tag.b { background: #18181b; color: #fafafa; } .log .tag.a { border: 1px solid #d4d4d8; color: #52525b; }
+  .log .rq.blocked span:first-child { text-decoration: line-through; color: #a1a1aa; }
+  .log .rq.on { opacity: 1; transition: opacity 300ms; } .log .rq.on .tag { opacity: 1; transform: none; }
+  .log .page { border-radius: 14px; background: #fff; box-shadow: 0 0 0 1px #e4e4e7; position: relative; overflow: hidden; }
+  .log .page .addr { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border-bottom: 1px solid #f0f0f2; font: 500 13px/1 var(--sans); color: #18181b; }
+  .log .page .addr .sh { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 8px; background: #f4f4f5; font: 600 13px/1 var(--mono); transition: transform 200ms var(--ease); }
+  .log .page .addr .sh svg { width: 15px; height: 15px; }
+  .blk { position: absolute; left: 14px; border-radius: 6px; background: #ececee; opacity: 0; transform: scaleX(0.4); transform-origin: left; transition: opacity 350ms, transform 450ms var(--ease); }
+  .blk.on { opacity: 1; transform: none; }
+  .panes { position: absolute; inset: 22px; display: flex; gap: 10px; }
+  .panes > div { flex: 1; border-radius: 12px; background: #fff; box-shadow: 0 0 0 1px #e4e4e7; overflow: hidden; color: #18181b; }
+  .panes .ph { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border-bottom: 1px solid #f0f0f2; font: 600 13.5px/1 var(--sans); white-space: nowrap; }
+  .panes .bar { height: 9px; border-radius: 5px; background: #ececee; margin: 14px 14px 0; }
+  .swatches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 14px; }
+  .swatches i { aspect-ratio: 1; border-radius: 9px; box-shadow: 0 0 0 1px #e4e4e7; }
+  .themes-stage img { position: absolute; inset: 22px auto auto 22px; width: 900px; max-width: none; border-radius: 12px; box-shadow: 0 0 0 1px #e4e4e7, 0 20px 40px -20px rgb(0 0 0 / 0.35); }
+  .themes-stage .dark { clip-path: inset(0 0 0 50%); transition: clip-path 1200ms var(--ease); }
+  .themes-stage:hover .dark, .themes-stage.flip .dark { clip-path: inset(0 0 0 0); }
+  .mini-list { display: flex; flex-wrap: wrap; gap: 8px; padding: 22px; }
+  .mini-list span { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 10px; background: var(--card); box-shadow: 0 0 0 1px var(--line); font: 500 14px/1 var(--sans); }
+
+  /* Light by design */
+  .light { padding: clamp(90px, 11vw, 150px) 0; overflow: hidden; }
+  .light h2 { font-size: clamp(36px, 5.6vw, 76px); line-height: 1.12; }
+  html[lang='ja'] .light h2 { font-size: clamp(30px, 4.4vw, 58px); line-height: 1.42; }
+  .chips { display: grid; grid-template-columns: repeat(8, 1fr); gap: 10px; margin-top: 56px; }
+  @media (max-width: 960px) { .chips { grid-template-columns: repeat(4, 1fr); } }
+  .chips div { display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 10px; border-radius: 11px; border: 1px solid rgb(255 255 255 / 0.14); font: 500 13.5px/1 var(--sans); color: #a1a1aa; white-space: nowrap; overflow: hidden; transition: background 500ms, color 500ms, opacity 600ms, transform 600ms var(--ease), border-style 0s; }
+  .chips div i { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: rgb(255 255 255 / 0.08); color: #d4d4d8; font: 600 11px/1 var(--mono); font-style: normal; flex: none; }
+  .chips div.on { background: #fafafa; color: #09090b; } .chips div.on i { background: #e4e4e7; color: #18181b; }
+  .chips div.away { opacity: 0.35; transform: translateY(10px) scale(0.94); border-style: dashed; }
+  .meter { margin-top: 22px; display: flex; gap: 28px; font: 500 15px/1 var(--mono); color: var(--muted); }
+  .meter b { color: var(--fg); }
+
+  /* Download */
+  .get { padding: clamp(90px, 11vw, 150px) 0; text-align: center; overflow: hidden; }
+  .get img.mark { width: 88px; height: 88px; margin: 0 auto 28px; }
+  .get .ctas { margin-top: 40px; }
+  .facts { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 28px; }
+  footer { border-top: 1px solid #e4e4e7; padding: 32px 0 48px; color: #71717a; font-size: 14px; background: #fff; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 16px 28px; align-items: center; }
+  footer a:hover { color: #09090b; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rv, .ln > span { transition: none !important; opacity: 1 !important; transform: none !important; }
+    .tabs-rain { display: none; }
+  }
+</style>
+</head>
+<body>
+<header id="top">
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="/media/mark-dark.svg" alt="">Athanor</a>
+    <nav class="links"><a href="#film" data-i18n="nav.film">Film</a><a href="#features" data-i18n="nav.features">Features</a><a href="#download" data-i18n="nav.download">Download</a><a href="https://github.com/bata-san/Athanor">GitHub</a></nav>
+    <span class="spacer"></span>
+    <div class="lang" role="group" aria-label="Language"><button type="button" data-lang="en" aria-pressed="true">EN</button><button type="button" data-lang="ja" aria-pressed="false">日本語</button></div>
+    <a class="btn primary get" href="#download" data-i18n="nav.get">Download</a>
+  </div>
+</header>
+
+<main>
+  <!-- Hero -->
+  <section class="hero">
+    <div class="grid-bg"></div>
+    <div class="wrap">
+      <span class="pill rv" id="hero-pill"><b class="ver">v0.1</b><span data-i18n="hero.pill">Windows · Android · Open source</span></span>
+      <h1 class="rv"><span class="ln"><span data-i18n="hero.l1">For people who</span></span><span class="ln"><span data-i18n="hero.l2" data-html><em>keep a lot open.</em></span></span></h1>
+      <p class="lead rv" data-i18n="hero.lead">A quiet, fast browser. Vertical tabs in spaces and folders, one bar for everything you type, and blocking built into the engine.</p>
+      <div class="ctas rv">
+        <a class="btn primary dl-win" href="https://github.com/bata-san/Athanor/releases/latest"><svg class="ic" viewBox="0 0 24 24"><path d="M12 15V3"/><path d="m7 10 5 5 5-5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></svg><span data-i18n="cta.windows">Download for Windows</span></a>
+        <a class="btn outline" href="#film"><svg class="ic" viewBox="0 0 24 24"><path d="M6 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 6 4.5Z"/></svg><span data-i18n="cta.film">Watch the film</span></a>
+      </div>
+      <p class="meta rv" data-i18n="hero.meta">Windows 10 and 11 · Android 7 or later · MIT licence</p>
+      <div class="window rv" id="hero-window"><img src="/media/app-light.webp" alt="Athanor on Windows: a sidebar with pinned sites and folders of tabs beside a Wikipedia article." width="1584" height="992" fetchpriority="high"><div class="tabs-rain" id="rain" aria-hidden="true"></div></div>
+    </div>
+    <div class="hero-fade"></div>
+  </section>
+
+  <!-- Film -->
+  <section class="film ink" id="film">
+    <div class="grid-bg"></div>
+    <div class="wrap">
+      <div class="head rv">
+        <div><div class="eyebrow" data-i18n="film.eyebrow">The film · 76 seconds</div><h2 style="margin-top:16px" data-i18n="film.h">Meet Athanor.</h2></div>
+        <p class="lead" style="max-width:460px;margin:0" data-i18n="film.lead">How it organises, files, searches and blocks — in a minute and a quarter.</p>
+      </div>
+      <div class="player rv"><video id="film-video" controls playsinline muted preload="metadata" poster="/media/poster-en.jpg"><source src="/media/athanor-intro-en.mp4" type="video/mp4"></video></div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="features" id="features">
+    <div class="wrap">
+      <div class="head rv"><div class="eyebrow" data-i18n="feat.eyebrow">What it does</div><h2 style="margin-top:16px" data-i18n="feat.h" data-html>Everything open,<br><em>nothing in the way.</em></h2><p class="lead" data-i18n="feat.lead">The things you reach for every day, a key press away, and calm the rest of the time.</p></div>
+      <div class="bento">
+        <article class="card span-4 rv">
+          <div class="txt"><h3><span data-i18n="f.file.h">Tidy every tab in one press</span> <span class="keys"><span class="kbd">Ctrl</span><span class="kbd">Shift</span><span class="kbd">F</span></span></h3><p data-i18n="f.file.p">Loose tabs move into folders by site. Undo puts them back.</p></div>
+          <div class="stage" style="min-height:480px"><div class="side" id="demo-file"></div></div>
+        </article>
+        <article class="card span-2 rv">
+          <div class="txt"><h3 data-i18n="f.org.h">Spaces, folders, vertical tabs</h3><p data-i18n="f.org.p">Pinned sites stay on top. Each space keeps its own tabs. Idle tabs archive themselves.</p></div>
+          <div class="stage" style="min-height:480px"><img class="shot" src="/media/app-light.webp" alt="The sidebar with pinned sites and folders" loading="lazy" style="width:1500px;left:22px;top:22px"></div>
+        </article>
+        <article class="card span-3 rv">
+          <div class="txt"><h3><span data-i18n="f.cmd.h">One bar for everything you type</span> <span class="keys"><span class="kbd">Ctrl</span><span class="kbd">K</span></span></h3><p data-i18n="f.cmd.p">Addresses, searches, open tabs, commands, and developer tools such as JWT decoding.</p></div>
+          <div class="stage" style="min-height:380px"><div class="palette" id="demo-cmd"></div></div>
+        </article>
+        <article class="card span-3 rv">
+          <div class="txt"><h3 data-i18n="f.shield.h">Blocking, built into the engine</h3><p data-i18n="f.shield.p">Brave's adblock-rust stops ads, trackers and YouTube ads. Nothing to install.</p></div>
+          <div class="stage" style="min-height:380px"><div class="log" id="demo-shield"></div></div>
+        </article>
+        <article class="card span-2 rv">
+          <div class="txt"><h3><span data-i18n="f.ov.h">Every tab at a glance</span> <span class="keys"><span class="kbd">Ctrl</span><span class="kbd">Space</span></span></h3><p data-i18n="f.ov.p">Tabs you haven't opened yet stay unloaded.</p></div>
+          <div class="stage"><img class="shot" src="/media/overview.webp" alt="Tab overview with pages as cards" loading="lazy" style="left:calc(50% - 450px);top:-40px"></div>
+        </article>
+        <article class="card span-2 rv">
+          <div class="txt"><h3><span data-i18n="f.split.h">Side by side</span> <span class="keys"><span class="kbd">Ctrl</span><span class="kbd">\</span></span></h3><p data-i18n="f.split.p">Any number of panes. Drag the dividers.</p></div>
+          <div class="stage"><div class="panes" style="display:none"><div><div class="ph">Docs</div><div class="bar" style="width:70%"></div><div class="bar"></div><div class="bar" style="width:55%"></div><div class="bar" style="width:80%"></div></div><div><div class="ph">Issue #142</div><div class="bar" style="width:60%"></div><div class="bar" style="width:75%"></div><div class="bar" style="width:50%"></div></div><div><div class="ph">Design</div><div class="swatches"><i style="background:#18181b"></i><i style="background:#52525b"></i><i style="background:#a1a1aa"></i><i style="background:#d4d4d8"></i><i style="background:#f4f4f5"></i><i style="background:#fff"></i></div></div></div><img class="shot" src="/media/split.webp" alt="Two pages side by side in split view" loading="lazy" style="width:1100px;left:calc(50% - 633px);top:-40px"></div>
+        </article>
+        <article class="card span-2 rv">
+          <div class="txt"><h3 data-i18n="f.board.h">Boards</h3><p data-i18n="f.board.p">A canvas for images and notes, kept on top while you work. Opens PureRef boards.</p></div>
+          <div class="stage"><img class="shot" src="/media/board.webp" alt="A reference board with images and a note" loading="lazy" style="width:1100px;left:calc(50% - 625px);top:-10px"></div>
+        </article>
+        <article class="card span-3 rv">
+          <div class="txt"><h3 data-i18n="f.theme.h">Quiet in light. Quieter in dark.</h3><p data-i18n="f.theme.p">Themes are JSON, and every part of the interface can be restyled by extensions.</p></div>
+          <div class="stage themes-stage" id="themes"><img src="/media/app-light.webp" alt="" loading="lazy"><img class="dark" src="/media/app-dark.webp" alt="Athanor in a dark theme" loading="lazy"></div>
+        </article>
+        <article class="card span-3 rv">
+          <div class="txt"><h3 data-i18n="f.dev.h">Made for the way you build</h3><p data-i18n="f.dev.p">Local dev servers appear on the start page. Downloads and media controls live in the address bar. DevTools are one key away.</p></div>
+          <div class="stage"><img class="shot" src="/media/newtab.webp" alt="The start page listing a local Vite dev server" loading="lazy" style="width:1000px;left:calc(50% - 576px);top:-70px"></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- Light by design -->
+  <section class="light ink">
+    <div class="grid-bg"></div>
+    <div class="wrap">
+      <div class="eyebrow rv" data-i18n="light.eyebrow">Light by design</div>
+      <h2 style="margin-top:22px" class="rv" id="light-h"><span class="ln"><span data-i18n="light.l1">No bundled Chromium.</span></span><span class="ln"><span data-i18n="light.l2" data-html>Tabs load <em>when you open them.</em></span></span><span class="ln"><span data-i18n="light.l3" data-html>Idle ones <em>step aside.</em></span></span></h2>
+      <div class="chips" id="chips"></div>
+      <div class="meter" id="meter"></div>
+    </div>
+  </section>
+
+  <!-- Download -->
+  <section class="get" id="download">
+    <div class="grid-bg"></div>
+    <div class="wrap">
+      <img class="mark rv" src="/media/mark-dark.svg" alt="">
+      <h2 class="rv" data-i18n="get.h">Get Athanor.</h2>
+      <p class="lead rv" style="margin:18px auto 0" data-i18n="get.lead">Free and open source. Updates arrive signed, inside the app.</p>
+      <div class="ctas rv">
+        <a class="btn primary dl-win" href="https://github.com/bata-san/Athanor/releases/latest"><svg class="ic" viewBox="0 0 24 24"><path d="M12 15V3"/><path d="m7 10 5 5 5-5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></svg><span data-i18n="cta.windows">Download for Windows</span></a>
+        <a class="btn outline dl-apk" href="https://github.com/bata-san/Athanor/releases/latest"><span data-i18n="cta.android">Android APK</span></a>
+        <a class="btn outline" href="https://github.com/bata-san/Athanor"><svg class="ic" viewBox="0 0 24 24"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>GitHub</a>
+      </div>
+      <div class="facts rv"><span class="pill" style="padding-left:14px" data-i18n="get.f1">Signed Windows installer</span><span class="pill" style="padding-left:14px" data-i18n="get.f2">In-app updates</span><span class="pill" style="padding-left:14px" data-i18n="get.f3">Android APK (unsigned)</span><span class="pill" style="padding-left:14px">MIT</span></div>
+      <p class="meta" id="release-note" style="margin-top:22px"></p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <a class="brand" href="#top" style="font-size:15px;color:#09090b"><img src="/media/mark-dark.svg" alt="" style="width:22px;height:22px">Athanor</a>
+    <span data-i18n="foot.made">Made with Rust, Tauri and shadcn/ui.</span>
+    <span class="spacer"></span>
+    <a href="https://github.com/bata-san/Athanor">GitHub</a><a href="https://github.com/bata-san/Athanor/releases" data-i18n="foot.releases">Releases</a><a href="https://github.com/bata-san/Athanor/blob/main/LICENSE" data-i18n="foot.license">License</a>
+  </div>
+</footer>
+
+<script>
+const T = {
+  en: {},
+  ja: {
+    'nav.film': '映像', 'nav.features': '機能', 'nav.download': 'ダウンロード', 'nav.get': 'ダウンロード',
+    'hero.pill': 'Windows · Android · オープンソース', 'hero.l1': 'たくさん開く人の、', 'hero.l2': '<em>静かなブラウザ。</em>',
+    'hero.lead': '縦に並ぶタブをスペースとフォルダで整理。入力はひとつのバーで。広告ブロックはエンジンに内蔵。',
+    'cta.windows': 'Windows 版をダウンロード', 'cta.film': '映像を見る', 'cta.android': 'Android APK', 'hero.meta': 'Windows 10 / 11 · Android 7 以降 · MIT ライセンス',
+    'film.eyebrow': '紹介映像 · 76 秒', 'film.h': 'これが Athanor。', 'film.lead': '整理、ファイル、検索、ブロック。1 分強で、仕組みをひととおり。',
+    'feat.eyebrow': 'できること', 'feat.h': 'たくさん開いても、<br><em>邪魔をしない。</em>', 'feat.lead': '毎日使うものはキーひとつで。それ以外のときは、静かに。',
+    'f.file.h': 'ワンクリックで、タブを整理', 'f.file.p': '散らばったタブをサイトごとにフォルダへ。Undo でいつでも元どおり。',
+    'f.org.h': 'スペース、フォルダ、縦に並ぶタブ', 'f.org.p': 'よく使うサイトは上に固定。スペースごとにタブを分けられて、使わないタブは自動で片づく。',
+    'f.cmd.h': '入力は、すべてこのバーで', 'f.cmd.p': 'アドレス、検索、開いているタブ、コマンド、JWT のデコードなどの開発者ツールまで。',
+    'f.shield.h': 'ブロックは、エンジンに内蔵', 'f.shield.p': 'Brave の adblock-rust が、広告・トラッカー・YouTube 広告を止める。拡張機能は不要。',
+    'f.ov.h': 'すべてのタブを、ひと目で', 'f.ov.p': 'まだ開いていないタブは、読み込まずに待機。',
+    'f.split.h': '並べて見る', 'f.split.p': 'ペインはいくつでも。境界はドラッグで調整。',
+    'f.board.h': 'ボード', 'f.board.p': '画像とメモを置けるキャンバス。作業中も最前面に。PureRef のボードも開ける。', 'f.board.chip': '常に最前面',
+    'f.theme.h': '明るくても静か。暗ければ、なお静か。', 'f.theme.p': 'テーマは JSON。拡張機能で、画面のどこでも変えられる。',
+    'f.dev.h': 'つくる人のために', 'f.dev.p': '開発サーバーはスタートページに。ダウンロードと再生はアドレスバーに。DevTools はキーひとつ。',
+    'light.eyebrow': '軽さの設計', 'light.l1': 'Chromium を同梱しない。', 'light.l2': 'タブは、<em>開いたときに読み込む。</em>', 'light.l3': '使わないタブは、<em>そっと退く。</em>',
+    'get.h': 'Athanor を手に入れる。', 'get.lead': '無料のオープンソース。アップデートは署名付きで、アプリの中から。',
+    'get.f1': '署名付き Windows インストーラー', 'get.f2': 'アプリ内アップデート', 'get.f3': 'Android APK（未署名）',
+    'foot.made': 'Rust、Tauri、shadcn/ui でつくっています。', 'foot.releases': 'リリース', 'foot.license': 'ライセンス',
+    'meter.loaded': '読み込み済み', 'meter.archived': 'アーカイブ', 'toast': '5 個のタブを 2 つのフォルダに整理しました', 'undo': '元に戻す',
+    'cmd.ph': '検索またはアドレスを入力…', 'cmd.web': 'Web で検索:', 'cmd.tools': '開発者ツール', 'cmd.decode': 'JWT をデコード', 'cmd.token': 'トークン', 'cmd.header': 'ヘッダー', 'cmd.payload': 'ペイロード',
+    'sh.reqs': 'リクエスト', 'sh.b': 'ブロック', 'sh.a': '許可', 'rel': (v) => `最新版 ${v}`,
+  },
+};
+const EN = { 'meter.loaded': 'Loaded', 'meter.archived': 'Archived', toast: 'Filed 5 tabs into 2 folders', undo: 'Undo', 'cmd.ph': 'Search or enter address…', 'cmd.web': 'Search the web for', 'cmd.tools': 'Developer tools', 'cmd.decode': 'Decode JWT', 'cmd.token': 'Token', 'cmd.header': 'Header', 'cmd.payload': 'Payload', 'sh.reqs': 'Requests', 'sh.b': 'Blocked', 'sh.a': 'Allowed', rel: (v) => `Latest release ${v}` };
+let LANG = 'en';
+const t = (k) => (LANG === 'ja' && T.ja[k] !== undefined ? T.ja[k] : EN[k]);
+const originals = new Map();
+function setLang(lang) {
+  LANG = lang; document.documentElement.lang = lang;
+  try { localStorage.setItem('athanor-lang', lang); } catch {}
+  document.querySelectorAll('[data-i18n]').forEach((el) => {
+    if (!originals.has(el)) originals.set(el, el.innerHTML);
+    const v = lang === 'ja' ? T.ja[el.dataset.i18n] : undefined;
+    el.innerHTML = v !== undefined ? v : originals.get(el);
+  });
+  document.querySelectorAll('.lang button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
+  const v = document.getElementById('film-video'); const playing = !v.paused;
+  v.poster = `/media/poster-${lang}.jpg`; const src = `/media/athanor-intro-${lang}.mp4`;
+  if (!v.currentSrc.endsWith(src)) { v.querySelector('source').src = src; v.load(); if (playing) v.play().catch(() => {}); }
+  demos.forEach((d) => d.build());
+  updateRelease();
+}
+
+// --- small helpers -------------------------------------------------------------------------------------------
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const prog = (x, a, d) => clamp((x - a) / d);
+const lerp = (a, b, p) => a + (b - a) * p;
+const inOut = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
+const out = (p) => 1 - Math.pow(1 - p, 4);
+const sigm = (x) => 1 / (1 + Math.exp(-x));
+const h = (html) => { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstElementChild; };
+const ICON = {
+  folder: '<svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>',
+  chev: '<svg class="ic" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="m6 9 6 6 6-6"/></svg>',
+  search: '<svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
+  code: '<svg class="ic" viewBox="0 0 24 24"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/></svg>',
+  check: '<svg class="ic" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>',
+  shield: '<svg class="ic" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>',
+  lock: '<svg class="ic" viewBox="0 0 24 24" style="width:14px;height:14px"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+};
+
+// A demo is a pure function of its own clock; it only runs while it is on screen.
+const demos = [];
+function demo(el, length, build) {
+  const d = { el, length, run: null, t0: 0, visible: false, build() { el.innerHTML = ''; d.run = build(el); d.run(reduce ? length : 0); } };
+  demos.push(d); d.build();
+  new IntersectionObserver(([e]) => { d.visible = e.isIntersecting; if (d.visible) d.t0 = performance.now(); }, { threshold: 0.35 }).observe(el);
+  return d;
+}
+function loop(now) {
+  if (!reduce) for (const d of demos) if (d.visible) { const x = ((now - d.t0) / 1000) % d.length; d.run(x); }
+  requestAnimationFrame(loop);
+}
+
+// --- File: rows reorder into their folders ------------------------------------------------------------------
+demo(document.getElementById('demo-file'), 7.5, (root) => {
+  const ROW = 42, TOP = 14;
+  const row = (kind, label, extra = '') => { const r = h(kind === 'folder' ? `<div class="row folder"><span style="display:inline-flex">${ICON.chev}</span>${ICON.folder}<span>${label}</span>${extra}</div>` : `<div class="row"><span class="t">${label[0]}</span><span>${label}</span></div>`); root.appendChild(r); return r; };
+  const folders = [{ key: 0, r: row('folder', 'Design', '<span class="count">0</span>') }, { key: 1, r: row('folder', 'Research', '<span class="count">0</span>') }];
+  const spec = [['Components', 0, 0.3], ['Research: alembics', 1, 1.3], ['Field notes', 1, 1.5], ['Moodboard', 0, 0.5], ['Reading list', 1, 1.7]];
+  const order = [0, 3, 1, 2, 4];
+  const tabs = spec.map(([l, f, end], i) => ({ r: row('tab', l), f, start: 1.6 + i * 0.06, end, at: 1.0 + order.indexOf(i) * 0.3 }));
+  const keep = { key: 2, r: row('tab', 'Release notes') }; keep.r.classList.add('active');
+  const toast = h(`<div class="toast"><span class="ok">${ICON.check}</span><span>${t('toast')}</span><span class="u">${t('undo')}</span></div>`); root.appendChild(toast);
+  return (x) => {
+    const items = [...folders.map((f) => ({ ...f, q: 0 })), { ...keep, q: 0 }, ...tabs.map((o) => { const q = inOut(prog(x, o.at, 0.8)); return { r: o.r, key: lerp(o.start, o.end, q), q, o }; })];
+    items.forEach((a) => { let rank = 0; items.forEach((b) => { if (a !== b) rank += sigm((a.key - b.key) / lerp(0.008, 0.18, Math.sin(Math.max(a.q, b.q) * Math.PI))); }); a.y = TOP + rank * ROW; });
+    const counts = [0, 0];
+    items.forEach((a) => {
+      a.r.style.top = a.y + 'px';
+      if (!a.o) return;
+      const lift = Math.sin(a.q * Math.PI);
+      a.r.classList.toggle('flying', a.q > 0.02 && a.q < 0.98);
+      a.r.style.paddingLeft = lerp(10, 40, a.q) + 'px'; a.r.style.transform = `translateX(${lift * 8}px)`;
+      if (a.q >= 1) counts[a.o.f]++;
+    });
+    folders.forEach((f, i) => { const c = f.r.querySelector('.count'); c.textContent = counts[i]; const land = tabs.filter((o) => o.f === i).map((o) => x - (o.at + 0.8)).filter((d) => d > 0 && d < 0.5); const fl = land.length ? 1 - Math.min(...land) / 0.5 : 0; f.r.style.background = `rgb(255 255 255 / ${fl})`; c.style.color = fl ? '#09090b' : ''; c.style.transform = `scale(${1 + fl * 0.3})`; });
+    const tp = out(prog(x, 3.5, 0.6)) * (1 - prog(x, 6.8, 0.5)); toast.style.opacity = tp; toast.style.transform = `translate(-50%, ${(1 - tp) * 20}px)`;
+  };
+});
+
+// --- Command bar: type, pick, decode -------------------------------------------------------------------------
+demo(document.getElementById('demo-cmd'), 8, (root) => {
+  root.innerHTML = `<div class="in-row">${ICON.search}<span class="q"></span><span class="caret"></span><span class="ph" style="color:#a1a1aa">${t('cmd.ph')}</span></div>
+    <div class="rows" style="display:none"><div class="item i1"><span class="tile">${ICON.search}</span><span>${t('cmd.web')} <b>jwt</b></span></div><div class="grp">${t('cmd.tools')}</div><div class="item i2"><span class="tile">${ICON.code}</span><span>${t('cmd.decode')}</span></div></div>
+    <div class="out"><div class="lab">${t('cmd.token')}</div><div class="tok"></div><div class="js"><div class="lab" style="padding:0 0 6px">${t('cmd.header')}</div><div class="lab" style="padding:0 0 6px">${t('cmd.payload')}</div><div>{ "alg": "HS256" }</div><div>{ "sub": "athanor" }</div><div>{ "typ": "JWT" }</div><div>{ "name": "Quiet" }</div></div></div>`;
+  const q = root.querySelector('.q'), ph = root.querySelector('.ph'), caret = root.querySelector('.caret'), rows = root.querySelector('.rows'), i1 = root.querySelector('.i1'), i2 = root.querySelector('.i2'), outEl = root.querySelector('.out'), tok = root.querySelector('.tok');
+  const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhdGhhbm9yIn0.Q2r5…';
+  const js = [...root.querySelectorAll('.js > div:not(.lab)')];
+  return (x) => {
+    const typed = 'jwt'.slice(0, Math.floor(clamp((x - 0.6) / 0.18, 0, 3)));
+    q.textContent = typed; ph.style.display = typed ? 'none' : ''; caret.style.opacity = Math.floor(x * 2.2) % 2 === 0 || (x > 0.5 && x < 1.4) ? 1 : 0;
+    rows.style.display = x > 1.25 ? '' : 'none'; rows.style.opacity = out(prog(x, 1.25, 0.4));
+    const sel = x > 2.0; i1.classList.toggle('sel', !sel); i2.classList.toggle('sel', sel);
+    const o = inOut(prog(x, 2.5, 0.6)) * (1 - inOut(prog(x, 7.3, 0.5))); outEl.style.maxHeight = o * 240 + 'px';
+    tok.textContent = token.slice(0, Math.floor(prog(x, 2.9, 0.9) * token.length));
+    js.forEach((d, i) => (d.style.opacity = out(prog(x, 3.9 + i * 0.1, 0.4))));
+  };
+});
+
+// --- Shield: requests sorted into blocked and allowed --------------------------------------------------------
+demo(document.getElementById('demo-shield'), 7, (root) => {
+  const reqs = [['news.example.com/app.js', 0], ['ads.example.net/slot', 1], ['cdn.example.com/font.woff2', 0], ['pixel.tracker.example', 1], ['img.example.com/hero.jpg', 0], ['analytics.example.io', 1], ['ad-serve.example/banner', 1], ['api.example.com/today', 0], ['beacon.example.net', 1]];
+  root.innerHTML = `<div class="list"><div class="hd"><span>${t('sh.reqs')}</span><span class="tot" style="margin-left:auto"></span></div>${reqs.map(([u, b]) => `<div class="rq${b ? ' blocked' : ''}"><span>${u}</span><span class="tag ${b ? 'b' : 'a'}">${b ? t('sh.b') : t('sh.a')}</span></div>`).join('')}</div>
+    <div class="page"><div class="addr">${ICON.lock}<span>news.example.com</span><span class="sh">${ICON.shield}<b class="n">0</b></span></div></div>`;
+  const page = root.querySelector('.page');
+  const blocks = [[14, 58, 60, 18], [14, 90, 85, 8], [14, 108, 70, 8], [14, 130, 88, 90], [14, 236, 80, 8], [14, 254, 60, 8]].map(([l, top, w, hh]) => { const b = document.createElement('div'); b.className = 'blk'; b.style.cssText = `left:${l}px;top:${top}px;width:${w}%;height:${hh}px;${hh > 20 ? 'border-radius:10px;background:#e4e4e7' : ''}`; page.appendChild(b); return b; });
+  const rq = [...root.querySelectorAll('.rq')], n = root.querySelector('.n'), sh = root.querySelector('.sh'), tot = root.querySelector('.tot');
+  return (x) => {
+    let blocked = 0, shown = 0, allowed = 0, last = -9;
+    reqs.forEach(([, b], i) => { const at = 0.5 + i * 0.45; const on = x >= at; rq[i].classList.toggle('on', on); if (on) { shown++; if (b) { blocked++; last = Math.max(last, at); } else allowed++; } });
+    blocks.forEach((bl, i) => bl.classList.toggle('on', i < Math.round(allowed * 1.5)));
+    n.textContent = blocked; tot.textContent = shown ? `${blocked} / ${shown}` : '';
+    const bump = Math.max(0, 1 - (x - last) / 0.35); sh.style.transform = `scale(${1 + bump * 0.2})`;
+  };
+});
+
+// --- Light by design: named tabs and their state ------------------------------------------------------------
+(function lightDemo() {
+  const names = ['Design system', 'Release notes', 'Rust', 'Webview API', 'Field notes', 'Typography', 'Inbox', 'Calendar', 'Issue #142', 'Moodboard', 'Changelog', 'Roadmap', 'Docs', 'Reading list', 'Recipes', 'Podcasts'];
+  const opened = [1, 4, 8, 12, 13], idle = [6, 7, 10, 14, 15];
+  const wrap = document.getElementById('chips'), meter = document.getElementById('meter');
+  const chips = names.map((nm) => { const c = h(`<div><i>${nm[0]}</i><span>${nm}</span></div>`); wrap.appendChild(c); return c; });
+  const paint = (stage) => {
+    chips.forEach((c, i) => { c.classList.toggle('on', stage >= 1 && opened.includes(i)); c.classList.toggle('away', stage >= 2 && idle.includes(i)); });
+    meter.innerHTML = `<span>${t('meter.loaded')} <b>${stage >= 1 ? opened.length : 0}</b> / ${names.length}</span>${stage >= 2 ? `<span>${t('meter.archived')} <b>${idle.length}</b></span>` : ''}`;
+  };
+  paint(reduce ? 2 : 0);
+  window.repaintLight = () => paint(lightStage);
+  let lightStage = reduce ? 2 : 0;
+  new IntersectionObserver(([e]) => { if (!e.isIntersecting || reduce) return; setTimeout(() => { lightStage = 1; paint(1); }, 900); setTimeout(() => { lightStage = 2; paint(2); }, 2100); }, { threshold: 0.5 }).observe(wrap);
+})();
+
+// --- Hero: a few tabs drift down into the real window's sidebar --------------------------------------------
+(function rain() {
+  if (reduce) return;
+  const box = document.getElementById('rain');
+  const names = ['Design system', 'Release notes', 'Issue #142', 'Moodboard', 'Field notes', 'Q4 roadmap', 'Reading list'];
+  const chips = names.map((nm, i) => { const c = h(`<div class="tab-chip"><i>${nm[0]}</i>${nm}</div>`); box.appendChild(c); return { c, i, x: 0.25 + Math.random() * 0.6, y: -0.1 - Math.random() * 0.25, r: (Math.random() - 0.5) * 14 }; });
+  const start = performance.now() + 900;
+  const step = (now) => {
+    const W = box.clientWidth, H = box.clientHeight, x = (now - start) / 1000;
+    chips.forEach((o) => {
+      const p = inOut(prog(x, o.i * 0.16, 1.5));
+      // Land on the sidebar's rows (left 14 % of the capture), one under another.
+      const tx = lerp(o.x * W, 0.028 * W, p), ty = lerp(o.y * H, (0.47 + o.i * 0.032) * H, p);
+      const fade = 1 - prog(p, 0.85, 0.15);
+      o.c.style.transform = `translate(${tx}px, ${ty}px) rotate(${lerp(o.r, 0, p)}deg) scale(${lerp(1, 0.72, p)})`;
+      o.c.style.opacity = String(Math.min(out(prog(x, o.i * 0.16, 0.3)), fade));
+    });
+    if (x < 4) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+})();
+
+// --- Reveal on scroll, header edge, theme flip ---------------------------------------------------------------
+const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+document.querySelectorAll('.rv').forEach((el) => io.observe(el));
+const head = document.querySelector('header');
+const inks = [...document.querySelectorAll('section.ink')];
+const onScroll = () => { head.classList.toggle('scrolled', scrollY > 8); const y = head.offsetHeight - 1; head.classList.toggle('dark', inks.some((s) => { const r = s.getBoundingClientRect(); return r.top <= y && r.bottom > y; })); };
+addEventListener('scroll', onScroll, { passive: true }); onScroll();
+const themes = document.getElementById('themes');
+new IntersectionObserver(([e]) => { if (e.isIntersecting) setTimeout(() => themes.classList.add('flip'), 700); else themes.classList.remove('flip'); }, { threshold: 0.6 }).observe(themes);
+const film = document.getElementById('film-video');
+new IntersectionObserver(([e]) => { if (e.isIntersecting && film.paused && film.currentTime === 0) film.play().catch(() => {}); }, { threshold: 0.6 }).observe(film);
+
+// --- Latest release: point the buttons straight at the files --------------------------------------------------
+let release = null;
+function updateRelease() {
+  if (!release) return;
+  document.querySelectorAll('.ver').forEach((v) => (v.textContent = release.tag));
+  document.getElementById('release-note').textContent = t('rel')(release.tag);
+}
+fetch('https://api.github.com/repos/bata-san/Athanor/releases/latest').then((r) => (r.ok ? r.json() : null)).then((r) => {
+  if (!r) return;
+  const win = r.assets.find((a) => /_x64-setup\.exe$/.test(a.name)), apk = r.assets.find((a) => /\.apk$/.test(a.name));
+  if (win) document.querySelectorAll('.dl-win').forEach((a) => (a.href = win.browser_download_url));
+  if (apk) document.querySelectorAll('.dl-apk').forEach((a) => (a.href = apk.browser_download_url));
+  release = { tag: r.tag_name }; updateRelease();
+}).catch(() => {});
+
+document.querySelectorAll('.lang button').forEach((b) => b.addEventListener('click', () => { setLang(b.dataset.lang); window.repaintLight && window.repaintLight(); }));
+let initial = 'en';
+try { initial = localStorage.getItem('athanor-lang') || ((navigator.language || '').toLowerCase().startsWith('ja') ? 'ja' : 'en'); } catch { initial = (navigator.language || '').toLowerCase().startsWith('ja') ? 'ja' : 'en'; }
+setLang(initial);
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

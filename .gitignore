@@ -23,3 +23,6 @@ public/fonts/
 /target-import/
 /target-e2e/
 e2e/ui/.run-*.cjs
+
+# Website film files are rendered locally (see site/README.md)
+site/media/*.mp4
