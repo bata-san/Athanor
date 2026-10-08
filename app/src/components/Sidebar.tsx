@@ -200,7 +200,7 @@ function DropLine({ tab, vertical = false }: { tab: Tab; vertical?: boolean }) {
 /** The picture that follows the pointer while dragging. */
 export function DragGhost({ tab }: { tab: Tab }) {
   return <div className="pointer-events-none flex h-[var(--ath-tab-height)] w-56 cursor-grabbing items-center gap-2 rounded-md border border-border bg-popover px-2 text-[0.8333rem] font-medium text-popover-foreground shadow-menu">
-    {tab.favicon ? <img src={tab.favicon} alt="" className="size-[1rem] rounded-[0.2rem] object-contain" /> : <Globe className="size-[1rem] text-muted-foreground" />}
+    {tab.favicon ? <img src={tab.favicon} alt="" className="ath-favicon size-[1rem] rounded-[0.2rem] object-contain" /> : <Globe className="size-[1rem] text-muted-foreground" />}
     <span className="min-w-0 flex-1 truncate">{tab.title}</span>
   </div>
 }
@@ -253,7 +253,7 @@ function NumberBadge({ value, className }: { value: number; className?: string }
 
 function Favicon({ tab, runtime, className }: { tab: Tab; runtime?: Snapshot['runtime'][string]; className?: string }) {
   return <span className={cn('grid size-[1rem] shrink-0 place-items-center text-muted-foreground [&_svg]:size-[1rem]', className)} data-part="tab-favicon" data-loading={String(runtime?.loading ?? false)}>
-    {runtime?.loading ? <Loader2 className="animate-spin text-foreground" /> : tab.favicon ? <img src={tab.favicon} alt="" className="size-[1rem] rounded-[0.2rem] object-contain" /> : tab.url.startsWith('athanor://') ? <AthanorMark className="size-3.5" /> : runtime?.secure ? <Lock className="!size-3.5" /> : <Globe />}
+    {runtime?.loading ? <Loader2 className="animate-spin text-foreground" /> : tab.favicon ? <img src={tab.favicon} alt="" className="ath-favicon size-[1rem] rounded-[0.2rem] object-contain" /> : tab.url.startsWith('athanor://') ? <AthanorMark className="size-3.5" /> : runtime?.secure ? <Lock className="!size-3.5" /> : <Globe />}
   </span>
 }
 
@@ -330,7 +330,7 @@ function FolderGroup({ folder, tabs, activeId, compact, children }: { folder: Sn
     <ChevronRight className={cn('size-3 text-muted-foreground transition-transform duration-200', 'rail:hidden', !folder.collapsed && 'rotate-90')} />
     <FolderIcon className="text-muted-foreground" />
     <span className={cn('sb-label min-w-0 flex-1 truncate', holdsActive && 'font-semibold')}>{folder.name}</span>
-    {folder.collapsed && count > 0 && <span className="flex shrink-0 items-center -space-x-0.5 rail:hidden" aria-hidden="true" data-part="folder-preview">{tabs.slice(0, 3).map((tab) => tab.favicon ? <img key={tab.id} src={tab.favicon} alt="" className="size-[0.9rem] rounded-[0.2rem] bg-sidebar object-contain ring-1 ring-sidebar" /> : <span key={tab.id} className="grid size-[0.9rem] place-items-center rounded-[0.2rem] bg-sidebar-accent ring-1 ring-sidebar"><Globe className="!size-2.5 text-muted-foreground" /></span>)}</span>}
+    {folder.collapsed && count > 0 && <span className="flex shrink-0 items-center -space-x-0.5 rail:hidden" aria-hidden="true" data-part="folder-preview">{tabs.slice(0, 3).map((tab) => tab.favicon ? <img key={tab.id} src={tab.favicon} alt="" className="ath-favicon size-[0.9rem] rounded-[0.2rem] bg-sidebar object-contain ring-1 ring-sidebar" /> : <span key={tab.id} className="grid size-[0.9rem] place-items-center rounded-[0.2rem] bg-sidebar-accent ring-1 ring-sidebar"><Globe className="!size-2.5 text-muted-foreground" /></span>)}</span>}
     {holdsActive && <span className="size-1.5 shrink-0 rounded-full bg-foreground rail:hidden" role="img" aria-label="Contains the current tab" />}
     {folder.auto && <Tip label="Created by filing" side="top"><WandSparkles className="!size-3 text-muted-foreground/70 rail:hidden" /></Tip>}
     <span className={`font-mono text-[0.7333rem] font-normal tabular-nums text-muted-foreground rail:hidden`}>{count}</span>

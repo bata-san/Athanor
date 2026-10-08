@@ -145,9 +145,9 @@ export default function SettingsPage() {
       {!settings ? <Callout><AppIcon name="CircleHelp" className="size-4 shrink-0" />Settings are not available yet.</Callout> : <>
         {section === 'General' && <>
           <Section title={t('settings.language')}>
-            <Row title={t('settings.language')} description={t('settings.language.description')} htmlFor="language">
+            <Row title={t('settings.language.row')} description={t('settings.language.description')} htmlFor="language">
               <Select value={settings.language} onValueChange={(value) => patch({ language: value as LanguageSetting })}>
-                <SelectTrigger id="language" aria-label={t('settings.language')} className="w-56 max-sm:w-full max-md:h-11"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="language" aria-label={t('settings.language.row')} className="w-56 max-sm:w-full max-md:h-11"><SelectValue /></SelectTrigger>
                 <SelectContent><SelectItem value="system">{t('settings.language.system')}</SelectItem><SelectItem value="en">{t('settings.language.english')}</SelectItem><SelectItem value="ja">{t('settings.language.japanese')}</SelectItem></SelectContent>
               </Select>
             </Row>

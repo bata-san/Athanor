@@ -88,6 +88,8 @@
 
 /* Thinner strokes read as more refined at 16px. */
 svg.lucide { stroke-width: 1.75; }
+/* Dark themes: a faint light rim lifts black favicons (GitHub, MDN) off the dark chrome; colour icons barely change. */
+:root[data-theme-dark='true'] .ath-favicon { filter: drop-shadow(0 0 0.5px oklch(1 0 0 / 0.85)) drop-shadow(0 0 1px oklch(1 0 0 / 0.35)); }
 
 /* The window itself: one continuous chrome surface the page card floats on. */
 .ath-chrome { background: radial-gradient(120% 90% at 0% 0%, color-mix(in oklab, var(--background) 55%, var(--sidebar)) 0%, var(--sidebar) 60%), var(--sidebar); }

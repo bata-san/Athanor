@@ -94,6 +94,8 @@ export function NavCluster({ snapshot, activeTab, className }: { snapshot: Snaps
 export function StageBar({ snapshot, activeTab, openBar, openPage, toggleDev, openOverview, openDownloads, openNotifications, openPasswords, windowControls }: { snapshot: Snapshot; activeTab: Tab | null; openBar: () => void; openOverview: () => void; openDownloads: () => void; openNotifications: () => void; openPasswords: () => void; openPage: (page: Page) => void; toggleDev: () => void; windowControls?: React.ReactNode }) {
   const notificationError = useNotices((state) => state.displayError)
   const media = usePageMedia(snapshot, activeTab)
+  // Page sound controls only join the More menu when the page has something to play or is already muted.
+  const pageSound = Boolean(activeTab && (media.media?.available || activeTab.muted || snapshot.runtime[activeTab.id]?.audible))
   const split = () => { const next = snapshot.workspace.tabs.find((tab) => tab.id !== activeTab?.id && tab.space === snapshot.workspace.activeSpace && !tab.archived); if (snapshot.workspace.split) void api.unsplit(); else if (next) void api.splitWith({ tab: next.id, dir: 'row' }); else toast('Open another tab to use Split View', { duration: 2400 }) }
   return <div className="flex h-9 shrink-0 items-center gap-1 ps-1.5" style={{ containerType: 'inline-size', containerName: 'ath-toolbar' }} data-part="toolbar" onPointerDown={dragWindow} onDoubleClick={toggleWindow}>
     <NavCluster snapshot={snapshot} activeTab={activeTab} className="shrink-0" />
@@ -111,19 +113,19 @@ export function StageBar({ snapshot, activeTab, openBar, openPage, toggleDev, op
       <NavButton label="Command bar" shortcut="Ctrl+K" className="ath-optional-tool" onClick={openBar}><Command aria-hidden="true" /></NavButton>
       <OverlayDropdownMenu>
         <Tip label="More"><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="size-7 rounded-md data-[state=open]:bg-foreground/[0.07] data-[state=open]:text-foreground [&_svg]:size-[1rem]" aria-label="More" data-part="nav-button"><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger></Tip>
-        <DropdownMenuContent align="end" className="w-60">
+        <DropdownMenuContent align="end" className="w-72">
           {/* What the page is doing comes first, so the same controls stay reachable when the hub is hidden by a narrow window. */}
           {activeTab && media.media?.available && <DropdownMenuItem disabled={media.pending} onSelect={media.toggle}>{media.media.paused || media.media.ended ? <Play aria-hidden="true" /> : <Pause aria-hidden="true" />}{media.media.paused || media.media.ended ? 'Play Page Media' : 'Pause Page Media'}</DropdownMenuItem>}
-          {activeTab && <DropdownMenuItem onSelect={() => void api.setMuted(activeTab.id, !activeTab.muted).catch((error) => toast.error('Could not change page audio', { description: String(error) }))}>{activeTab.muted ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}{activeTab.muted ? 'Unmute Page' : 'Mute Page'}</DropdownMenuItem>}
-          {activeTab && <DropdownMenuSeparator />}
+          {activeTab && pageSound && <DropdownMenuItem onSelect={() => void api.setMuted(activeTab.id, !activeTab.muted).catch((error) => toast.error('Could not change page audio', { description: String(error) }))}>{activeTab.muted ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}{activeTab.muted ? 'Unmute Page' : 'Mute Page'}</DropdownMenuItem>}
+          {activeTab && pageSound && <DropdownMenuSeparator />}
           <DropdownMenuItem onSelect={openDownloads}><Download aria-hidden="true" />Downloads<DropdownMenuShortcut>Ctrl+J</DropdownMenuShortcut></DropdownMenuItem>
           <DropdownMenuItem onSelect={openNotifications}><Bell aria-hidden="true" />Notifications</DropdownMenuItem>
           {snapshot.platform === 'windows' && <DropdownMenuItem onSelect={openPasswords}><KeyRound aria-hidden="true" />Passwords</DropdownMenuItem>}
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => void fileTabs()}><FolderInput aria-hidden="true" />File tabs into folders<DropdownMenuShortcut>Ctrl+Shift+F</DropdownMenuShortcut></DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void fileTabs()}><FolderInput aria-hidden="true" />File Tabs into Folders<DropdownMenuShortcut>Ctrl+Shift+F</DropdownMenuShortcut></DropdownMenuItem>
           <DropdownMenuItem onSelect={split}><Columns2 aria-hidden="true" />{snapshot.workspace.split ? 'Close Split View' : 'Split View'}<DropdownMenuShortcut>Ctrl+\</DropdownMenuShortcut></DropdownMenuItem>
-          <DropdownMenuItem onSelect={openOverview}><LayoutGrid aria-hidden="true" />Show all tabs<DropdownMenuShortcut>Ctrl+Space</DropdownMenuShortcut></DropdownMenuItem>
-          <DropdownMenuItem onSelect={openBar}><Command aria-hidden="true" />Command bar<DropdownMenuShortcut>Ctrl+K</DropdownMenuShortcut></DropdownMenuItem>
+          <DropdownMenuItem onSelect={openOverview}><LayoutGrid aria-hidden="true" />Show All Tabs<DropdownMenuShortcut>Ctrl+Space</DropdownMenuShortcut></DropdownMenuItem>
+          <DropdownMenuItem onSelect={openBar}><Command aria-hidden="true" />Command Bar<DropdownMenuShortcut>Ctrl+K</DropdownMenuShortcut></DropdownMenuItem>
           <DropdownMenuItem onSelect={toggleDev}><SquareTerminal aria-hidden="true" />Developer Panel<DropdownMenuShortcut>Ctrl+Shift+D</DropdownMenuShortcut></DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => openPage('boards')}><LayoutPanelTop aria-hidden="true" />Reference Boards</DropdownMenuItem>

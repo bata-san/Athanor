@@ -107,7 +107,13 @@ export function CommandBar({ open, onOpenChange, mode, seed, snapshot, servers, 
   const visited = useMemo(() => suggestions.filter((item) => (item.kind === 'history' || item.kind === 'url') && item.url).slice(0, q ? 8 : 5), [suggestions, q])
   const suggestedCommands = useMemo(() => suggestions.filter((item) => item.kind === 'command' && item.command), [suggestions])
   const openTabs = useMemo(() => tabs.filter((tab) => !q || fuzzy(q, `${tab.title} ${tab.url}`)).slice(0, q ? 8 : 6), [tabs, q])
-  const paletteCommands = useMemo(() => COMMANDS.filter((item) => !q || fuzzy(q, item.label)), [q])
+  // Typing a command's name ("open settings") and pressing Enter runs it rather than searching the web for the words.
+  const topCommand = useMemo(() => {
+    const typed = q.trim().toLocaleLowerCase()
+    if (typed.length < 3 || looksLikeAddress(typed)) return null
+    return COMMANDS.find((item) => item.label.toLocaleLowerCase().startsWith(typed)) ?? null
+  }, [q])
+  const paletteCommands = useMemo(() => COMMANDS.filter((item) => item.id !== topCommand?.id && (!q || fuzzy(q, item.label))), [q, topCommand])
   const extensionRows = useMemo(() => extensionCommands.filter((item) => !q || fuzzy(q, item.title)), [extensionCommands, q])
   const tools = useMemo(() => (q ? DEV_TOOLS.filter((item) => fuzzy(q, item.replaceAll('-', ' '))) : []), [q])
   const devServers = useMemo(() => servers.filter((server) => !q || fuzzy(q, `${server.title ?? ''} ${server.url}`)), [servers, q])
@@ -127,10 +133,13 @@ export function CommandBar({ open, onOpenChange, mode, seed, snapshot, servers, 
         </div>
         <CommandList className="max-h-[min(28rem,56dvh)]">
           <CommandEmpty>Nothing here yet. Type an address or a search to get started.</CommandEmpty>
+          {topCommand && <CommandGroup heading="Top hit">
+            <CommandItem data-part="palette-item" value={`top:${topCommand.id}`} onSelect={() => select(`cmd:${topCommand.id}`)}><Tile icon={<AppIcon name={topCommand.icon} />} /><span className="min-w-0 flex-1 truncate">{topCommand.label}</span>{topCommand.shortcut && <Kbd className="shrink-0 border-0 bg-transparent">{topCommand.shortcut}</Kbd>}</CommandItem>
+          </CommandGroup>}
           {text && <CommandGroup>
             <CommandItem data-part="palette-item" value="go" onSelect={() => select('go')}><Tile icon={address ? <Globe /> : <Search />} /><span className="min-w-0 flex-1 truncate" title={text}>{address ? 'Go to ' : 'Search the web for '}<strong className="font-medium">{text}</strong></span><span className="shrink-0 text-xs text-muted-foreground">{hint}</span></CommandItem>
           </CommandGroup>}
-          {openTabs.length > 0 && <CommandGroup heading="Open tabs">{openTabs.map((tab) => <CommandItem data-part="palette-item" key={tab.id} value={tab.id} onSelect={select}><Tile icon={tab.favicon ? <img src={tab.favicon} alt="" className="size-4 rounded-[0.2rem]" /> : <AppIcon name={tab.pinned ? 'Layers3' : 'Globe2'} />} /><span className="min-w-0 flex-1 truncate">{tab.title}</span><span className="max-w-[45%] truncate font-mono text-[0.7333rem] text-muted-foreground">{tab.url}</span>{tab.id === activeId && <span className="shrink-0 text-xs text-muted-foreground">Current</span>}</CommandItem>)}</CommandGroup>}
+          {openTabs.length > 0 && <CommandGroup heading="Open tabs">{openTabs.map((tab) => <CommandItem data-part="palette-item" key={tab.id} value={tab.id} onSelect={select}><Tile icon={tab.favicon ? <img src={tab.favicon} alt="" className="ath-favicon size-4 rounded-[0.2rem]" /> : <AppIcon name={tab.pinned ? 'Layers3' : 'Globe2'} />} /><span className="min-w-0 flex-1 truncate">{tab.title}</span><span className="max-w-[45%] truncate font-mono text-[0.7333rem] text-muted-foreground">{tab.url}</span>{tab.id === activeId && <span className="shrink-0 text-xs text-muted-foreground">Current</span>}</CommandItem>)}</CommandGroup>}
           {visited.length > 0 && <CommandGroup heading={q ? 'History' : 'Recent'}>{visited.map((item, index) => <CommandItem data-part="palette-item" key={`${item.kind}-${index}`} value={`suggest:${item.url}`} onSelect={select}><Tile icon={<AppIcon name="History" />} /><span className="min-w-0 flex-1 truncate">{item.title}</span><span className="max-w-[45%] truncate font-mono text-[0.7333rem] text-muted-foreground">{item.subtitle}</span></CommandItem>)}</CommandGroup>}
           {paletteCommands.length + suggestedCommands.length + extensionRows.length > 0 && <CommandGroup heading="Commands">{paletteCommands.map((item) => <CommandItem data-part="palette-item" key={item.id} value={`cmd:${item.id}`} onSelect={select}><Tile icon={<AppIcon name={item.icon} />} /><span className="min-w-0 flex-1 truncate">{item.label}</span>{item.shortcut && <Kbd className="shrink-0 border-0 bg-transparent">{item.shortcut}</Kbd>}</CommandItem>)}{suggestedCommands.map((item, index) => <CommandItem data-part="palette-item" key={`suggested-${index}`} value={`suggest-command:${item.command}`} onSelect={select}><Tile icon={<AppIcon name="Zap" />} /><span className="min-w-0 flex-1 truncate">{item.title}</span></CommandItem>)}{extensionRows.map((item) => <CommandItem data-part="palette-item" key={`${item.ext}/${item.id}`} value={`ext:${item.ext}/${item.id}`} onSelect={select}><Tile icon={<AppIcon name="Zap" />} /><span className="min-w-0 flex-1 truncate">{item.title}</span>{item.keybinding && <Kbd className="shrink-0 border-0 bg-transparent">{item.keybinding}</Kbd>}</CommandItem>)}</CommandGroup>}
           {tools.length > 0 && <CommandGroup heading="Developer tools">{tools.map((item) => <CommandItem data-part="palette-item" key={item} value={`devtool:${item}`} onSelect={select}><Tile icon={<AppIcon name="SquareCode" />} /><span className="truncate">{TOOL_LABELS[item]}</span></CommandItem>)}</CommandGroup>}

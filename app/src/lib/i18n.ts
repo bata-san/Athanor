@@ -11,6 +11,7 @@ export type Locale = 'en' | 'ja'
 const messages = {
   en: {
     'settings.language': 'Language',
+    'settings.language.row': 'Interface language',
     'settings.language.description': 'The language of Athanor’s own interface. System follows Windows.',
     'settings.language.system': 'System default',
     'settings.language.english': 'English',
@@ -18,6 +19,7 @@ const messages = {
   },
   ja: {
     'settings.language': '言語',
+    'settings.language.row': '表示言語',
     'settings.language.description': 'Athanor 自体の表示言語です。「システムの既定」は Windows の言語に従います。',
     'settings.language.system': 'システムの既定',
     'settings.language.english': 'English',

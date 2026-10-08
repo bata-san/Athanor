@@ -153,7 +153,7 @@ export function TabOverview({ open, onClose, snapshot }: { open: boolean; onClos
 }
 
 function Favicon({ tab }: { tab: Tab }) {
-  if (tab.favicon) return <img src={tab.favicon} alt="" className="size-[1.1rem] shrink-0 rounded-[0.2rem] object-contain" />
+  if (tab.favicon) return <img src={tab.favicon} alt="" className="ath-favicon size-[1.1rem] shrink-0 rounded-[0.2rem] object-contain" />
   if (tab.url.startsWith('athanor://')) return <AthanorMark className="size-[1.1rem] shrink-0" />
   return <Globe aria-hidden="true" className="size-[1.1rem] shrink-0" />
 }
@@ -179,12 +179,13 @@ function TabCard({ tab, image, runtime, active, onGo, onClose }: { tab: Tab; ima
       {image
         ? <img src={image} alt="" draggable={false} className="absolute inset-0 size-full object-cover object-top" />
         : <span className="absolute inset-0 grid place-items-center bg-gradient-to-br from-muted to-card text-muted-foreground"><span className="[&_svg]:size-10"><Favicon tab={tab} /></span></span>}
-      {/* The words are part of the picture: set over it on a soft shade, so they read on any page. */}
-      <span className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-black/75 via-black/45 to-transparent px-3.5 pb-3 pt-10 text-white">
+      {/* Over a page picture the words sit on a soft shade so they read on any page; a tab not loaded yet has no picture,
+          so its words stay in the card's own colours instead of a dark shade over a blank card. */}
+      <span className={cn('absolute inset-x-0 bottom-0 flex items-center gap-2 px-3.5 pb-3 pt-10', image ? 'bg-gradient-to-t from-black/75 via-black/45 to-transparent text-white' : 'text-foreground')}>
         <Favicon tab={tab} />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[0.9333rem] font-semibold leading-tight [text-shadow:0_1px_2px_oklch(0_0_0/0.5)]">{title}</span>
-          <span className="block truncate font-mono text-[0.7333rem] leading-tight text-white/75">{host}</span>
+          <span className={cn('block truncate text-[0.9333rem] font-semibold leading-tight', image && '[text-shadow:0_1px_2px_oklch(0_0_0/0.5)]')}>{title}</span>
+          <span className={cn('block truncate font-mono text-[0.7333rem] leading-tight', image ? 'text-white/75' : 'text-muted-foreground')}>{host}</span>
         </span>
         {runtime?.loading && <Loader2 aria-hidden="true" className="size-4 shrink-0 animate-spin" />}
         {runtime?.audible && !tab.muted && <Volume2 aria-hidden="true" className="size-4 shrink-0" />}

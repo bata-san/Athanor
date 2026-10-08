@@ -134,3 +134,15 @@ Applied: the base corner radius moved from 0.5rem to 0.625rem, so the page card,
 Kept on purpose: the shadcn components, the monochrome palette, and the IBM Plex typeface. Apple's Liquid Glass refraction and the SF system font are not reproduced, since the material is tied to Apple's own renderer and SF is not available on Windows.
 
 Verification: the TypeScript build and the 42 unit tests pass. The result was viewed in the browser preview with the mock backend, in light appearance. Dark appearance and the real WebView2 build have not been checked, and the translucency depends on WebView2 supporting backdrop blur.
+
+## Release polish pass (October 2026)
+
+Read before this pass: the DocC JSON for [Menus](https://developer.apple.com/tutorials/data/design/human-interface-guidelines/menus.json) and [Search fields](https://developer.apple.com/tutorials/data/design/human-interface-guidelines/search-fields.json), with the Toolbars, Materials and Motion notes above. Menus asks for short labels in title-style capitalization; Search fields asks for the most relevant result first.
+
+* More menu: wide enough that no label wraps under its shortcut; *File Tabs into Folders*, *Show All Tabs* and *Command Bar* now use the same capitalization as the other items. Play/Pause and Mute Page only appear when the page has media, plays sound or is muted, matching the activity hub.
+* Command bar: when the typed text (three or more characters, not an address) starts a command's name, that command is listed first as *Top hit*, so Enter runs it instead of searching the web for the words.
+* Tab overview: a tab that has not loaded yet has no picture, so its card keeps the card's own colours instead of a dark shade meant for page pictures.
+* Dark themes: favicons get a faint light rim, so black icons such as GitHub's stay visible on the dark sidebar.
+* Settings: the language row reads *Interface language* under the *Language* heading instead of repeating it.
+
+Verification: TypeScript build and unit tests pass. Each change was observed in the Windows WebView2 debug build (an isolated test instance), in the light and dark (Monolith) themes, through window captures. The menu translucency and dark appearance listed as unverified in the earlier sections were observed in that build.
