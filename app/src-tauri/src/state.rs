@@ -319,10 +319,19 @@ mod tests {
     fn language_follows_the_system_unless_chosen() {
         let mut s = Settings::default();
         assert_eq!(s.language, "system");
-        s.apply(SettingsPatch { language: Some("ja".into()), ..Default::default() });
+        s.apply(SettingsPatch {
+            language: Some("ja".into()),
+            ..Default::default()
+        });
         assert_eq!(s.language, "ja");
-        s.apply(SettingsPatch { language: Some("fr".into()), ..Default::default() });
-        assert_eq!(s.language, "system", "unknown languages fall back to the system choice");
+        s.apply(SettingsPatch {
+            language: Some("fr".into()),
+            ..Default::default()
+        });
+        assert_eq!(
+            s.language, "system",
+            "unknown languages fall back to the system choice"
+        );
     }
 
     #[test]

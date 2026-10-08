@@ -313,9 +313,15 @@ impl Browser {
     pub fn save(&self) {
         let (session, settings, history) = {
             let g = self.inner.lock();
+            // A tab that only exists to receive a file is not a place to come back to: restoring it would
+            // fetch the file again.
+            let mut ws = g.ws.clone();
+            for tab in g.download_tabs.values() {
+                ws.close_tab(tab);
+            }
             (
                 Session {
-                    workspace: Some(g.ws.clone()),
+                    workspace: Some(ws),
                     filer: Some(g.filer.clone()),
                 },
                 g.settings.clone(),
@@ -944,6 +950,8 @@ impl Browser {
             let out = g.ws.close_tab(tab);
             g.runtime.remove(tab);
             g.committed.remove(tab);
+            g.download_tabs.retain(|_, t| t != tab);
+            let interrupted = g.downloads.interrupt_tab(tab);
             g.view.emulation.remove(tab);
             g.view.want_live.remove(tab);
             g.view.live.remove(tab);
@@ -964,12 +972,28 @@ impl Browser {
                 g.view.focus_next = true;
             }
             g.ws.prune_empty_auto_folders();
-            t.url
+            (t.url, interrupted)
         };
-        let _ = closed_url;
+        let (_, interrupted) = closed_url;
         {
             let _guard = self.apply_lock.lock();
             let _ = self.engine.close_tab(tab);
+        }
+        for d in interrupted {
+            let _ = self.app.emit(
+                "athanor://download",
+                &EngineEvent::Download {
+                    tab: d.tab,
+                    id: d.id,
+                    name: d.name,
+                    path: d.path,
+                    state: d.state,
+                    received: d.received,
+                    total: d.total,
+                    error: d.error,
+                    can_resume: d.can_resume,
+                },
+            );
         }
         true
     }

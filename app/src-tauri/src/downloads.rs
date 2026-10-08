@@ -65,11 +65,59 @@ impl Downloads {
     pub fn get(&self, id: u32) -> Option<&Download> {
         self.0.iter().find(|d| d.id == id)
     }
+    /// The engine stops a tab's transfers together with its view and says nothing more about them. Record them as
+    /// interrupted, so no download keeps showing progress it is no longer making; returns the changed records.
+    pub fn interrupt_tab(&mut self, tab: &str) -> Vec<Download> {
+        let mut changed = Vec::new();
+        for d in self.0.iter_mut().filter(|d| {
+            d.tab == tab && matches!(d.state.as_str(), "started" | "progress" | "paused")
+        }) {
+            d.state = "failed".into();
+            d.can_resume = false;
+            d.error = Some("Stopped because the tab that was downloading it was closed.".into());
+            changed.push(d.clone());
+        }
+        changed
+    }
     pub fn busy(&self, tab: &str) -> bool {
         self.0.iter().any(|d| {
             d.tab == tab
                 && (matches!(d.state.as_str(), "started" | "progress" | "paused")
                     || d.state == "failed" && d.can_resume)
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn event(tab: &str, id: u32, state: &str) -> EngineEvent {
+        EngineEvent::Download {
+            tab: tab.into(),
+            id,
+            name: format!("file-{id}.zip"),
+            path: String::new(),
+            state: state.into(),
+            received: 10,
+            total: 100,
+            error: None,
+            can_resume: false,
+        }
+    }
+
+    #[test]
+    fn closing_a_tab_interrupts_only_its_running_transfers() {
+        let mut d = Downloads::default();
+        d.update(&event("a", 1, "progress"));
+        d.update(&event("a", 2, "done"));
+        d.update(&event("b", 3, "progress"));
+        let changed = d.interrupt_tab("a");
+        assert_eq!(changed.len(), 1);
+        assert_eq!(d.get(1).unwrap().state, "failed");
+        assert!(d.get(1).unwrap().error.is_some() && !d.get(1).unwrap().can_resume);
+        assert_eq!(d.get(2).unwrap().state, "done");
+        assert_eq!(d.get(3).unwrap().state, "progress");
+        assert!(!d.busy("a") && d.busy("b"));
     }
 }
