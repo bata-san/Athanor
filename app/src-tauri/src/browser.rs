@@ -91,6 +91,9 @@ struct Inner {
     filing_serial: u64,
     /// The address each tab last really arrived at (a typed address that turns out to be a download is not one).
     committed: HashMap<String, String>,
+    /// Downloads that started in a tab which never showed a page (a link opened in a new tab that turned out to
+    /// be a file): download id -> tab. The tab carries the file name meanwhile and closes once the file is done.
+    download_tabs: HashMap<u32, String>,
     downloads: crate::downloads::Downloads,
     /// Cookies waiting for a tab that is being recreated in the other rendering mode.
     cookie_seed: HashMap<String, String>,
@@ -201,6 +204,7 @@ impl Browser {
             filing_undo: None,
             filing_serial: 0,
             committed: HashMap::new(),
+            download_tabs: HashMap::new(),
             downloads: Default::default(),
             cookie_seed: HashMap::new(),
             had_split: false,
@@ -505,7 +509,11 @@ impl Browser {
                 let _ = self.app.emit("athanor://script-dialog", &ev);
             }
             EngineEvent::Download {
-                ref tab, ref state, ..
+                ref tab,
+                id,
+                ref name,
+                ref state,
+                ..
             } => {
                 self.inner.lock().downloads.update(&ev);
                 if state == "started" {
@@ -516,6 +524,10 @@ impl Browser {
                         if g.ws.tab(tab).is_some_and(|t| t.url != url) {
                             g.ws.update_tab(tab, Some(&url), None, None);
                         }
+                    } else if g.ws.tab(tab).is_some() {
+                        // Nothing was ever shown here: name the tab after the file instead of leaving a blank one.
+                        g.download_tabs.insert(id, tab.clone());
+                        g.ws.update_tab(tab, None, Some(name), None);
                     }
                     if let Some(r) = g.runtime.get_mut(tab) {
                         r.loading = false;
@@ -523,6 +535,20 @@ impl Browser {
                     }
                     drop(g);
                     self.changed();
+                } else if state == "done" || state == "cancelled" {
+                    // A tab that only existed for this file goes away with it. A failed download keeps its tab,
+                    // because resuming needs the view that started it.
+                    let close = {
+                        let mut g = self.inner.lock();
+                        g.download_tabs
+                            .remove(&id)
+                            .filter(|t| !g.committed.contains_key(t))
+                    };
+                    if let Some(tab) = close {
+                        if self.close_tab_quiet(&tab) {
+                            self.sync();
+                        }
+                    }
                 }
                 let _ = self.app.emit("athanor://download", &ev);
             }
