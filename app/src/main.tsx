@@ -4,6 +4,7 @@ import { LazyMotion, MotionConfig, domMax } from 'motion/react'
 import { App } from './App'
 import { NotificationSurface } from './components/Notifications'
 import { useAppStore } from './lib/store'
+import { useLocale } from './lib/i18n'
 import './styles/app.css'
 
 /**
@@ -14,12 +15,14 @@ function Root() {
   const scale = useAppStore((state) => state.snapshot?.settings.uiScale ?? 100)
   const reduce = useAppStore((state) => state.snapshot?.settings.reduceMotion ?? false)
   const contrast = useAppStore((state) => state.snapshot?.settings.highContrast ?? false)
+  const locale = useLocale()
   useEffect(() => {
     const root = document.documentElement
+    root.lang = locale
     root.style.setProperty('--ath-ui-scale', String(scale / 100))
     if (reduce) root.dataset.reduceMotion = 'true'; else delete root.dataset.reduceMotion
     if (contrast) root.dataset.contrast = 'high'; else delete root.dataset.contrast
-  }, [scale, reduce, contrast])
+  }, [scale, reduce, contrast, locale])
   return <MotionConfig reducedMotion={reduce ? 'always' : 'user'}>{window.location.hash === '#/notifications' ? <NotificationSurface /> : <App />}</MotionConfig>
 }
 

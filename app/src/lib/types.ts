@@ -6,7 +6,9 @@ export type SplitNode = { kind: 'leaf'; tab: Id } | { kind: 'split'; dir: 'row' 
 export interface SplitState { root: SplitNode; focused: Id }
 export interface Workspace { spaces: Space[]; folders: Folder[]; tabs: Tab[]; activeSpace: Id; activeTab: Id | null; split: SplitState | null }
 export interface TabRuntime { loading: boolean; canGoBack: boolean; canGoForward: boolean; blocked: number; audible: boolean; secure: boolean; failed?: boolean }
-export interface Settings { searchEngine: string; archiveAfterHours: number; httpsUpgrade: boolean; stripTracking: boolean; autoFile: boolean; restoreSession: boolean; sidebarSide: 'left' | 'right'; sidebarCompact: boolean; sidebarWidth: number; theme: string; adblockEnabled: boolean; homepage: string; youtubeAdSkip: boolean; blockDrm: boolean; onboarded: boolean; webFont: boolean; autoUpdate: boolean; siteZoom: Record<string, number>; sitePermissions: Record<string, boolean>; uiScale: number; reduceMotion: boolean; highContrast: boolean }
+/** `system` follows the Windows language; `en` and `ja` pin the interface. */
+export type LanguageSetting = 'system' | 'en' | 'ja'
+export interface Settings { searchEngine: string; archiveAfterHours: number; httpsUpgrade: boolean; stripTracking: boolean; autoFile: boolean; restoreSession: boolean; sidebarSide: 'left' | 'right'; sidebarCompact: boolean; sidebarWidth: number; theme: string; adblockEnabled: boolean; homepage: string; youtubeAdSkip: boolean; blockDrm: boolean; onboarded: boolean; webFont: boolean; autoUpdate: boolean; siteZoom: Record<string, number>; sitePermissions: Record<string, boolean>; uiScale: number; reduceMotion: boolean; highContrast: boolean; language: LanguageSetting }
 export interface NavHistory { tab: Id; current: number; entries: { id: number; url: string; title: string }[] }
 export interface ScriptDialogEvent { type: 'scriptDialog'; tab: Id; kind: 'alert' | 'confirm' | 'prompt' | 'beforeunload'; message: string; defaultText: string; origin: string }
 export interface PermissionPrompt { tab: Id; id: number; origin: string; kind: string; host: string }

@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import type { ExtensionInfo, FilingRule, LineIssue, Settings as SettingsShape, ThemeInfo } from '@/lib/types'
+import type { ExtensionInfo, FilingRule, LanguageSetting, LineIssue, Settings as SettingsShape, ThemeInfo } from '@/lib/types'
 import { api } from '@/lib/api'
 import { fileTabs } from '@/lib/filing'
 import { countFilterLines, ignoredLineSummary, lineCountLabel, lineSelectionRange } from '@/lib/userFilters'
 import { useAppStore } from '@/lib/store'
+import { useT } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { AppIcon } from '@/components/Icons'
 import { AthanorMark } from '@/components/AthanorMark'
@@ -53,6 +54,7 @@ export default function SettingsPage() {
   const snapshot = useAppStore((state) => state.snapshot)
   const adblock = useAppStore((state) => state.adblock)
   const [section, setSection] = useState<SettingsSection>('General')
+  const t = useT()
   const [themes, setThemes] = useState<ThemeInfo[]>([])
   const [extensions, setExtensions] = useState<ExtensionInfo[]>([])
   const [rules, setRules] = useState<FilingRule[]>(snapshot?.filingRules ?? [])
@@ -142,6 +144,14 @@ export default function SettingsPage() {
     <Page title={section} description={sectionDescriptions[section]}>
       {!settings ? <Callout><AppIcon name="CircleHelp" className="size-4 shrink-0" />Settings are not available yet.</Callout> : <>
         {section === 'General' && <>
+          <Section title={t('settings.language')}>
+            <Row title={t('settings.language')} description={t('settings.language.description')} htmlFor="language">
+              <Select value={settings.language} onValueChange={(value) => patch({ language: value as LanguageSetting })}>
+                <SelectTrigger id="language" aria-label={t('settings.language')} className="w-56 max-sm:w-full max-md:h-11"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="system">{t('settings.language.system')}</SelectItem><SelectItem value="en">{t('settings.language.english')}</SelectItem><SelectItem value="ja">{t('settings.language.japanese')}</SelectItem></SelectContent>
+              </Select>
+            </Row>
+          </Section>
           <Section title="Search and startup">
             <Row title="New tab opens" description="The page a new tab starts on." htmlFor="homepage">
               <Select value={settings.homepage === 'athanor://newtab' ? 'athanor' : settings.homepage === 'https://www.google.com/' ? 'google' : 'custom'} onValueChange={(value) => { if (value === 'google') patch({ homepage: 'https://www.google.com/' }); else if (value === 'athanor') patch({ homepage: 'athanor://newtab' }) }}>

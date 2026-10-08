@@ -129,3 +129,7 @@ To have the ad-block script in place from the first byte, Athanor may cancel a n
 ## Android sign-in popups and cookies
 
 `window.open` with a size (Android reports it as a dialog window) opens a real popup over the screen with a close bar (`AthanorEngine.openPopup`), so it keeps its opener: `postMessage` back to the page and `window.close()` work, which is how most sign-in popups finish. Plain `target=_blank` links still become tabs. Back closes the popup first. Third-party cookies are accepted, as on desktop, so a login set by the identity provider is seen by the site. Checked on a phone with `e2e/phone/popup-login.cjs` (`adb reverse`).
+
+## Language
+
+Settings > General > Language sets the interface language: `system` (follows Windows), `en` or `ja`. The value is stored as `language` in the settings (Rust `Settings.language`, validated in `sanitize`). `lib/i18n.ts` holds the strings: add a key to `en`, then its `ja` translation; a missing translation falls back to English. Components call `useT()` and never hard-code the text they translate. The root sets `<html lang>` to the resolved locale. Only the Language row and its section use the table so far; the rest of the shell still has English text and should move over one screen at a time. Page content is not translated by this setting; that is the Translate page command.

@@ -57,6 +57,8 @@ pub struct Settings {
     pub reduce_motion: bool,
     /// Stronger text and border contrast, whatever the system says.
     pub high_contrast: bool,
+    /// Interface language: `system` (follow Windows), `en` or `ja`.
+    pub language: String,
 }
 
 impl Default for Settings {
@@ -84,6 +86,7 @@ impl Default for Settings {
             ui_scale: 100,
             reduce_motion: false,
             high_contrast: false,
+            language: "system".into(),
         }
     }
 }
@@ -112,6 +115,7 @@ pub struct SettingsPatch {
     pub ui_scale: Option<u32>,
     pub reduce_motion: Option<bool>,
     pub high_contrast: Option<bool>,
+    pub language: Option<String>,
 }
 
 impl Settings {
@@ -139,7 +143,8 @@ impl Settings {
             auto_update,
             ui_scale,
             reduce_motion,
-            high_contrast
+            high_contrast,
+            language
         );
         self.sanitize();
     }
@@ -153,6 +158,9 @@ impl Settings {
         }
         if self.sidebar_side != "left" && self.sidebar_side != "right" {
             self.sidebar_side = "left".into();
+        }
+        if !matches!(self.language.as_str(), "system" | "en" | "ja") {
+            self.language = "system".into();
         }
         self.sidebar_width = self.sidebar_width.clamp(180, 520);
         self.ui_scale = (self.ui_scale.clamp(100, 200) + 2) / 5 * 5; // steps of 5 %
@@ -305,6 +313,16 @@ mod tests {
         assert!(s.web_font && s.auto_update);
         assert_eq!(s.ui_scale, 100);
         assert!(!s.reduce_motion && !s.high_contrast);
+    }
+
+    #[test]
+    fn language_follows_the_system_unless_chosen() {
+        let mut s = Settings::default();
+        assert_eq!(s.language, "system");
+        s.apply(SettingsPatch { language: Some("ja".into()), ..Default::default() });
+        assert_eq!(s.language, "ja");
+        s.apply(SettingsPatch { language: Some("fr".into()), ..Default::default() });
+        assert_eq!(s.language, "system", "unknown languages fall back to the system choice");
     }
 
     #[test]
