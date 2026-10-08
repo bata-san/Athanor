@@ -124,3 +124,13 @@ Verification: TypeScript build and the unit test suite pass. The layout was chec
 ## WebView2 limits on shell styling
 
 Tab pages are native WebView2 surfaces stacked above the shell. Any shell popup over a page area therefore freezes the page into a screenshot and hides the native view (see `lib/overlay.ts`). Styling a page's own scrollbars, selection, or native dialogs is outside the shell's reach; those stay with the engine. Shell-owned surfaces (menus, dialogs, permission prompts, the page context menu) are already drawn by Athanor.
+
+## Softer, rounder chrome (October 2026)
+
+The DocC JSON for [Motion](https://developer.apple.com/tutorials/data/design/human-interface-guidelines/motion.json), [Materials](https://developer.apple.com/tutorials/data/design/human-interface-guidelines/materials.json), and [Layout](https://developer.apple.com/tutorials/data/design/human-interface-guidelines/layout.json) was read before this change. Motion asks for brief, precise feedback that never makes people wait, and for motion to explain what changed. Materials ask for translucency on controls that float above content, so the content stays visible behind them. Layout asks for corners that nest with their container.
+
+Applied: the base corner radius moved from 0.5rem to 0.625rem, so the page card, popups and the address field take a rounder shape while small controls keep their proportions. The address field and activity capsule are full pills. Menus, popovers and dialogs use a slightly translucent surface with a background blur, and a softer layered shadow with a hairline edge. Popups open from scale 0.94 on the spring curve; dialogs settle in from slightly lower; page switches use the same spring for a little longer. Every motion stays under the existing Reduce Motion rules in `styles/app.css`.
+
+Kept on purpose: the shadcn components, the monochrome palette, and the IBM Plex typeface. Apple's Liquid Glass refraction and the SF system font are not reproduced, since the material is tied to Apple's own renderer and SF is not available on Windows.
+
+Verification: the TypeScript build and the 42 unit tests pass. The result was viewed in the browser preview with the mock backend, in light appearance. Dark appearance and the real WebView2 build have not been checked, and the translucency depends on WebView2 supporting backdrop blur.

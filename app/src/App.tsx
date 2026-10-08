@@ -326,7 +326,7 @@ export function App() {
         {mobile && notificationHeight > 0 && <div aria-hidden="true" className="shrink-0" style={{ height: Math.max(0, notificationHeight - (document.querySelector('[data-part="toolbar"]')?.getBoundingClientRect().bottom ?? 56)) }} />}
         <AnimatePresence initial={false}>{findOpen && framed && shownTab && !internalPage && <FindBar key="find" tab={shownTab.id} url={shownTab.url} seed={findSeed} onClose={closeFind} commandRef={findCommand} />}</AnimatePresence>
         <section ref={contentRef} className={cn('content relative min-h-0 min-w-0 flex-1 overflow-hidden bg-background', mobile ? 'mobile-content' : standaloneBoardWindow ? '' : 'rounded-[var(--ath-stage-radius)] shadow-[var(--ath-stage-shadow)]')} data-part="content" data-split={String(splitActive)}>
-          <div key={`${currentPage}|${panel?.id ?? ''}|${internalPage ? shownTab?.url : 'web'}`} className="absolute inset-0 animate-[ath-rise_160ms_var(--ease-snap)_both]">
+          <div key={`${currentPage}|${panel?.id ?? ''}|${internalPage ? shownTab?.url : 'web'}`} className="absolute inset-0 animate-[ath-rise_240ms_var(--ease-spring)_both]">
           {currentPage === 'browser' && (panel
             ? <PanelView panel={panel} />
             : !internalPage ? (isMock ? shownTab ? <MockPage tab={shownTab} snapshot={snapshot} /> : <NewTabPage servers={servers} onNavigate={openTabUrl} /> : null)

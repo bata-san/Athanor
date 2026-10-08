@@ -11,7 +11,7 @@
   --muted: #f4f4f5; --muted-foreground: #666670;
   --accent: #f4f4f5; --accent-foreground: #18181b;
   --destructive: #3f3f46; --destructive-foreground: #fafafa;
-  --border: #e4e4e7; --input: #e4e4e7; --ring: #a1a1aa; --radius: 0.5rem;
+  --border: #e4e4e7; --input: #e4e4e7; --ring: #a1a1aa; --radius: 0.625rem;
   --sidebar: #f5f5f6; --sidebar-foreground: #18181b; --sidebar-primary: #0f0f10; --sidebar-primary-foreground: #fafafa; --sidebar-accent: #ebebed; --sidebar-accent-foreground: #18181b; --sidebar-border: #e6e6e9; --sidebar-ring: #a1a1aa;
   --ath-tab-height: 1.8rem; --ath-sidebar-width: 15.5rem; --ath-tab-active: #ffffff; --ath-tab-hover: #ececee; --ath-space-accent: #0f0f10; --ath-blur: 0px;
   --font-ui: 'IBM Plex Sans JP', 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', 'Yu Gothic UI', 'Hiragino Sans', sans-serif; --font-instr: 'PP Fraktion Mono', 'IBM Plex Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
@@ -24,8 +24,8 @@
   --ath-sidebar-min: 13rem; --ath-sidebar-max: 25rem; --ath-rail-width: 3.5rem;
   --ath-settings-nav-width: 14rem; --ath-toolbar-omnibox: 40rem; --ath-board-list-width: 14rem; --ath-board-list-mobile: 8rem; --ath-board-name-width: 12rem; --ath-board-image-max-px: 520;
   --ath-round-small: 0.5rem; --ath-round-medium: 0.75rem; --ath-round-large: 1rem; --ath-round-pill: 999px;
-  --ath-stage-radius: 0.75rem; --ath-stage-shadow: 0 0 0 1px oklch(0 0 0 / 0.07), 0 1px 2px oklch(0 0 0 / 0.04), 0 12px 32px -16px oklch(0 0 0 / 0.25);
-  --ath-shadow: 0 8px 30px oklch(0 0 0 / 0.1); --ath-shadow-menu: 0 0 0 1px oklch(0 0 0 / 0.02), 0 10px 32px -6px oklch(0 0 0 / 0.14), 0 2px 6px oklch(0 0 0 / 0.05); --ath-motion: 140ms; --ease-snap: cubic-bezier(0.2, 0.9, 0.25, 1); --ease-spring: linear(0, 0.2 4%, 0.55 9%, 0.84 15%, 1.02 22%, 1.07 28%, 1.06 34%, 1.02 44%, 0.995 56%, 1 70%, 1);
+  --ath-stage-radius: 0.875rem; --ath-stage-shadow: 0 0 0 1px oklch(0 0 0 / 0.07), 0 1px 2px oklch(0 0 0 / 0.04), 0 12px 32px -16px oklch(0 0 0 / 0.25);
+  --ath-shadow: 0 8px 30px oklch(0 0 0 / 0.1); --ath-shadow-menu: 0 0 0 0.5px oklch(0 0 0 / 0.08), 0 1px 2px oklch(0 0 0 / 0.05), 0 8px 20px -6px oklch(0 0 0 / 0.12), 0 22px 48px -14px oklch(0 0 0 / 0.22); --ath-motion: 140ms; --ease-snap: cubic-bezier(0.2, 0.9, 0.25, 1); --ease-spring: linear(0, 0.2 4%, 0.55 9%, 0.84 15%, 1.02 22%, 1.07 28%, 1.06 34%, 1.02 44%, 0.995 56%, 1 70%, 1);
 }
 :root[data-theme-dark='true'] {
   color-scheme: dark;
@@ -42,7 +42,7 @@
   --ath-tab-active: #1f1f23; --ath-tab-hover: #19191c; --ath-space-accent: #fafafa;
   --ath-space-default-color: #a1a1aa; --ath-board-default: #111113; --ath-dialog-dim: oklch(0 0 0 / 0.6);
   --ath-stage-shadow: 0 0 0 1px oklch(1 0 0 / 0.08), 0 14px 36px -14px oklch(0 0 0 / 0.7);
-  --ath-shadow: 0 10px 40px oklch(0 0 0 / 0.5); --ath-shadow-menu: 0 0 0 1px oklch(1 0 0 / 0.04), 0 12px 36px -6px oklch(0 0 0 / 0.65), 0 2px 6px oklch(0 0 0 / 0.4);
+  --ath-shadow: 0 10px 40px oklch(0 0 0 / 0.5); --ath-shadow-menu: 0 0 0 0.5px oklch(1 0 0 / 0.12), 0 2px 4px oklch(0 0 0 / 0.3), 0 10px 26px -6px oklch(0 0 0 / 0.5), 0 26px 60px -16px oklch(0 0 0 / 0.72);
 }
 @custom-variant rail ([data-collapsed='true'] &);
 @theme inline {
@@ -60,13 +60,15 @@
   --font-sans: var(--font-ui); --font-mono: var(--font-mono); --font-instr: var(--font-instr);
   --radius-sm: calc(var(--radius) - 0.25rem); --radius-md: calc(var(--radius) - 0.125rem); --radius-lg: var(--radius); --radius-xl: calc(var(--radius) + 0.25rem); --radius-2xl: calc(var(--radius) + 0.5rem);
   --shadow-menu: var(--ath-shadow-menu);
-  --animate-in: ath-in 130ms var(--ease-snap) both; --animate-out: ath-out 90ms cubic-bezier(0.4, 0, 1, 1) both;
+  --animate-in: ath-in 220ms var(--ease-spring) both; --animate-out: ath-out 120ms cubic-bezier(0.4, 0, 1, 1) both;
 }
 /* Popups grow out of the point they were opened from (Radix exposes it as --radix-popper-transform-origin). */
-@keyframes ath-in { from { opacity: 0; transform: scale(0.975); } to { opacity: 1; transform: none; } }
+@keyframes ath-in { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: none; } }
 @keyframes ath-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(0.96); } }
 /* A card that floats up out of the blurred page (tab overview). */
 @keyframes ath-float { from { opacity: 0; transform: translateY(14px) scale(0.965); } to { opacity: 1; transform: none; } }
+/* Sheets and dialogs settle in from slightly smaller and lower, the way macOS sheets do. */
+@keyframes ath-pop { from { opacity: 0; transform: translateY(8px) scale(0.96); } to { opacity: 1; transform: none; } }
 /* The blur behind the tab overview deepens as the cards arrive. */
 @keyframes ath-blur-in { from { -webkit-backdrop-filter: blur(0); backdrop-filter: blur(0); } to { -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px); } }
 @keyframes ath-blur-out { from { -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px); } to { -webkit-backdrop-filter: blur(0); backdrop-filter: blur(0); } }

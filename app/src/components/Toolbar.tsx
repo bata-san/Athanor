@@ -182,7 +182,7 @@ function ActivityHub({ snapshot, activeTab, media, onOpenDownloads }: { snapshot
   const pageMedia = Boolean(activeTab && (media.media?.available || runtime?.audible))
   const transfers = activeTransfers(items)
   if (!pageMedia && !transfers.length) return null
-  return <div className="flex h-8 min-w-0 shrink items-center gap-0.5 rounded-lg bg-foreground/[0.055] px-0.5" data-part="activity-hub" data-no-drag role="group" aria-label="Page and transfers">
+  return <div className="flex h-8 min-w-0 shrink items-center gap-0.5 rounded-full bg-foreground/[0.055] px-1" data-part="activity-hub" data-no-drag role="group" aria-label="Page and transfers">
     {activeTab && pageMedia && <MediaButtons tab={activeTab} media={media} />}
     {transfers.length > 0 && <DownloadActivity active={transfers} onOpen={onOpenDownloads} />}
   </div>
