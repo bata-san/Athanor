@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import type { Download } from './types'
 
 export const isDownloading = (item: Download) => item.state === 'started' || item.state === 'progress'
+/** Transfers that still need the person's attention: running, paused, or interrupted but resumable. */
+export const activeTransfers = (items: Download[]) => items.filter((item) => isDownloading(item) || item.state === 'paused' || item.state === 'failed' && item.canResume)
 export function formatBytes(value: number) {
   if (!Number.isFinite(value) || value <= 0) return '0 B'
   const unit = Math.min(3, Math.floor(Math.log(value) / Math.log(1024)))

@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type * as React from 'react'
 import { Bell, Download, KeyRound, LayoutGrid, ArrowLeft, ArrowRight, Columns2, Command, FolderInput, LayoutPanelTop, MoreHorizontal, PanelLeft, PanelsTopLeft, Pause, Play, Puzzle, RotateCw, Settings, SquareTerminal, Volume2, VolumeX, X } from 'lucide-react'
-import type { MediaState, NavHistory, Snapshot, Tab } from '@/lib/types'
+import type { Download as DownloadItem, MediaState, NavHistory, Snapshot, Tab } from '@/lib/types'
 import { listen } from '@/lib/events'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { fileTabs } from '@/lib/filing'
 import { cn } from '@/lib/utils'
-import { downloadStatus, formatBytes, isDownloading, useDownloads } from '@/lib/downloads'
+import { activeTransfers, downloadStatus, formatBytes, isDownloading, useDownloads } from '@/lib/downloads'
 import { Button } from './ui/button'
 import { DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuTrigger } from './ui/dropdown-menu'
 import { Tip } from './ui/tooltip'
@@ -93,15 +93,16 @@ export function NavCluster({ snapshot, activeTab, className }: { snapshot: Snaps
  */
 export function StageBar({ snapshot, activeTab, openBar, openPage, toggleDev, openOverview, openDownloads, openNotifications, openPasswords, windowControls }: { snapshot: Snapshot; activeTab: Tab | null; openBar: () => void; openOverview: () => void; openDownloads: () => void; openNotifications: () => void; openPasswords: () => void; openPage: (page: Page) => void; toggleDev: () => void; windowControls?: React.ReactNode }) {
   const notificationError = useNotices((state) => state.displayError)
+  const media = usePageMedia(snapshot, activeTab)
   const split = () => { const next = snapshot.workspace.tabs.find((tab) => tab.id !== activeTab?.id && tab.space === snapshot.workspace.activeSpace && !tab.archived); if (snapshot.workspace.split) void api.unsplit(); else if (next) void api.splitWith({ tab: next.id, dir: 'row' }); else toast('Open another tab to use Split View', { duration: 2400 }) }
   return <div className="flex h-9 shrink-0 items-center gap-1 ps-1.5" style={{ containerType: 'inline-size', containerName: 'ath-toolbar' }} data-part="toolbar" onPointerDown={dragWindow} onDoubleClick={toggleWindow}>
     <NavCluster snapshot={snapshot} activeTab={activeTab} className="shrink-0" />
-    <div className="flex min-w-0 flex-1 justify-center px-1" data-no-drag>
-      <UrlPill snapshot={snapshot} activeTab={activeTab} onOpen={openBar} onSettings={() => openPage('settings')} className="w-full max-w-[44rem]" />
+    {/* The address and what the page is doing right now share one row: the pill is the place, the hub is its live status. */}
+    <div className="flex min-w-0 flex-1 items-center justify-center gap-1.5 px-1" data-no-drag>
+      <UrlPill snapshot={snapshot} activeTab={activeTab} onOpen={openBar} onSettings={() => openPage('settings')} className="min-w-[9rem] max-w-[44rem] flex-1" />
+      <ActivityHub snapshot={snapshot} activeTab={activeTab} media={media} onOpenDownloads={openDownloads} />
     </div>
-    <MediaControls snapshot={snapshot} activeTab={activeTab} />
     {notificationError && <div data-no-drag><NavButton label="Read notifications: toast display unavailable" onClick={openNotifications}><Bell aria-hidden="true" /></NavButton></div>}
-    <DownloadActivity onOpen={openDownloads} />
     <div className="flex items-center" data-no-drag>
       <NavButton label="File tabs into folders" shortcut="Ctrl+Shift+F" className="ath-optional-tool" onClick={() => void fileTabs()}><FolderInput aria-hidden="true" /></NavButton>
       <NavButton label={snapshot.workspace.split ? 'Close split view' : 'Split view'} shortcut={'Ctrl+\\'} active={Boolean(snapshot.workspace.split)} className="ath-optional-tool" onClick={split}><Columns2 aria-hidden="true" /></NavButton>
@@ -111,6 +112,10 @@ export function StageBar({ snapshot, activeTab, openBar, openPage, toggleDev, op
       <OverlayDropdownMenu>
         <Tip label="More"><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="size-7 rounded-md data-[state=open]:bg-foreground/[0.07] data-[state=open]:text-foreground [&_svg]:size-[1rem]" aria-label="More" data-part="nav-button"><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger></Tip>
         <DropdownMenuContent align="end" className="w-60">
+          {/* What the page is doing comes first, so the same controls stay reachable when the hub is hidden by a narrow window. */}
+          {activeTab && media.media?.available && <DropdownMenuItem disabled={media.pending} onSelect={media.toggle}>{media.media.paused || media.media.ended ? <Play aria-hidden="true" /> : <Pause aria-hidden="true" />}{media.media.paused || media.media.ended ? 'Play Page Media' : 'Pause Page Media'}</DropdownMenuItem>}
+          {activeTab && <DropdownMenuItem onSelect={() => void api.setMuted(activeTab.id, !activeTab.muted).catch((error) => toast.error('Could not change page audio', { description: String(error) }))}>{activeTab.muted ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}{activeTab.muted ? 'Unmute Page' : 'Mute Page'}</DropdownMenuItem>}
+          {activeTab && <DropdownMenuSeparator />}
           <DropdownMenuItem onSelect={openDownloads}><Download aria-hidden="true" />Downloads<DropdownMenuShortcut>Ctrl+J</DropdownMenuShortcut></DropdownMenuItem>
           <DropdownMenuItem onSelect={openNotifications}><Bell aria-hidden="true" />Notifications</DropdownMenuItem>
           {snapshot.platform === 'windows' && <DropdownMenuItem onSelect={openPasswords}><KeyRound aria-hidden="true" />Passwords</DropdownMenuItem>}
@@ -134,7 +139,11 @@ export function StageBar({ snapshot, activeTab, openBar, openPage, toggleDev, op
   </div>
 }
 
-function MediaControls({ snapshot, activeTab }: { snapshot: Snapshot; activeTab: Tab | null }) {
+/**
+ * Asks the active page whether it has a playable media element, once every two seconds. The hub and the More menu
+ * read the same answer, so the two places never disagree about what the page can do.
+ */
+function usePageMedia(snapshot: Snapshot, activeTab: Tab | null) {
   const [media, setMedia] = useState<MediaState | null>(null)
   const [pending, setPending] = useState(false)
   const currentTab = useRef(activeTab?.id)
@@ -153,29 +162,48 @@ function MediaControls({ snapshot, activeTab }: { snapshot: Snapshot; activeTab:
     void poll()
     return () => { alive = false; window.clearTimeout(timer) }
   }, [activeTab?.id, activeTab?.url, runtime?.failed])
-  if (!activeTab || !media?.available && !runtime?.audible) return null
-  const tab = activeTab.id
-  const paused = media?.paused || media?.ended
-  return <div className="flex h-8 shrink-0 items-center rounded-lg bg-foreground/[0.055] px-0.5" data-part="media-controls" data-no-drag role="group" aria-label="Page playback">
-    {media?.available && <NavButton label={paused ? 'Play' : 'Pause'} disabled={pending} onClick={() => {
-      setPending(true)
-      void api.pageMedia(tab, 'toggle-play').then((state) => { if (currentTab.current === tab) { setMedia(state); if (state.error) toast('Playback could not start', { description: state.error }); else if (!state.available) toast('Use the player on the page to control playback') } }).catch((error) => toast.error('Could not control playback', { description: String(error) })).finally(() => setPending(false))
-    }}>{paused ? <Play aria-hidden="true" /> : <Pause aria-hidden="true" />}</NavButton>}
-    <NavButton label={activeTab.muted ? 'Unmute page' : 'Mute page'} disabled={pending} onClick={() => void api.setMuted(tab, !activeTab.muted).catch((error) => toast.error('Could not change page audio', { description: String(error) }))}>{activeTab.muted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</NavButton>
+  const toggle = () => {
+    if (!activeTab) return
+    const tab = activeTab.id
+    setPending(true)
+    void api.pageMedia(tab, 'toggle-play').then((state) => { if (currentTab.current === tab) { setMedia(state); if (state.error) toast('Playback could not start', { description: state.error }); else if (!state.available) toast('Use the player on the page to control playback') } }).catch((error) => toast.error('Could not control playback', { description: String(error) })).finally(() => setPending(false))
+  }
+  return { media, pending, toggle }
+}
+type PageMedia = ReturnType<typeof usePageMedia>
+
+/**
+ * Live status of the current page and its transfers, in one capsule beside the address. It only appears while
+ * there is something to show (page audio or media, a running or resumable download) and folds away when there is not.
+ */
+function ActivityHub({ snapshot, activeTab, media, onOpenDownloads }: { snapshot: Snapshot; activeTab: Tab | null; media: PageMedia; onOpenDownloads: () => void }) {
+  const items = useDownloads((state) => state.items)
+  const runtime = activeTab ? snapshot.runtime[activeTab.id] : undefined
+  const pageMedia = Boolean(activeTab && (media.media?.available || runtime?.audible))
+  const transfers = activeTransfers(items)
+  if (!pageMedia && !transfers.length) return null
+  return <div className="flex h-8 min-w-0 shrink items-center gap-0.5 rounded-lg bg-foreground/[0.055] px-0.5" data-part="activity-hub" data-no-drag role="group" aria-label="Page and transfers">
+    {activeTab && pageMedia && <MediaButtons tab={activeTab} media={media} />}
+    {transfers.length > 0 && <DownloadActivity active={transfers} onOpen={onOpenDownloads} />}
+  </div>
+}
+
+function MediaButtons({ tab, media }: { tab: Tab; media: PageMedia }) {
+  const paused = media.media?.paused || media.media?.ended
+  return <div className="flex shrink-0 items-center" data-part="media-controls">
+    {media.media?.available && <NavButton label={paused ? 'Play' : 'Pause'} disabled={media.pending} onClick={media.toggle}>{paused ? <Play aria-hidden="true" /> : <Pause aria-hidden="true" />}</NavButton>}
+    <NavButton label={tab.muted ? 'Unmute page' : 'Mute page'} disabled={media.pending} onClick={() => void api.setMuted(tab.id, !tab.muted).catch((error) => toast.error('Could not change page audio', { description: String(error) }))}>{tab.muted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</NavButton>
   </div>
 }
 
 /** Transfers stay visible in the existing toolbar without covering or hiding the page. */
-function DownloadActivity({ onOpen }: { onOpen: () => void }) {
-  const items = useDownloads((state) => state.items)
+function DownloadActivity({ active, onOpen }: { active: DownloadItem[]; onOpen: () => void }) {
   const [pending, setPending] = useState(false)
-  const active = items.filter((item) => isDownloading(item) || item.state === 'paused' || item.state === 'failed' && item.canResume)
-  if (!active.length) return null
   const item = active.find(isDownloading) ?? active[0]!
   const determinate = item.total > 0
   const percent = determinate ? Math.min(100, Math.max(0, item.received / item.total * 100)) : 0
   const label = `${item.name} · ${downloadStatus(item)}${active.length > 1 ? ` · ${active.length} transfers` : ''}`
-  return <div className="flex h-8 min-w-0 w-[clamp(8rem,20vw,17rem)] shrink items-center rounded-lg bg-foreground/[0.055]" data-part="download-activity" data-no-drag><Button variant="ghost" className="h-8 min-w-0 flex-1 shrink gap-2 px-2 text-start" aria-label={label} title={label} onClick={onOpen}>
+  return <div className="flex h-7 min-w-0 w-[clamp(6rem,12vw,12rem)] shrink items-center" data-part="download-activity" data-no-drag><Button variant="ghost" className="h-7 min-w-0 flex-1 shrink gap-2 px-1.5 text-start" aria-label={label} title={label} onClick={onOpen}>
     <Download className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
     <span className="flex min-w-0 flex-1 flex-col gap-1">
       <span className="flex min-w-0 items-center gap-1 text-[0.7333rem]"><span className="truncate">{item.name}</span><span className="shrink-0 text-muted-foreground">{item.state === 'paused' ? 'Paused' : item.state === 'failed' ? 'Interrupted' : determinate ? `${Math.floor(percent)}%` : formatBytes(item.received)}{active.length > 1 ? ` +${active.length - 1}` : ''}</span></span>
