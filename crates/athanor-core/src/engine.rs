@@ -145,6 +145,9 @@ pub enum EngineEvent {
     /// The page's zoom changed (keyboard, Ctrl+wheel, pinch). `factor` is 1.0 at 100 %.
     #[serde(rename_all = "camelCase")]
     ZoomChanged { tab: Id, factor: f64 },
+    /// The page put an element (usually a video) into full screen, or left it.
+    #[serde(rename_all = "camelCase")]
+    FullscreenChanged { tab: Id, on: bool },
     /// A custom context-menu entry was chosen (e.g. `send-image-to-board` with the image URL as `data`).
     #[serde(rename_all = "camelCase")]
     ContextAction {

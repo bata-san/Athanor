@@ -132,6 +132,7 @@ export function App() {
   const [density, setDensity] = useState<'compact' | 'comfortable'>(() => localStorage.getItem('athanor-density') === 'compact' ? 'compact' : 'comfortable')
   const [narrow, setNarrow] = useState(() => window.matchMedia('(max-width: 43.75rem)').matches)
   const contentRef = useRef<HTMLElement>(null)
+  const [pageFull, setPageFull] = useState(false)
   const mobile = (snapshot?.platform === 'android' || snapshot?.platform === 'ios') || narrow
   const anyOverlay = useAnyOverlay()
   const dnd = useTabDnd()
@@ -169,13 +170,16 @@ export function App() {
   useEffect(() => { const update = (event: Event) => { const next = (event as CustomEvent<'compact' | 'comfortable'>).detail; if (next === 'compact' || next === 'comfortable') setDensity(next) }; window.addEventListener('athanor-density', update); return () => window.removeEventListener('athanor-density', update) }, [])
   useEffect(() => { if (!snapshot?.workspace.split) { setSplitRects(null); return }; void api.getSplitRects().then(setSplitRects) }, [snapshot?.workspace.split])
   useEffect(() => { const unlisten = listen('athanor://split-rects', setSplitRects); return () => { void unlisten.then((off) => off()) } }, [])
+  // A page element (a video) went full screen: the shell steps aside so the page fills the display.
+  useEffect(() => { const unlisten = listen('athanor://page-fullscreen', (event) => setPageFull(event.on)); return () => { void unlisten.then((off) => off()) } }, [])
+  useEffect(() => { if (pageFull && !activeTab) setPageFull(false) }, [pageFull, activeTab])
   // The page views are clipped to the stage's corner radius so the native page sits inside the rounded card.
   useEffect(() => {
     const content = contentRef.current; if (!content) return
     const apply = () => { const radius = parseFloat(getComputedStyle(content).borderTopLeftRadius) || 0; void api.setPageRadius(Math.round(radius * (window.devicePixelRatio || 1))) }
     apply(); window.addEventListener('resize', apply)
     return () => window.removeEventListener('resize', apply)
-  }, [mobile, ready])
+  }, [mobile, ready, pageFull])
   useEffect(() => { const content = contentRef.current; if (!content) return; const report = () => { const rect = content.getBoundingClientRect(); void api.setContentBounds({ x: rect.x, y: rect.y, w: rect.width, h: rect.height }).then(() => { if (useAppStore.getState().snapshot?.workspace.split) void api.getSplitRects().then(setSplitRects) }) }; const observer = new ResizeObserver(report); observer.observe(content); report(); return () => observer.disconnect() }, [mobile, ready, snapshot?.settings.sidebarCompact, snapshot?.settings.sidebarWidth, snapshot?.settings.sidebarSide])
 
   // The page's right-click menu: freeze the page, then draw the menu over the still image.
@@ -314,18 +318,19 @@ export function App() {
   const controls = !mobile ? <WindowControls /> : undefined
   const controlsInSidebar = sidebarRight && !snapshot.settings.sidebarCompact
   const framed = !mobile && !standaloneBoardWindow
+  const chromeShown = framed && !pageFull
   const urlSeed = (() => { const url = activeTab?.url ?? ''; return url.startsWith('athanor://') || !hostOf(url) ? '' : url })()
   const showBar = () => openBar('navigate', urlSeed)
   return <TooltipProvider><DndContext {...dnd}>
     <div className={cn('app-shell ath-chrome flex h-dvh w-full min-h-0 text-foreground', mobile && 'mobile-shell flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]', !mobile && sidebarRight && 'flex-row-reverse', standaloneBoardWindow && 'standalone-board-shell')} data-part="shell" data-side={snapshot.settings.sidebarSide} data-density={density}>
-      {framed && <Sidebar snapshot={snapshot} panels={panels} openPage={openInternalPage} openPanel={(selected) => { setPanel(selected); setScreen('browser') }} windowControls={controlsInSidebar ? controls : undefined} />}
-      <main className={cn('main-column relative flex min-h-0 min-w-0 flex-1 flex-col', framed && (sidebarRight ? 'ps-2 pb-2' : 'pe-2 pb-2'))}>
-        {framed && <StageBar snapshot={snapshot} activeTab={activeTab} openBar={showBar} openPage={openInternalPage} toggleDev={() => setDevOpen((value) => !value)} openOverview={() => setOverviewOpen(true)} openDownloads={openDownloads} openNotifications={() => setNotificationsOpen(true)} openPasswords={() => setPasswordsOpen(true)} windowControls={controlsInSidebar ? undefined : controls} />}
+      {chromeShown && <Sidebar snapshot={snapshot} panels={panels} openPage={openInternalPage} openPanel={(selected) => { setPanel(selected); setScreen('browser') }} windowControls={controlsInSidebar ? controls : undefined} />}
+      <main className={cn('main-column relative flex min-h-0 min-w-0 flex-1 flex-col', chromeShown && (sidebarRight ? 'ps-2 pb-2' : 'pe-2 pb-2'))}>
+        {chromeShown && <StageBar snapshot={snapshot} activeTab={activeTab} openBar={showBar} openPage={openInternalPage} toggleDev={() => setDevOpen((value) => !value)} openOverview={() => setOverviewOpen(true)} openDownloads={openDownloads} openNotifications={() => setNotificationsOpen(true)} openPasswords={() => setPasswordsOpen(true)} windowControls={controlsInSidebar ? undefined : controls} />}
         {standaloneBoardWindow && !mobile && <StandaloneTitlebar />}
         {mobile && !standaloneBoardWindow && <MobileBar snapshot={snapshot} activeTab={activeTab} openBar={showBar} openSwitcher={() => setSwitcherOpen(true)} openMenu={() => openBar('navigate', '')} openPage={openInternalPage} />}
         {mobile && notificationHeight > 0 && <div aria-hidden="true" className="shrink-0" style={{ height: Math.max(0, notificationHeight - (document.querySelector('[data-part="toolbar"]')?.getBoundingClientRect().bottom ?? 56)) }} />}
-        <AnimatePresence initial={false}>{findOpen && framed && shownTab && !internalPage && <FindBar key="find" tab={shownTab.id} url={shownTab.url} seed={findSeed} onClose={closeFind} commandRef={findCommand} />}</AnimatePresence>
-        <section ref={contentRef} className={cn('content relative min-h-0 min-w-0 flex-1 overflow-hidden bg-background', mobile ? 'mobile-content' : standaloneBoardWindow ? '' : 'rounded-[var(--ath-stage-radius)] shadow-[var(--ath-stage-shadow)]')} data-part="content" data-split={String(splitActive)}>
+        <AnimatePresence initial={false}>{findOpen && chromeShown && shownTab && !internalPage && <FindBar key="find" tab={shownTab.id} url={shownTab.url} seed={findSeed} onClose={closeFind} commandRef={findCommand} />}</AnimatePresence>
+        <section ref={contentRef} className={cn('content relative min-h-0 min-w-0 flex-1 overflow-hidden bg-background', mobile ? 'mobile-content' : standaloneBoardWindow || pageFull ? '' : 'rounded-[var(--ath-stage-radius)] shadow-[var(--ath-stage-shadow)]')} data-part="content" data-split={String(splitActive)}>
           <div key={`${currentPage}|${panel?.id ?? ''}|${internalPage ? shownTab?.url : 'web'}`} className="absolute inset-0 animate-[ath-rise_240ms_var(--ease-spring)_both]">
           {currentPage === 'browser' && (panel
             ? <PanelView panel={panel} />

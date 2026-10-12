@@ -146,3 +146,7 @@ Read before this pass: the DocC JSON for [Menus](https://developer.apple.com/tut
 * Settings: the language row reads *Interface language* under the *Language* heading instead of repeating it.
 
 Verification: TypeScript build and unit tests pass. Each change was observed in the Windows WebView2 debug build (an isolated test instance), in the light and dark (Monolith) themes, through window captures. The menu translucency and dark appearance listed as unverified in the earlier sections were observed in that build.
+
+## Page full screen
+
+HIG (Playing video / Going full screen): content should fill the display and controls should step aside while the person watches. When a page puts an element into full screen (`ContainsFullScreenElementChanged`), the window goes full screen and the shell hides the sidebar, toolbar, find bar and stage rounding, so the page view grows to the whole window. Esc (handled by the page) restores everything. Build checks only (tsc, vitest, clippy); not yet observed in a real window with a playing video.

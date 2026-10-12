@@ -914,6 +914,25 @@ pub unsafe fn attach(controller: &ICoreWebView2Controller, ctx: Ctx) -> windows:
         )?;
     }
 
+    // --- element full screen (video players, presentations) ---
+    {
+        let (sink, tab) = (ctx.sink.clone(), tab.clone());
+        core.add_ContainsFullScreenElementChanged(
+            &ContainsFullScreenElementChangedEventHandler::create(Box::new(move |sender, _| {
+                if let Some(core) = sender {
+                    let mut on = Default::default();
+                    core.ContainsFullScreenElement(&mut on)?;
+                    sink(EngineEvent::FullscreenChanged {
+                        tab: tab.clone(),
+                        on: on.as_bool(),
+                    });
+                }
+                Ok(())
+            })),
+            &mut token,
+        )?;
+    }
+
     // --- zoom (keyboard, Ctrl+wheel, pinch) ---
     {
         let (sink, tab) = (ctx.sink.clone(), tab.clone());

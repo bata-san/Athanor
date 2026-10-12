@@ -587,6 +587,20 @@ impl Browser {
                     }
                 }
             }
+            EngineEvent::FullscreenChanged { tab, on } => {
+                // The window goes full screen and the shell hides its chrome, so the page fills the display.
+                #[cfg(desktop)]
+                {
+                    use tauri::Manager;
+                    if let Some(window) = self.app.get_window("main") {
+                        let _ = window.set_fullscreen(on);
+                    }
+                }
+                let _ = self.app.emit(
+                    "athanor://page-fullscreen",
+                    serde_json::json!({ "tab": tab, "on": on }),
+                );
+            }
             EngineEvent::ZoomChanged { tab, factor } => {
                 let mut g = self.inner.lock();
                 let key =
