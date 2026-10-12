@@ -172,7 +172,6 @@ export function App() {
   useEffect(() => { const unlisten = listen('athanor://split-rects', setSplitRects); return () => { void unlisten.then((off) => off()) } }, [])
   // A page element (a video) went full screen: the shell steps aside so the page fills the display.
   useEffect(() => { const unlisten = listen('athanor://page-fullscreen', (event) => setPageFull(event.on)); return () => { void unlisten.then((off) => off()) } }, [])
-  useEffect(() => { if (pageFull && !activeTab) setPageFull(false) }, [pageFull, activeTab])
   // The page views are clipped to the stage's corner radius so the native page sits inside the rounded card.
   useEffect(() => {
     const content = contentRef.current; if (!content) return
