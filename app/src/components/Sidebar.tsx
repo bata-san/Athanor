@@ -9,6 +9,7 @@ import {
 import type { PanelInfo, Snapshot, Tab } from '@/lib/types'
 import { groupSidebarTabs, tabNumbers } from '@/lib/sidebarModel'
 import { useCtrlHeld } from '@/lib/modifiers'
+import { isMacOS } from '@/lib/platform'
 import { api } from '@/lib/api'
 import { fileTabs } from '@/lib/filing'
 import { cn, cssToken } from '@/lib/utils'
@@ -236,7 +237,7 @@ function TabMenu({ tab, snapshot, activeTab, spaceFolders }: TabMenuCtx) {
       </ContextMenuSubContent>
     </ContextMenuSub>}
     <ContextMenuItem onSelect={() => void api.copyUrl(tab.id)}><Link2 />Copy Address</ContextMenuItem>
-    {!tab.archived && !tab.url.startsWith('athanor://') && <ContextMenuItem onSelect={() => void api.setSoftwareRendering(tab.id, !tab.softwareRendering)}><ZapOff />{tab.softwareRendering ? 'Turn On Hardware Acceleration' : 'Turn Off Hardware Acceleration'}</ContextMenuItem>}
+    {!isMacOS && !tab.archived && !tab.url.startsWith('athanor://') && <ContextMenuItem onSelect={() => void api.setSoftwareRendering(tab.id, !tab.softwareRendering)}><ZapOff />{tab.softwareRendering ? 'Turn On Hardware Acceleration' : 'Turn Off Hardware Acceleration'}</ContextMenuItem>}
     <ContextMenuSeparator />
     <ContextMenuItem onSelect={() => void api.closeTab(tab.id)}><X />Close Tab</ContextMenuItem>
     {hasOthers && <ContextMenuItem onSelect={() => void api.closeOtherTabs(tab.id)}><XCircle />Close Other Tabs</ContextMenuItem>}
@@ -280,7 +281,7 @@ function TabRow(props: RowProps) {
     style={{ opacity: isDragging ? 0.35 : undefined }}>
     {active && <ActivePill />}
     <DropLine tab={tab} />
-    <button type="button" {...attributes} {...listeners} className={`flex h-full min-w-0 flex-1 items-center gap-1.5 rounded text-start outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rail:justify-center rail:gap-0`} aria-current={active ? 'page' : undefined} aria-keyshortcuts={shortcutNumber ? `Control+${shortcutNumber}` : undefined} onClick={() => void api.activateTab(tab.id)} onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); close() } }} title={compact ? undefined : tab.url}>
+    <button type="button" {...attributes} {...listeners} className={`flex h-full min-w-0 flex-1 items-center gap-1.5 rounded text-start outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rail:justify-center rail:gap-0`} aria-current={active ? 'page' : undefined} aria-keyshortcuts={shortcutNumber ? `${isMacOS ? 'Meta' : 'Control'}+${shortcutNumber}` : undefined} onClick={() => void api.activateTab(tab.id)} onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); close() } }} title={compact ? undefined : tab.url}>
       <Favicon tab={tab} runtime={runtime} className={`rail:size-[1.2rem]`} />
       <span className="sb-label min-w-0 flex-1 truncate" data-part="tab-title">{tab.title}</span>
     </button>
@@ -300,7 +301,7 @@ function PinnedTile(props: RowProps) {
   const { setNodeRef: setDropRef } = useDroppable({ id: dropId.tab(tab.id), disabled: isDragging })
   const tile = <button ref={(element) => { setNodeRef(element); setDropRef(element) }} type="button" {...attributes} {...listeners} onClick={() => void api.activateTab(tab.id)}
     className="relative isolate grid aspect-square w-full min-w-0 place-items-center rounded-lg bg-sidebar-accent/70 text-muted-foreground outline-none transition-colors hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 data-[active=true]:bg-transparent data-[active=true]:text-foreground"
-    data-part="pinned-tab" data-pinned="true" data-active={String(active)} aria-keyshortcuts={shortcutNumber ? `Control+${shortcutNumber}` : undefined} style={{ opacity: isDragging ? 0.35 : undefined }} aria-label={tab.title}>
+    data-part="pinned-tab" data-pinned="true" data-active={String(active)} aria-keyshortcuts={shortcutNumber ? `${isMacOS ? 'Meta' : 'Control'}+${shortcutNumber}` : undefined} style={{ opacity: isDragging ? 0.35 : undefined }} aria-label={tab.title}>
     {active && <ActivePill />}
     <DropLine tab={tab} vertical />
     <Favicon tab={tab} runtime={runtime} className="size-[1.2rem]" />

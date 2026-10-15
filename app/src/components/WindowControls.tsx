@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Copy, Minus, Square, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { isMacOS } from '@/lib/platform'
 
 const base = 'grid h-10 w-11 place-items-center text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:bg-accent [&_svg]:size-[1rem] [&_svg]:stroke-[1.6]'
 
@@ -9,6 +10,7 @@ const base = 'grid h-10 w-11 place-items-center text-muted-foreground outline-no
 export function WindowControls({ className }: { className?: string }) {
   const [maximized, setMaximized] = useState(false)
   useEffect(() => { void api.windowIsMaximized().then(setMaximized) }, [])
+  if (isMacOS) return null // macOS supplies the title bar, traffic lights and full-screen behavior.
   return <div className={cn('flex shrink-0 [-webkit-app-region:no-drag]', className)} data-part="window-controls">
     <button type="button" className={base} data-part="window-minimize" aria-label="Minimize" onClick={() => void api.windowMinimize()}><Minus /></button>
     <button type="button" className={base} data-part="window-maximize" aria-label={maximized ? 'Restore window' : 'Maximize window'} onClick={() => { void api.windowToggleMaximize(); setMaximized((value) => !value) }}>{maximized ? <Copy className="-scale-x-100" /> : <Square className="!size-3" />}</button>
@@ -18,6 +20,7 @@ export function WindowControls({ className }: { className?: string }) {
 
 /** Pointer handler for empty window chrome: drags the window, double-click toggles maximise. */
 export function dragWindow(event: React.PointerEvent) {
+  if (isMacOS) { if (event.button === 0 && !(event.target as HTMLElement).closest('button, input, textarea, a, [role="menuitem"], [data-no-drag]')) void api.windowStartDrag(); return }
   if (event.button !== 0 || (event.target as HTMLElement).closest('button, input, textarea, a, [role="menuitem"], [data-no-drag]')) return
   const surface = event.currentTarget as HTMLElement
   const pointer = event.pointerId

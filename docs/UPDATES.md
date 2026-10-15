@@ -5,12 +5,13 @@
 * The shell checks the release feed about 8 seconds after start-up (setting `autoUpdate`, default on), downloads a newer version in the background and shows a toast with **Restart**. Nothing is installed until the user presses it. Settings -> About has **Check for updates** and the switch.
 * Commands (`app/src-tauri/src/updater.rs`): `check_update() -> UpdateInfo | null`, `download_update()`, `install_update()` (saves the session, runs the installer in passive mode, restarts). Desktop only; Android has no updater.
 * The feed is `https://github.com/bata-san/Athanor/releases/download/updater/latest.json`, the asset of a rolling release tagged `updater` (a fixed URL that also works while releases are pre-releases). Every download is verified against the public key in `tauri.conf.json` (`plugins.updater.pubkey`) before the installer runs. `ATHANOR_UPDATE_URL` replaces the feed (tests; release builds only accept https).
+* macOS updates use signed `.app.tar.gz` archives with separate `darwin-aarch64` and `darwin-x86_64` feed entries. Apple code signing and notarization are separate; see [MACOS.md](MACOS.md).
 * Windows updates come from the NSIS installer, so a copy installed with the installer updates itself. A standalone `athanor.exe` copied around by hand is not replaced by it.
 
 ### Releasing
 
 1. Bump the version in `Cargo.toml` (`[workspace.package]`) and `app/src-tauri/tauri.conf.json`.
-2. Run the **Release** workflow with the tag `v<version>`. It builds and signs the installer (secret `TAURI_SIGNING_PRIVATE_KEY`), publishes the release with the installer, the APK and `SHA256SUMS.txt`, and replaces `latest.json` on the `updater` release.
+2. Run the **Release** workflow with the tag `v<version>`. It builds and signs the installer (secret `TAURI_SIGNING_PRIVATE_KEY`), publishes the release with the Windows installer, macOS DMGs/updater archives, the APK and `SHA256SUMS.txt`, and replaces `latest.json` on the `updater` release.
 
 The signing key is generated once (`npx tauri signer generate`); keep the private half safe: without it no update can be signed for installs that carry the matching public key.
 

@@ -72,6 +72,42 @@ jobs:
             target/release/bundle/nsis/*-setup.exe.sig
             latest.json
 
+  macos:
+    name: macOS (${{ matrix.target }}, unsigned)
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        target: [aarch64-apple-darwin, x86_64-apple-darwin]
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+      RELEASE_TARGET: ${{ matrix.target }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Check release version
+        run: node -e 'if (process.env.RELEASE_TAG !== "v" + require("./app/src-tauri/tauri.conf.json").version) process.exit(1)'
+      - name: Build application, disk image and updater archive
+        working-directory: app
+        run: |
+          npm ci
+          npx tauri build --target "$RELEASE_TARGET" --no-sign --bundles app,dmg -- --locked
+      - name: Prepare macOS assets and feed fragment
+        run: node tools/macos-release.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: athanor-${{ matrix.target }}
+          path: release-assets/*
+
   android:
     name: Android APK (unsigned)
     runs-on: ubuntu-latest
@@ -107,28 +143,32 @@ jobs:
 
   publish:
     name: Publish release and update feed
-    needs: [windows, android]
+    needs: [windows, android, macos]
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - uses: actions/download-artifact@v4
         with:
           path: dist
+      - name: Collect installers and merge platform feeds
+        run: node tools/collect-release.mjs
       - name: Create the release
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_PRERELEASE: ${{ inputs.prerelease }}
         run: |
-          installer=$(ls dist/athanor-windows/target/release/bundle/nsis/*-setup.exe)
-          apk=$(find dist/athanor-android -name '*.apk' | head -n1)
-          cp "$installer" "$apk" .
-          sha256sum "$(basename "$installer")" "$(basename "$apk")" > SHA256SUMS.txt
           flags=""
-          if [ "${{ inputs.prerelease }}" = "true" ]; then flags="--prerelease"; fi
-          gh release create "${{ inputs.tag }}" $flags --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "Athanor ${{ inputs.tag }}" --generate-notes \
-            "$(basename "$installer")" "$(basename "$apk")" SHA256SUMS.txt
+          if [ "$RELEASE_PRERELEASE" = "true" ]; then flags="--prerelease"; fi
+          gh release create "$RELEASE_TAG" $flags --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Athanor $RELEASE_TAG" --generate-notes release-assets/*
       - name: Refresh the update feed
         run: |
           gh release view updater --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
             gh release create updater --repo "$GITHUB_REPOSITORY" --prerelease --target "$GITHUB_SHA" \
               --title "Update feed" --notes "Rolling release that holds latest.json for the in-app updater. Do not delete."
-          gh release upload updater dist/athanor-windows/latest.json --clobber --repo "$GITHUB_REPOSITORY"
+          gh release upload updater latest.json --clobber --repo "$GITHUB_REPOSITORY"

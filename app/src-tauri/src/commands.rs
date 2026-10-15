@@ -392,7 +392,7 @@ pub async fn control_download(b: B<'_>, webview: tauri::Webview, id: u32, action
 #[tauri::command]
 pub async fn reveal_download(b: B<'_>, webview: tauri::Webview, path: String) -> R {
     shell_only(&webview)?;
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     {
         // Only files that exist; the path comes from a download Athanor itself started.
         if !b
@@ -405,17 +405,24 @@ pub async fn reveal_download(b: B<'_>, webview: tauri::Webview, path: String) ->
         if !std::path::Path::new(&path).is_file() {
             return Err("The downloaded file was moved or deleted".into());
         }
+        #[cfg(windows)]
         std::process::Command::new("explorer.exe")
             .arg(format!("/select,{path}"))
             .spawn()
             .map_err(e)?;
+        #[cfg(target_os = "macos")]
+        std::process::Command::new("/usr/bin/open")
+            .arg("-R")
+            .arg(&path)
+            .spawn()
+            .map_err(e)?;
+        Ok(())
     }
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         let _ = (b, path);
-        return Err("Show in folder is unavailable on this platform".into());
+        Err("Show in folder is unavailable on this platform".into())
     }
-    Ok(())
 }
 
 #[tauri::command]
@@ -869,20 +876,20 @@ pub async fn context_action(b: B<'_>, action: String, data: String) -> R {
 
 #[tauri::command]
 pub async fn import_detect() -> R<serde_json::Value> {
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     {
         let found = tauri::async_runtime::spawn_blocking(crate::import::detect)
             .await
             .map_err(e)?;
         serde_json::to_value(found).map_err(e)
     }
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "macos")))]
     Ok(serde_json::json!([]))
 }
 
 #[tauri::command]
 pub async fn import_run(b: B<'_>, request: serde_json::Value) -> R<serde_json::Value> {
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     {
         let request: crate::import::ImportRequest = serde_json::from_value(request).map_err(e)?;
         let browser = b.inner().clone();
@@ -892,10 +899,10 @@ pub async fn import_run(b: B<'_>, request: serde_json::Value) -> R<serde_json::V
                 .map_err(e)??;
         serde_json::to_value(report).map_err(e)
     }
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         let _ = (b, request);
-        Err("importing from other browsers is only available on Windows".into())
+        Err("importing from other browsers is available on Windows and macOS".into())
     }
 }
 
@@ -920,7 +927,7 @@ pub async fn import_pick_file(app: AppHandle) -> R<Option<String>> {
 /// Choose a PureRef scene to import.
 #[tauri::command]
 pub async fn board_pick_pureref(app: AppHandle) -> R<Option<String>> {
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     {
         let _ = &app;
         let picked = rfd::AsyncFileDialog::new()
@@ -929,7 +936,7 @@ pub async fn board_pick_pureref(app: AppHandle) -> R<Option<String>> {
             .await;
         Ok(picked.map(|file| file.path().to_string_lossy().into_owned()))
     }
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         let _ = app;
         Ok(None)
@@ -939,7 +946,7 @@ pub async fn board_pick_pureref(app: AppHandle) -> R<Option<String>> {
 /// Import a PureRef 2.x scene as a new board.
 #[tauri::command]
 pub async fn board_import_pureref(b: B<'_>, path: String) -> R<crate::boards::PureRefImport> {
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     {
         let paths = b.paths.clone();
         tokio::task::spawn_blocking(move || {
@@ -948,10 +955,10 @@ pub async fn board_import_pureref(b: B<'_>, path: String) -> R<crate::boards::Pu
         .await
         .map_err(e)?
     }
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         let _ = (b, path);
-        Err("importing PureRef boards is only available on Windows".into())
+        Err("importing PureRef boards is available on Windows and macOS".into())
     }
 }
 

@@ -22,6 +22,10 @@ pub struct DesktopEngine {
     filter: Arc<Filter>,
     sink: Arc<Mutex<Option<EventSink>>>,
     tabs: Mutex<HashMap<Id, Webview<Wry>>>,
+    #[cfg(target_os = "macos")]
+    radius: std::sync::atomic::AtomicI32,
+    #[cfg(target_os = "macos")]
+    muted: Arc<Mutex<std::collections::HashSet<Id>>>,
 }
 
 impl DesktopEngine {
@@ -31,6 +35,10 @@ impl DesktopEngine {
             filter,
             sink: Arc::new(Mutex::new(None)),
             tabs: Mutex::new(HashMap::new()),
+            #[cfg(target_os = "macos")]
+            radius: std::sync::atomic::AtomicI32::new(0),
+            #[cfg(target_os = "macos")]
+            muted: Arc::new(Mutex::new(std::collections::HashSet::new())),
         }
     }
 
@@ -59,7 +67,12 @@ impl DesktopEngine {
                 .map_err(err)?
                 .map_err(EngineError::Engine)
         }
-        #[cfg(not(windows))]
+        #[cfg(target_os = "macos")]
+        {
+            let _ = jpeg;
+            crate::macos::capture(&self.get(id)?)
+        }
+        #[cfg(not(any(windows, target_os = "macos")))]
         {
             let _ = (id, jpeg);
             Err(EngineError::Engine(
@@ -109,6 +122,15 @@ impl EngineBackend for DesktopEngine {
         visible: bool,
         opts: &TabOptions,
     ) -> EngineResult {
+        #[cfg(target_os = "macos")]
+        let parsed: url::Url = self
+            .filter
+            .rewrite_navigation(url)
+            .as_deref()
+            .unwrap_or(url)
+            .parse()
+            .map_err(err)?;
+        #[cfg(not(target_os = "macos"))]
         let parsed: url::Url = url.parse().map_err(err)?;
         #[cfg(windows)]
         let _ = &parsed;
@@ -117,12 +139,13 @@ impl EngineBackend for DesktopEngine {
 
         // On Windows the page is loaded only after our hooks are attached (see below); otherwise the very
         // first navigation would bypass document-start scripts, https upgrade and request blocking setup.
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "macos"))]
         let initial: url::Url = "about:blank".parse().map_err(err)?;
-        #[cfg(not(windows))]
+        #[cfg(not(any(windows, target_os = "macos")))]
         let initial = parsed.clone();
-        let mut builder =
-            WebviewBuilder::new(tab_label(id), WebviewUrl::External(initial)).devtools(true);
+        let mut builder = WebviewBuilder::new(tab_label(id), WebviewUrl::External(initial))
+            .incognito(opts.incognito)
+            .devtools(true);
         if let Some(ua) = &opts.user_agent {
             builder = builder.user_agent(ua);
         }
@@ -151,16 +174,19 @@ impl EngineBackend for DesktopEngine {
         // Cross-platform fallbacks; on Windows the WebView2 hooks in `win.rs` report everything itself.
         #[cfg(not(windows))]
         {
-            let (s1, t1) = (sink.clone(), tab.clone());
-            builder = builder.on_new_window(move |url, _| {
-                if let Some(s) = s1.lock().as_ref() {
-                    s(EngineEvent::NewTabRequested {
-                        from: t1.clone(),
-                        url: url.to_string(),
-                    });
-                }
-                NewWindowResponse::Deny
-            });
+            #[cfg(not(target_os = "macos"))]
+            {
+                let (s1, t1) = (sink.clone(), tab.clone());
+                builder = builder.on_new_window(move |url, _| {
+                    if let Some(s) = s1.lock().as_ref() {
+                        s(EngineEvent::NewTabRequested {
+                            from: t1.clone(),
+                            url: url.to_string(),
+                        });
+                    }
+                    NewWindowResponse::Deny
+                });
+            }
             let (s2, t2) = (sink.clone(), tab.clone());
             builder = builder.on_document_title_changed(move |_, title| {
                 if let Some(s) = s2.lock().as_ref() {
@@ -171,9 +197,39 @@ impl EngineBackend for DesktopEngine {
                 }
             });
             let (s3, t3) = (sink.clone(), tab.clone());
-            builder = builder.on_page_load(move |_, payload| {
+            #[cfg(target_os = "macos")]
+            let filter = self.filter.clone();
+            #[cfg(target_os = "macos")]
+            let muted_tabs = self.muted.clone();
+            builder = builder.on_page_load(move |view, payload| {
+                #[cfg(not(target_os = "macos"))]
+                let _ = &view;
+                let loading = matches!(payload.event(), tauri::webview::PageLoadEvent::Started);
+                #[cfg(target_os = "macos")]
+                {
+                    if !loading {
+                        // Started is provisional: destination scripts must never run in the old page.
+                        // Guard queued evaluations against a subsequent navigation as well.
+                        if muted_tabs.lock().contains(&t3) {
+                            let _ = view.eval(mute_script(true));
+                        }
+                        let source = serde_json::json!(payload.url().as_str());
+                        let mut scripts = filter.injections(payload.url().as_str(), 0);
+                        scripts.extend(filter.page_script_injections(payload.url().as_str(), 1));
+                        scripts.extend(filter.page_script_injections(payload.url().as_str(), 2));
+                        for script in scripts {
+                            let _ = view.eval(format!("(() => {{ if (location.href !== {source}) return;\n{script}\n}})()"));
+                        }
+                        let s = s3.clone();
+                        let t = t3.clone();
+                        let _ = view.eval_with_callback("document.querySelector('link[rel~=icon]')?.href || new URL('/favicon.ico', location.href).href", move |json| {
+                            if let (Some(sink), Ok(url)) = (s.lock().as_ref(), serde_json::from_str::<String>(&json)) {
+                                sink(EngineEvent::FaviconChanged { tab: t.clone(), url });
+                            }
+                        });
+                    }
+                }
                 if let Some(s) = s3.lock().as_ref() {
-                    let loading = matches!(payload.event(), tauri::webview::PageLoadEvent::Started);
                     s(EngineEvent::UrlChanged {
                         tab: t3.clone(),
                         url: payload.url().to_string(),
@@ -183,6 +239,73 @@ impl EngineBackend for DesktopEngine {
                         loading,
                     });
                 }
+            });
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let app = tauri::Manager::app_handle(&self.window).clone();
+            builder = builder.on_new_window(move |url, features| {
+                static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+                let label = format!(
+                    "popup-{}",
+                    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                );
+                // WebKit requires the supplied configuration to retain window.opener and the original request.
+                match tauri::WebviewWindowBuilder::new(&app, label, WebviewUrl::External(url))
+                    .window_features(features)
+                    .title("Athanor")
+                    .build()
+                {
+                    Ok(window) => {
+                        let _ = crate::macos::register(window.as_ref());
+                        NewWindowResponse::Create { window }
+                    }
+                    Err(_) => NewWindowResponse::Deny,
+                }
+            });
+            use tauri::webview::DownloadEvent;
+            let transfers = Arc::new(Mutex::new(
+                HashMap::<String, (u32, std::path::PathBuf)>::new(),
+            ));
+            let (sink, tab) = (sink.clone(), tab.clone());
+            builder = builder.on_download(move |_, event| {
+                static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
+                match event {
+                    DownloadEvent::Requested { url, destination } => {
+                        let mut active = transfers.lock();
+                        // Wry's macOS completion event carries the URL but no transfer ID/path.
+                        // Serialise identical URLs so a completion can never mark the wrong file as done.
+                        if active.contains_key(url.as_str()) {
+                            let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            if let Some(sink) = sink.lock().as_ref() {
+                                sink(download_event(&tab, id, destination, "failed", Some("A download from this address is already running. Wait for it to finish before starting another.".into())));
+                            }
+                            return false;
+                        }
+                        let requested = destination.clone();
+                        let stem = requested.file_stem().unwrap_or_default().to_string_lossy();
+                        let extension = requested.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
+                        let mut suffix = 1u32;
+                        while destination.exists() || active.values().any(|(_, path)| path == destination) {
+                            *destination = requested.with_file_name(format!("{stem} ({suffix}){extension}"));
+                            suffix += 1;
+                        }
+                        let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        active.insert(url.to_string(), (id, destination.clone()));
+                        if let Some(sink) = sink.lock().as_ref() {
+                            sink(download_event(&tab, id, destination, "started", None));
+                        }
+                    }
+                    DownloadEvent::Finished { url, success, .. } => {
+                        if let Some((id, path)) = transfers.lock().remove(url.as_str()) {
+                            let state = if success { "done" } else { "failed" };
+                            let error = (!success).then(|| "WebKit could not finish the download. Try again from the original page.".into());
+                            if let Some(sink) = sink.lock().as_ref() { sink(download_event(&tab, id, &path, state, error)); }
+                        }
+                    }
+                    _ => {}
+                }
+                true
             });
         }
         #[cfg(windows)]
@@ -277,7 +400,23 @@ impl EngineBackend for DesktopEngine {
             })
             .map_err(err)?;
         }
-        #[cfg(not(windows))]
+        #[cfg(target_os = "macos")]
+        {
+            let observer_sink = self.sink.clone();
+            crate::macos::attach(
+                &wv,
+                tab,
+                Arc::new(move |event| {
+                    if let Some(sink) = observer_sink.lock().as_ref() {
+                        sink(event);
+                    }
+                }),
+            )
+            .map_err(err)?;
+            crate::macos::radius(&wv, self.radius.load(std::sync::atomic::Ordering::Relaxed));
+            wv.navigate(parsed).map_err(err)?;
+        }
+        #[cfg(not(any(windows, target_os = "macos")))]
         let _ = &self.filter;
 
         self.tabs.lock().insert(id.to_string(), wv);
@@ -285,13 +424,21 @@ impl EngineBackend for DesktopEngine {
     }
 
     fn close_tab(&self, id: &str) -> EngineResult {
+        #[cfg(target_os = "macos")]
+        self.muted.lock().remove(id);
         if let Some(wv) = self.tabs.lock().remove(id) {
+            #[cfg(target_os = "macos")]
+            crate::macos::detach(&wv).map_err(err)?;
             wv.close().map_err(err)?;
         }
         Ok(())
     }
 
     fn navigate(&self, id: &str, url: &str) -> EngineResult {
+        #[cfg(target_os = "macos")]
+        let rewritten = self.filter.rewrite_navigation(url);
+        #[cfg(target_os = "macos")]
+        let url = rewritten.as_deref().unwrap_or(url);
         self.get(id)?
             .navigate(url.parse().map_err(err)?)
             .map_err(err)
@@ -305,7 +452,9 @@ impl EngineBackend for DesktopEngine {
                 let _ = crate::win::go_back(&pw.controller());
             })
             .map_err(err);
-        #[cfg(not(windows))]
+        #[cfg(target_os = "macos")]
+        return crate::macos::action(&wv, 0, 0).map_err(err);
+        #[cfg(not(any(windows, target_os = "macos")))]
         wv.eval("history.back()").map_err(err)
     }
 
@@ -317,7 +466,9 @@ impl EngineBackend for DesktopEngine {
                 let _ = crate::win::go_forward(&pw.controller());
             })
             .map_err(err);
-        #[cfg(not(windows))]
+        #[cfg(target_os = "macos")]
+        return crate::macos::action(&wv, 1, 0).map_err(err);
+        #[cfg(not(any(windows, target_os = "macos")))]
         wv.eval("history.forward()").map_err(err)
     }
 
@@ -333,7 +484,9 @@ impl EngineBackend for DesktopEngine {
                 let _ = crate::win::stop(&pw.controller());
             })
             .map_err(err);
-        #[cfg(not(windows))]
+        #[cfg(target_os = "macos")]
+        return crate::macos::action(&wv, 2, 0).map_err(err);
+        #[cfg(not(any(windows, target_os = "macos")))]
         wv.eval("window.stop()").map_err(err)
     }
 
@@ -361,7 +514,15 @@ impl EngineBackend for DesktopEngine {
                 });
             }
         }
-        #[cfg(not(windows))]
+        #[cfg(target_os = "macos")]
+        {
+            self.radius
+                .store(radius, std::sync::atomic::Ordering::Relaxed);
+            for view in self.tabs.lock().values() {
+                crate::macos::radius(view, radius);
+            }
+        }
+        #[cfg(not(any(windows, target_os = "macos")))]
         let _ = radius;
         Ok(())
     }
@@ -400,10 +561,14 @@ impl EngineBackend for DesktopEngine {
         }
         #[cfg(not(windows))]
         {
-            let _ = (id, script, reply);
-            Err(athanor_core::engine::EngineError::Engine(
-                "not supported".into(),
-            ))
+            let reply = Mutex::new(Some(reply));
+            self.get(id)?
+                .eval_with_callback(script, move |json| {
+                    if let Some(reply) = reply.lock().take() {
+                        reply(json);
+                    }
+                })
+                .map_err(err)
         }
     }
 
@@ -423,7 +588,16 @@ impl EngineBackend for DesktopEngine {
                 })
                 .map_err(err)
         }
-        #[cfg(not(windows))]
+        #[cfg(target_os = "macos")]
+        {
+            let _ = params;
+            if method == "Page.getNavigationHistory" {
+                crate::macos::history(&self.get(id)?, reply).map_err(err)
+            } else {
+                Err(err("Chromium DevTools Protocol is unavailable in WebKit"))
+            }
+        }
+        #[cfg(not(any(windows, target_os = "macos")))]
         {
             let _ = (id, method, params, reply);
             Err(athanor_core::engine::EngineError::Engine(
@@ -442,7 +616,23 @@ impl EngineBackend for DesktopEngine {
                 })
                 .map_err(err)
         }
-        #[cfg(not(windows))]
+        #[cfg(target_os = "macos")]
+        {
+            match method {
+                "Page.reload" => crate::macos::action(&self.get(id)?, 3, 0).map_err(err),
+                "Page.navigateToHistoryEntry" => {
+                    #[derive(serde::Deserialize)]
+                    struct Entry {
+                        #[serde(rename = "entryId")]
+                        id: i64,
+                    }
+                    let entry: Entry = serde_json::from_str(params).map_err(err)?;
+                    crate::macos::action(&self.get(id)?, 4, entry.id).map_err(err)
+                }
+                _ => Err(err("Chromium DevTools Protocol is unavailable in WebKit")),
+            }
+        }
+        #[cfg(not(any(windows, target_os = "macos")))]
         {
             let _ = (id, method, params);
             Err(athanor_core::engine::EngineError::Engine(
@@ -459,7 +649,17 @@ impl EngineBackend for DesktopEngine {
                 let _ = crate::win::set_muted(&pw.controller(), muted);
             })
             .map_err(err);
-        #[cfg(not(windows))]
+        #[cfg(target_os = "macos")]
+        {
+            let view = self.get(id)?;
+            if muted {
+                self.muted.lock().insert(id.to_owned());
+            } else {
+                self.muted.lock().remove(id);
+            }
+            view.eval(mute_script(muted)).map_err(err)
+        }
+        #[cfg(not(any(windows, target_os = "macos")))]
         {
             let _ = (id, muted);
             Ok(())
@@ -471,6 +671,9 @@ impl EngineBackend for DesktopEngine {
     }
 
     fn capture_frame(&self, id: &str) -> EngineResult<(&'static str, Vec<u8>)> {
+        #[cfg(target_os = "macos")]
+        return self.capture(id, false).map(|png| ("image/png", png));
+        #[cfg(not(target_os = "macos"))]
         self.capture(id, true).map(|jpeg| ("image/jpeg", jpeg))
     }
 
@@ -522,4 +725,57 @@ impl EngineBackend for DesktopEngine {
         self.get(id)?.open_devtools();
         Ok(())
     }
+}
+
+#[cfg(target_os = "macos")]
+fn download_event(
+    tab: &str,
+    id: u32,
+    path: &std::path::Path,
+    state: &str,
+    error: Option<String>,
+) -> EngineEvent {
+    let bytes = if state == "done" {
+        std::fs::metadata(path).map_or(0, |m| m.len())
+    } else {
+        0
+    };
+    EngineEvent::Download {
+        tab: tab.into(),
+        id,
+        name: path
+            .file_name()
+            .map_or_else(|| "Download".into(), |n| n.to_string_lossy().into_owned()),
+        path: path.to_string_lossy().into_owned(),
+        state: state.into(),
+        received: bytes,
+        total: bytes,
+        error,
+        can_resume: false,
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn mute_script(muted: bool) -> String {
+    format!(
+        r#"(() => {{
+                const on = {muted};
+                window.__athanorMuteObserver?.disconnect();
+                const saved = window.__athanorMutedMedia || new Map();
+                window.__athanorMutedMedia = saved;
+                const apply = () => document.querySelectorAll('video,audio').forEach(media => {{
+                    if (!saved.has(media)) saved.set(media, media.muted);
+                    media.muted = true;
+                }});
+                if (on) {{
+                    apply();
+                    const observer = new MutationObserver(apply);
+                    observer.observe(document, {{childList:true, subtree:true}});
+                    window.__athanorMuteObserver = observer;
+                }} else {{
+                    for (const [media, previous] of saved) media.muted = previous;
+                    saved.clear();
+                }}
+            }})()"#
+    )
 }

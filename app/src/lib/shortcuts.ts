@@ -1,3 +1,5 @@
+import { isMacOS } from './platform'
+
 export function normalizeShortcut(input: string): string {
   const aliases: Record<string, string> = { CONTROL: 'Ctrl', CTRL: 'Ctrl', CMD: 'Meta', COMMAND: 'Meta', OPTION: 'Alt', ESC: 'Escape', LEFT: 'Left', RIGHT: 'Right', UP: 'Up', DOWN: 'Down', ARROWLEFT: 'Left', ARROWRIGHT: 'Right', ARROWUP: 'Up', ARROWDOWN: 'Down', ' ': 'Space' }
   const modifierAliases: Record<string, string> = { SHIFT: 'Shift', ALT: 'Alt', META: 'Meta', CONTROL: 'Ctrl', CTRL: 'Ctrl' }
@@ -16,7 +18,20 @@ const CODE_KEYS: Record<string, string> = { Equal: '=', NumpadAdd: '=', Minus: '
 /** Keys that are shortcuts without any modifier. */
 const BARE_KEYS = new Set(['F3', 'F5', 'F11', 'F12'])
 
-export function shortcutFromKeyboard(event: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'altKey' | 'shiftKey' | 'metaKey'> & { code?: string }): string | null {
+export function shortcutFromKeyboard(event: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'altKey' | 'shiftKey' | 'metaKey'> & { code?: string }, mac = isMacOS): string | null {
+  if (mac) {
+    if (event.metaKey && event.ctrlKey && !event.altKey && event.key.toLowerCase() === 'f') return 'F11'
+    if (event.metaKey && event.altKey && !event.ctrlKey && event.key.toLowerCase() === 'i') return 'F12'
+    if (event.metaKey && !event.ctrlKey && !event.altKey) {
+      // Command-Tab and Command-Space belong to macOS. Control-Tab cycles browser tabs.
+      if (event.key === 'Tab' || event.key === ' ') return null
+      if (!event.shiftKey && (event.key === '[' || event.code === 'BracketLeft')) return 'Alt+Left'
+      if (!event.shiftKey && (event.key === ']' || event.code === 'BracketRight')) return 'Alt+Right'
+      if (event.shiftKey && event.code === 'Backslash') return 'Ctrl+Space'
+      return shortcutFromKeyboard({ key: event.key, code: event.code, altKey: event.altKey, shiftKey: event.shiftKey, ctrlKey: true, metaKey: false }, false)
+    }
+    if (event.metaKey || event.ctrlKey && event.key !== 'Tab') return null
+  }
   const byCode = event.ctrlKey && !event.altKey ? CODE_KEYS[event.code ?? ''] : undefined
   const key = byCode ?? (event.key === ' ' ? 'Space' : event.key.length === 1 ? event.key.toUpperCase() : event.key)
   if (!event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey && !BARE_KEYS.has(key)) return null
@@ -78,4 +93,9 @@ for (let n = 2; n <= 9; n++) ownerOf.set(`Ctrl+${n}`, 'backend')
 export const shortcutOwner = (combo: string): 'shell' | 'backend' | null => ownerOf.get(combo) ?? null
 
 /** Show a combo the way people read it: `Ctrl+Shift+T` -> ['Ctrl', 'Shift', 'T']. */
-export const comboKeys = (combo: string): string[] => combo === 'Ctrl++' ? ['Ctrl', '+'] : combo.split('+').filter(Boolean).map((key) => ({ Left: '←', Right: '→', '=': '+' } as Record<string, string>)[key] ?? key)
+export function displayShortcut(combo: string, mac = isMacOS): string {
+  if (!mac) return combo
+  const special: Record<string, string> = { F5: 'Cmd+R', F11: 'Ctrl+Cmd+F', F12: 'Option+Cmd+I', 'Alt+Left': 'Cmd+[', 'Alt+Right': 'Cmd+]', 'Ctrl+Tab': 'Ctrl+Tab', 'Ctrl+Shift+Tab': 'Ctrl+Shift+Tab', 'Ctrl+Space': 'Cmd+Shift+\\' }
+  return special[combo] ?? combo.replace(/Ctrl/g, 'Cmd').replace(/Alt/g, 'Option')
+}
+export const comboKeys = (combo: string, mac = isMacOS): string[] => combo === 'Ctrl++' ? [mac ? 'Cmd' : 'Ctrl', '+'] : displayShortcut(combo, mac).split('+').filter(Boolean).map((key) => ({ Left: '←', Right: '→', '=': '+' } as Record<string, string>)[key] ?? key)

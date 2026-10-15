@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import type { DevServer } from '@/lib/types'
 import { useAppStore } from '@/lib/store'
 import { api } from '@/lib/api'
+import { primaryModifier } from '@/lib/platform'
 import { AthanorMark } from './AthanorMark'
 import { AppIcon } from './Icons'
 import { Button } from './ui/button'
@@ -47,7 +48,7 @@ export function NewTabPage({ servers, onNavigate }: { servers: DevServer[]; onNa
 
       {pinned.length === 0 && recent.length === 0 && <div className="mt-7 flex w-full flex-col items-center gap-2 rounded-xl border border-dashed border-border px-4 py-6 text-center" role="status"><AppIcon name="Layers3" className="size-5 text-muted-foreground" /><span className="text-sm font-medium">A clean start</span><span className="text-xs text-muted-foreground">Open a page above. Your recent tabs will appear here.</span></div>}
 
-      <div className="mt-6 flex w-full items-center justify-between gap-3 text-xs text-muted-foreground"><span className="flex items-center gap-2"><Kbd>Ctrl+K</Kbd><span>Command bar</span></span><Tip label="Open boards"><Button variant="ghost" size="sm" className="gap-1.5 px-2 max-md:min-h-11" onClick={() => { void api.openTab({ url: 'athanor://boards' }).catch((error) => toast.error(why(error))) }}><AppIcon name="PanelsTopLeft" /><span>Boards</span></Button></Tip></div>
+      <div className="mt-6 flex w-full items-center justify-between gap-3 text-xs text-muted-foreground"><span className="flex items-center gap-2"><Kbd>{primaryModifier}+K</Kbd><span>Command bar</span></span><Tip label="Open boards"><Button variant="ghost" size="sm" className="gap-1.5 px-2 max-md:min-h-11" onClick={() => { void api.openTab({ url: 'athanor://boards' }).catch((error) => toast.error(why(error))) }}><AppIcon name="PanelsTopLeft" /><span>Boards</span></Button></Tip></div>
     </div>
 
   </div>

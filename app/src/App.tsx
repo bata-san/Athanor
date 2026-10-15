@@ -24,6 +24,7 @@ import { CommandBar, type BarMode } from './components/CommandBar'
 import { hostOf } from './components/UrlPill'
 import { startupUpdateCheck } from './lib/updates'
 import { useCtrlHeld } from './lib/modifiers'
+import { isMacOS } from './lib/platform'
 import { useCover, useThumbnailCapture } from './lib/thumbs'
 import { TabOverview } from './components/TabOverview'
 import { FindBar } from './components/FindBar'
@@ -258,7 +259,7 @@ export function App() {
   useEffect(() => {
     const set = useCtrlHeld.getState().set
     // Every key and pointer event says whether Ctrl is down, so a missed key-up (focus moved to a page) cannot leave it stuck.
-    const sync = (event: KeyboardEvent | MouseEvent) => set(event.ctrlKey)
+    const sync = (event: KeyboardEvent | MouseEvent) => set(isMacOS ? event.metaKey : event.ctrlKey)
     const release = () => set(false)
     window.addEventListener('keydown', sync); window.addEventListener('keyup', sync); window.addEventListener('mousemove', sync, { passive: true }); window.addEventListener('blur', release)
     return () => { window.removeEventListener('keydown', sync); window.removeEventListener('keyup', sync); window.removeEventListener('mousemove', sync); window.removeEventListener('blur', release) }
@@ -368,7 +369,7 @@ export function App() {
       <DialogHost />
       <AnimatePresence>{(!snapshot.settings.onboarded || tour) && <Welcome key="welcome" snapshot={snapshot} onDone={() => { setTour(false); void api.setSettings({ onboarded: true }) }} />}</AnimatePresence>
       <DragOverlay dropAnimation={null} zIndex={80}>{draggingId ? (() => { const tab = snapshot.workspace.tabs.find((entry) => entry.id === draggingId); return tab ? <DragGhost tab={tab} /> : null })() : null}</DragOverlay>
-      <NotificationHost snapshot={snapshot} native={!isMock && snapshot.platform === 'windows' && !standaloneBoardWindow} suppressed={overlayOpen} onMobileHeight={mobile ? setNotificationHeight : undefined} />
+      <NotificationHost snapshot={snapshot} native={!isMock && (snapshot.platform === 'windows' || snapshot.platform === 'macos') && !standaloneBoardWindow} suppressed={overlayOpen} onMobileHeight={mobile ? setNotificationHeight : undefined} />
     </div>
   </DndContext></TooltipProvider>
 }

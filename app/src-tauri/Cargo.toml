@@ -15,7 +15,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["unstable", "devtools", "image-png"] }
+tauri = { version = "2", features = ["unstable", "devtools", "image-png", "macos-private-api"] }
 athanor-core = { path = "../../crates/athanor-core" }
 athanor-ext = { path = "../../crates/athanor-ext" }
 athanor-adblock = { path = "../../crates/athanor-adblock" }
@@ -36,10 +36,10 @@ tokio = { version = "1", features = ["time", "sync", "net", "io-util", "rt", "ma
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
 rfd = { version = "0.16", default-features = false }
-
-[target.'cfg(windows)'.dependencies]
 athanor-import = { path = "../../crates/athanor-import" }
 athanor-pur = { path = "../../crates/athanor-pur" }
+
+[target.'cfg(windows)'.dependencies]
 flate2 = "1"
 webview2-com = "0.39"
 windows = { version = "0.62", features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_System_Com", "Win32_UI_Shell", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_Security_Cryptography"] }

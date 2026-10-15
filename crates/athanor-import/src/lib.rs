@@ -14,7 +14,7 @@ mod html;
 mod sqlite;
 mod util;
 
-pub use detect::{detect, detect_in, Roots};
+pub use detect::{detect, detect_in, detect_macos_in, Roots};
 pub use html::parse_bookmarks_html;
 
 #[derive(Debug, thiserror::Error)]

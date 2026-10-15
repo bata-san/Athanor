@@ -20,7 +20,7 @@ export function Downloads({ open, onOpenChange, platform }: { open: boolean; onO
   }
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent data-part="downloads" aria-describedby="downloads-description">
-      <DialogHeader><DialogTitle className="text-base font-semibold">Downloads</DialogTitle><DialogDescription id="downloads-description">Transfers and saved files from this session. Pause keeps the received data; Cancel discards the partial file.</DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle className="text-base font-semibold">Downloads</DialogTitle><DialogDescription id="downloads-description">Transfers and saved files from this session. {platform === 'macos' ? 'Downloads continue in WebKit. Detailed progress and pause/resume controls are unavailable.' : 'Pause keeps the received data; Cancel discards the partial file.'}</DialogDescription></DialogHeader>
       <div className="mt-4 min-h-0 overflow-y-auto px-5">
         {!items.length && <div className="flex flex-col items-center gap-2 py-10 text-sm text-muted-foreground"><DownloadIcon className="size-6" /><span>No downloads yet</span>{platform === 'android' && <span>Downloads are also available in your device's Downloads app.</span>}</div>}
         {items.map((item) => { const active = isDownloading(item); const busy = pending.has(item.id)
@@ -33,7 +33,7 @@ export function Downloads({ open, onOpenChange, platform }: { open: boolean; onO
                 {platform === 'windows' && active && <Tip label="Pause download"><Button variant="ghost" size="icon-sm" className="max-md:size-11" disabled={busy} aria-label={`Pause ${item.name}`} onClick={() => void control(item.id, 'pause')}><Pause /></Button></Tip>}
                 {platform === 'windows' && !active && item.canResume && <Tip label="Resume download"><Button variant="ghost" size="icon-sm" className="max-md:size-11" disabled={busy} aria-label={`Resume ${item.name}`} onClick={() => void control(item.id, 'resume')}><Play /></Button></Tip>}
                 {platform === 'windows' && (active || item.state === 'paused' || item.canResume) && <Tip label="Cancel download"><Button variant="ghost" size="icon-sm" className="max-md:size-11" disabled={busy} aria-label={`Cancel ${item.name}`} onClick={() => void control(item.id, 'cancel')}><X /></Button></Tip>}
-                {platform === 'windows' && item.state === 'done' && <Tip label="Show in folder"><Button variant="ghost" size="icon-sm" className="max-md:size-11" aria-label={`Show ${item.name} in folder`} onClick={() => void api.revealDownload(item.path).catch((error) => setErrors((state) => ({ ...state, [item.id]: String(error) })))}><FolderOpen /></Button></Tip>}
+                {(platform === 'windows' || platform === 'macos') && item.state === 'done' && <Tip label={platform === 'macos' ? 'Show in Finder' : 'Show in folder'}><Button variant="ghost" size="icon-sm" className="max-md:size-11" aria-label={`Show ${item.name} in folder`} onClick={() => void api.revealDownload(item.path).catch((error) => setErrors((state) => ({ ...state, [item.id]: String(error) })))}><FolderOpen /></Button></Tip>}
               </div>
             </div>
             {active && <div className="mt-3 h-1 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label={`Downloading ${item.name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={item.total > 0 ? Math.min(100, Math.floor(item.received / item.total * 100)) : undefined} aria-valuetext={downloadStatus(item)}>

@@ -2,9 +2,9 @@
 
 # Athanor
 
-**A very light Chromium-based browser for Windows and Android.** Rust + Tauri core, shadcn/ui shell, Brave-grade blocking built in.
+**A very light browser for Windows, macOS and Android.** Rust + Tauri core, shadcn/ui shell, Brave-grade blocking built in.
 
-軽量な Chromium ベースのブラウザ(Windows / Android)。垂直タブ、スペース、自動タブファイリング、分割表示、開発者向けツール、PureRef 風リファレンスボード、Brave の `adblock-rust` による標準広告ブロックを搭載。コア層と拡張層を厳密に分離し、拡張機能とテーマで UI の深部まで変更できます。
+軽量なブラウザ(Windows / macOS / Android)。WindowsとAndroidはChromium、macOSはWebKitを使用します。垂直タブ、スペース、自動タブファイリング、分割表示、開発者向けツール、PureRef 風リファレンスボード、Brave の `adblock-rust` による標準広告ブロックを搭載。コア層と拡張層を厳密に分離し、拡張機能とテーマで UI の深部まで変更できます。
 
 ## Highlights
 
@@ -15,7 +15,7 @@
 - **Developer friendly**: JSON/JWT/Base64/URL/timestamp/color/hash tools in the palette, localhost dev-server detection, responsive viewport presets, native DevTools.
 - **Boards**: a PureRef-like reference canvas (paste / drop images, arrange, always-on-top window).
 - **Deeply customisable**: themes are JSON; every UI part exposes `data-part` hooks; extensions add themes, shell CSS, userscripts, panels, commands, filter lists and filing rules.
-- **Light**: no bundled Chromium. Uses the system engine (WebView2 / Android System WebView), so it stays small and always current.
+- **Light**: no bundled Chromium. Uses the system engine (WebView2 / WKWebView / Android System WebView), so it stays small and always current.
 
 ## Status (v0.1)
 
@@ -28,6 +28,11 @@ shield, *My filters*). Automated end-to-end check: [`e2e/`](e2e/README.md).
 Not finished yet (contributions welcome): Brave-style privacy hardening (GPC/referrer trimming, fingerprint
 farbling, third-party storage), element picker / zapper, uBO-style dynamic filtering matrix, loading unpacked
 Chrome extensions, Android generic-cosmetic parity and release signing.
+
+macOS support includes a WKWebView adapter, native menus and window controls, PNG capture, page tools,
+browser bookmark/history import, PureRef import, native notifications and WebKit content rules. Apple
+Silicon compilation/tests and application packaging are checked; UI and real-site behavior are not yet
+runtime-verified. See [macOS](docs/MACOS.md) for limitations and signing/distribution requirements.
 
 ### Reliability and contextual toolbar changes
 
@@ -54,7 +59,7 @@ not yet been verified for this revision.
 ## Architecture in one picture
 
 ```
-Shell UI (React/shadcn) ─ Extensions ─ Core (pure Rust) ─ Platform adapters ─ System Chromium
+Shell UI (React/shadcn) ─ Extensions ─ Core (pure Rust) ─ Platform adapters ─ System web engine
 ```
 
 The core and extension crates never depend on Tauri or on any webview, so Chromium changes only ever touch the adapters.
@@ -62,7 +67,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Build
 
-Requirements: Rust (stable), Node 20+, and on Windows the MSVC Build Tools + WebView2 runtime.
+Requirements: Rust (stable), Node 20+, and on Windows the MSVC Build Tools + WebView2 runtime. macOS requires macOS 14+ and Xcode Command Line Tools; see [macOS setup and feature differences](docs/MACOS.md).
 
 ```bash
 cd app
@@ -82,7 +87,7 @@ cd app && npm test && npm run typecheck
 
 ## Docs
 
-[Architecture](docs/ARCHITECTURE.md) · [IPC contract](docs/IPC.md) · [Extensions](docs/EXTENSIONS.md) · [Theming](docs/THEMING.md) · [UI](docs/UI.md) · [Android](docs/ANDROID.md)
+[Architecture](docs/ARCHITECTURE.md) · [IPC contract](docs/IPC.md) · [Extensions](docs/EXTENSIONS.md) · [Theming](docs/THEMING.md) · [UI](docs/UI.md) · [macOS](docs/MACOS.md) · [Android](docs/ANDROID.md)
 
 ## License
 

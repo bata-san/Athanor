@@ -19,7 +19,34 @@ impl Roots {
 }
 
 pub fn detect() -> Vec<DetectedBrowser> {
+    #[cfg(target_os = "macos")]
+    {
+        std::env::var_os("HOME").map_or_else(Vec::new, |home| {
+            detect_macos_in(&PathBuf::from(home).join("Library/Application Support"))
+        })
+    }
+    #[cfg(not(target_os = "macos"))]
     detect_in(&Roots::from_env())
+}
+
+/// macOS keeps Chromium profiles directly below Application Support, without `User Data`.
+pub fn detect_macos_in(support: &Path) -> Vec<DetectedBrowser> {
+    let mut browsers = Vec::new();
+    for (id, name, relative) in [
+        ("chrome", "Google Chrome", "Google/Chrome"),
+        ("edge", "Microsoft Edge", "Microsoft Edge"),
+        ("brave", "Brave", "BraveSoftware/Brave-Browser"),
+        ("vivaldi", "Vivaldi", "Vivaldi"),
+        ("chromium", "Chromium", "Chromium"),
+    ] {
+        if let Some(browser) = chromium_browser(id, name, &support.join(relative)) {
+            browsers.push(browser);
+        }
+    }
+    if let Some(browser) = firefox_browser(&support.join("Firefox")) {
+        browsers.push(browser);
+    }
+    browsers
 }
 
 pub fn detect_in(roots: &Roots) -> Vec<DetectedBrowser> {
@@ -286,6 +313,34 @@ mod tests {
 
     fn profile(root: &Path, path: &str) -> PathBuf {
         root.join(path)
+    }
+
+    #[test]
+    fn detects_macos_layout_without_windows_user_data_suffix() {
+        let temp = tempfile::tempdir().unwrap();
+        touch(&temp.path().join("Google/Chrome/Default/Bookmarks"));
+        touch(&temp.path().join("Microsoft Edge/Profile 1/History"));
+        touch(
+            &temp
+                .path()
+                .join("Firefox/Profiles/test.default/places.sqlite"),
+        );
+        fs::write(
+            temp.path().join("Firefox/profiles.ini"),
+            "[Profile0]\nName=Personal\nIsRelative=1\nPath=Profiles/test.default\n",
+        )
+        .unwrap();
+        let browsers = super::detect_macos_in(temp.path());
+        assert_eq!(
+            browsers.iter().map(|b| b.id.as_str()).collect::<Vec<_>>(),
+            ["chrome", "edge", "firefox"]
+        );
+        assert_eq!(
+            browsers[0].profiles[0].dir,
+            temp.path().join("Google/Chrome/Default")
+        );
+        assert!(browsers[1].profiles[0].has_history);
+        assert_eq!(browsers[2].profiles[0].name, "Personal");
     }
 
     #[test]

@@ -424,6 +424,11 @@ impl Filter {
         *self.injector.write() = Some(injector);
     }
 
+    #[cfg(target_os = "macos")]
+    pub fn webkit_rules(&self) -> Result<String, String> {
+        self.blocker.webkit_rules()
+    }
+
     /// Everything to evaluate in the page at `phase`: cosmetic filters (start/end) and extension scripts.
     #[cfg_attr(not(mobile), allow(dead_code))]
     pub fn injections(&self, page_url: &str, phase: u8) -> Vec<String> {

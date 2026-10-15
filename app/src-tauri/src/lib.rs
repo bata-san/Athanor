@@ -15,10 +15,12 @@ mod engine_mobile;
 mod errorpage;
 mod ext_host;
 mod filter;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 mod import;
 #[cfg(target_os = "android")]
 mod jni_bridge;
+#[cfg(target_os = "macos")]
+mod macos;
 #[cfg(desktop)]
 mod notifications;
 mod pagetools;
@@ -169,6 +171,8 @@ pub fn run() {
                 });
             }
             app.manage(browser);
+            #[cfg(target_os = "macos")]
+            macos::install_menu(app)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

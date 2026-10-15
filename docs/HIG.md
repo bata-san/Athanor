@@ -1,5 +1,27 @@
 # Apple's Human Interface Guidelines, applied
 
+## macOS port (2026-10-14)
+
+Read the current official [Windows](https://developer.apple.com/design/human-interface-guidelines/windows)
+and [Keyboards](https://developer.apple.com/design/human-interface-guidelines/keyboards) guidance via
+their Apple DocC JSON. Use the native macOS window frame so key/inactive window appearance, traffic
+lights and full-screen behavior follow the system. Keep the established shadcn shell and theme tokens
+inside it. Command-based native menu accelerators make actions available while a WKWebView has focus;
+native Edit actions preserve the responder chain. System Command-Tab/Space are not intercepted, and
+shortcut help/tooltips reflect Mac equivalents.
+
+The existing [progress](https://developer.apple.com/design/human-interface-guidelines/progress-indicators)
+and [notification](https://developer.apple.com/design/human-interface-guidelines/notifications) guidance
+also applies: Wry exposes no intermediate WKDownload bytes, so transfers stay indeterminate and do not
+offer unsupported pause/resume actions. Notifications use a raised child view without requesting focus;
+recent messages remain accessible in More. Windows-only font and acceleration controls are unavailable
+on macOS. Network-block counts are reported as unavailable instead of implying zero blocked requests.
+
+Compilation, tests and packaging are build verification. Launching a process does not establish correct
+rendering or interactions. Computer-use approval denied Athanor inspection in this session; macOS UI,
+real-site playback/authentication, notification stacking and page capture still need runtime observation.
+See [MACOS.md](MACOS.md) for engine differences and the verification scope.
+
 ## Navigation hang correction (2026-10-05, v0.1.19)
 
 The official [progress indicators guidance](https://developer.apple.com/design/human-interface-guidelines/progress-indicators)
