@@ -23,3 +23,8 @@ lto = "fat"
 codegen-units = 1
 panic = "abort"
 strip = true
+
+# Keep host proc-macro dylibs loadable by newer macOS dyld versions. They are build tools,
+# not shipped app binaries; stripping the final release executable remains enabled above.
+[profile.release.build-override]
+strip = false

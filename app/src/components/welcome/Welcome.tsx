@@ -25,8 +25,8 @@ export function Welcome({ snapshot, onDone }: { snapshot: Snapshot; onDone: () =
   const [step, setStep] = useState(0)
   const [direction, setDirection] = useState(1)
   const [imported, setImported] = useState<ImportReport[]>([])
-  // Importing from other browsers is a Windows feature; elsewhere the step is simply left out.
-  const STEPS = useMemo<readonly StepName[]>(() => snapshot.platform === 'windows' ? ALL_STEPS : ALL_STEPS.filter((name) => name !== 'Import'), [snapshot.platform])
+  // Browser profile and HTML bookmark import are available on Windows and macOS.
+  const STEPS = useMemo<readonly StepName[]>(() => (snapshot.platform === 'windows' || snapshot.platform === 'macos') ? ALL_STEPS : ALL_STEPS.filter((name) => name !== 'Import'), [snapshot.platform])
   useOverlay(true, 'welcome')
   const go = useCallback((next: number) => { setDirection(next > step ? 1 : -1); setStep(Math.max(0, Math.min(STEPS.length - 1, next))) }, [step, STEPS.length])
   const last = step === STEPS.length - 1
@@ -259,7 +259,7 @@ function ImportStep({ platform, imported, onImported }: { platform: string; impo
           {platform === 'windows' && <Button variant="outline" className="gap-1.5" disabled={passwordBusy} onClick={() => { setPasswordBusy(true); setPasswordStatus(''); void api.passwordImport().then((report) => { if (report) setPasswordStatus(`Imported ${report.imported} passwords · Updated ${report.updated} · Skipped ${report.skipped}`) }).catch((error) => setPasswordStatus(String(error))).finally(() => setPasswordBusy(false)) }}>{passwordBusy ? 'Importing passwords…' : 'Passwords CSV…'}</Button>}
         </div>
         {passwordStatus && <p className="mt-3 text-sm text-muted-foreground" role="status">{passwordStatus}</p>}
-        <p className="mt-4 text-[0.7667rem] leading-[1.5] text-muted-foreground/80">On Windows, export a password CSV from Chrome, Edge or Firefox, then import it here. Delete the exported CSV afterwards; it contains readable passwords. Cookies and saved cards are not copied. You can import again later from More → Passwords. {imported.length > 0 && 'Your bookmarks and history have been imported.'}</p>
+        <p className="mt-4 text-[0.7667rem] leading-[1.5] text-muted-foreground/80">{platform === 'windows' ? 'On Windows, export a password CSV from Chrome, Edge or Firefox, then import it here. Delete the exported CSV afterwards; it contains readable passwords. You can import again later from More → Passwords.' : 'Import bookmarks and history from detected browser profiles, or choose an exported bookmarks HTML file. Password import is currently unavailable on macOS.'} Cookies and saved cards are not copied. {imported.length > 0 && 'Your bookmarks and history have been imported.'}</p>
       </m.div>}
     </AnimatePresence>
   </div>

@@ -111,6 +111,7 @@ fn layout(app: &AppHandle) -> Result<(), tauri::Error> {
                 "notifications",
                 tauri::WebviewUrl::App("index.html#/notifications".into()),
             )
+            .focused(false)
             .transparent(true),
             position,
             tauri::LogicalSize::new(width, height),
@@ -143,7 +144,11 @@ pub fn raise(app: &AppHandle) {
             }
         });
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    if let Some(view) = app.get_webview("notifications") {
+        crate::macos::raise(&view);
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     let _ = app;
 }
 

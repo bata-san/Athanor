@@ -36,6 +36,39 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
 
+  macos:
+    name: macOS (Apple Silicon)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - working-directory: app
+        run: |
+          npm ci
+          npm run build
+          npm test
+      - run: cargo fmt --all -- --check
+      - run: cargo check --workspace --locked --target aarch64-apple-darwin
+      - run: node --test tools/release.test.mjs
+      - run: cargo test --workspace --locked
+      - name: Package unsigned macOS application
+        working-directory: app
+        run: npx tauri build --target aarch64-apple-darwin --no-sign --bundles app --config '{"bundle":{"createUpdaterArtifacts":false}}' -- --locked
+      - name: Preserve application permissions and symlinks
+        run: tar -czf Athanor-macos-ci.app.tar.gz -C target/aarch64-apple-darwin/release/bundle/macos Athanor.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: athanor-macos-ci
+          path: Athanor-macos-ci.app.tar.gz
+
   frontend:
     name: Frontend
     runs-on: ubuntu-latest

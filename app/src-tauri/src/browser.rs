@@ -336,6 +336,8 @@ impl Browser {
     /// Push the current adblock status (lists, counters, updating flag) to the shell.
     pub fn emit_adblock(&self) {
         let _ = self.app.emit("athanor://adblock", self.filter.status());
+        #[cfg(target_os = "macos")]
+        crate::macos::refresh_rules(&self.app, self.filter.clone());
     }
 
     pub fn toast(&self, level: &str, message: impl Into<String>) {
@@ -1363,6 +1365,8 @@ impl Browser {
     }
 
     pub fn set_settings(self: &Arc<Self>, patch: SettingsPatch) {
+        #[cfg(target_os = "macos")]
+        let refresh_rules = patch.adblock_enabled.is_some() || patch.youtube_ad_skip.is_some();
         let s = {
             let mut g = self.inner.lock();
             g.settings.apply(patch);
@@ -1376,6 +1380,11 @@ impl Browser {
             .store(s.strip_tracking, std::sync::atomic::Ordering::Relaxed);
         self.filter.set_youtube_ad_skip(s.youtube_ad_skip);
         self.filter.set_block_drm(s.block_drm);
+        #[cfg(target_os = "macos")]
+        if refresh_rules {
+            self.filter.set_enabled(s.adblock_enabled);
+            self.emit_adblock();
+        }
         self.changed();
     }
 

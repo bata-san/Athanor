@@ -17,7 +17,7 @@ pub fn init(
         .title("Athanor")
         .inner_size(1360.0, 860.0)
         .min_inner_size(420.0, 320.0)
-        .decorations(false)
+        .decorations(cfg!(target_os = "macos"))
         .build()?;
     let size = window
         .inner_size()?

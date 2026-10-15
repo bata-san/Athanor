@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import type { ExtensionInfo, FilingRule, LanguageSetting, LineIssue, Settings as SettingsShape, ThemeInfo } from '@/lib/types'
 import { api } from '@/lib/api'
+import { isMacOS, primaryModifier } from '@/lib/platform'
 import { fileTabs } from '@/lib/filing'
 import { countFilterLines, ignoredLineSummary, lineCountLabel, lineSelectionRange } from '@/lib/userFilters'
 import { useAppStore } from '@/lib/store'
@@ -20,7 +21,7 @@ import { Slider } from '@/components/ui/slider'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card } from '@/components/ui/card'
 import { Kbd, KeyCap } from '@/components/ui/kbd'
-import { SHORTCUTS, comboKeys, type ShortcutGroup } from '@/lib/shortcuts'
+import { SHORTCUTS, comboKeys, displayShortcut, type ShortcutGroup } from '@/lib/shortcuts'
 import { Tip } from '@/components/ui/tooltip'
 
 type SettingsSection = 'General' | 'Privacy' | 'Filing' | 'Appearance' | 'Extensions' | 'Shortcuts' | 'About'
@@ -198,7 +199,7 @@ export default function SettingsPage() {
 
         {section === 'Privacy' && <>
           <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-            <Stat label="Blocked this session" value={(snapshot?.blockedTotal ?? adblock?.blockedTotal ?? 0).toLocaleString()} />
+            <Stat label="Blocked this session" value={isMacOS ? 'Unavailable' : (snapshot?.blockedTotal ?? adblock?.blockedTotal ?? 0).toLocaleString()} />
             <Stat label="Enabled filter lists" value={(adblock?.lists.filter((list) => list.enabled).length ?? 0).toLocaleString()} />
           </div>
           <Section title="Ad and tracker blocking" actions={<div className="flex flex-col items-end gap-1"><Button className="max-md:min-h-11" size="sm" variant="outline" disabled={adblock?.updating} onClick={() => void api.updateAdblockLists().catch(() => setListStatus('Filter lists could not be updated'))}><AppIcon name="RotateCw" className={adblock?.updating ? 'animate-spin' : ''} />{adblock?.updating ? 'Updating…' : 'Update Filter Lists'}</Button><span aria-live="polite" className="text-[0.7333rem] text-muted-foreground">{listStatus}</span></div>}>
@@ -226,10 +227,10 @@ export default function SettingsPage() {
             <Row title="Turn off DRM" description="Tells sites that encrypted media (Widevine) is unavailable, so protected video will not play. Applies to pages you open next.">
               <TouchSwitch label="Turn off DRM" checked={settings.blockDrm} onCheckedChange={(blockDrm) => patch({ blockDrm })} />
             </Row>
-            <Row title="Upgrade to HTTPS" description="Prefer encrypted connections when available.">
+            <Row title="Upgrade to HTTPS" description={isMacOS ? 'Prefer HTTPS for addresses you enter or open as new tabs. Site redirects and forms keep their original requests.' : 'Prefer encrypted connections when available.'}>
               <TouchSwitch label="Upgrade to HTTPS" checked={settings.httpsUpgrade} onCheckedChange={(httpsUpgrade) => patch({ httpsUpgrade })} />
             </Row>
-            <Row title="Strip tracking parameters" description="Remove common tracking keys from addresses.">
+            <Row title="Strip tracking parameters" description={isMacOS ? 'Remove common tracking keys from addresses you enter or open as new tabs.' : 'Remove common tracking keys from addresses.'}>
               <TouchSwitch label="Strip tracking parameters" checked={settings.stripTracking} onCheckedChange={(stripTracking) => patch({ stripTracking })} />
             </Row>
             {/* Destructive, so it comes last in the section. */}
@@ -241,7 +242,7 @@ export default function SettingsPage() {
 
         {section === 'Filing' && <>
           <Section title="Filing" description="Tabs stay where you open them until you press File. Rules group open tabs by site, URL path, or title." actions={<Button className="max-md:min-h-11" variant="outline" disabled={filing} onClick={() => void runFiling()}><AppIcon name="FolderInput" />{filing ? 'Filing…' : 'File Open Tabs'}</Button>}>
-            <p className="m-0 py-3 text-sm text-muted-foreground">File from the toolbar or press Ctrl+Shift+F. Undo is available in the toast.</p>
+            <p className="m-0 py-3 text-sm text-muted-foreground">File from the toolbar or press {primaryModifier}+Shift+F. Undo is available in the toast.</p>
           </Section>
           <Section title="Filing rules" description="Built-in destinations include Development, Reading list, Shopping, Social, and Design. Rules create a folder the first time a match appears." actions={<Button className="max-md:min-h-11" size="sm" onClick={addRule}><AppIcon name="Plus" />Add Rule</Button>}>
             <div className="py-2">
@@ -263,7 +264,7 @@ export default function SettingsPage() {
 
         {section === 'Appearance' && <>
           <Section title="Accessibility" description="Make Athanor easier to see and to use. The system settings for Reduce Motion and Increase Contrast are always followed.">
-            <Row title="Interface size" description="Scales text, controls and menus together. Web pages keep their own zoom (Ctrl + / Ctrl -).">
+            <Row title="Interface size" description={`Scales text, controls and menus together. Web pages keep their own zoom (${primaryModifier} + / ${primaryModifier} -).`}>
               <div className="flex w-64 items-center gap-4 max-sm:w-full"><Slider className="max-md:h-11" aria-label="Interface size" aria-valuetext={scaleLabel} min={100} max={200} step={5} value={[settings.uiScale]} onValueChange={([uiScale]) => patch({ uiScale })} /><span className="w-12 text-end text-[0.8667rem] tabular-nums text-muted-foreground">{scaleLabel}</span></div>
             </Row>
             <Row title="Reduce motion" description="Replaces sliding and scaling with simple fades.">
@@ -274,8 +275,8 @@ export default function SettingsPage() {
             </Row>
           </Section>
           <Section title="Web pages" description="Pages that name their own font are not changed.">
-            <Row title="IBM Plex Sans JP as the default font" description="Used by pages that do not pick a font themselves. Applies the next time Athanor starts.">
-              <TouchSwitch label="IBM Plex Sans JP as the default font" checked={settings.webFont} onCheckedChange={(webFont) => patch({ webFont })} />
+            <Row title="IBM Plex Sans JP as the default font" description={isMacOS ? 'Available on Windows. macOS pages use their own fonts and system defaults.' : 'Used by pages that do not pick a font themselves. Applies the next time Athanor starts.'}>
+              <TouchSwitch label="IBM Plex Sans JP as the default font" checked={!isMacOS && settings.webFont} disabled={isMacOS} onCheckedChange={(webFont) => patch({ webFont })} />
             </Row>
           </Section>
           <Section title="Theme" description="Choose the colors used across Athanor.">
@@ -309,7 +310,7 @@ export default function SettingsPage() {
               <h3 className="m-0 mb-1 text-[0.7333rem] font-medium uppercase tracking-wider text-muted-foreground">{group}</h3>
               <div className="divide-y divide-border">
                 {SHORTCUTS.filter((item) => item.group === group).map((item) => <div key={item.combo} className="flex min-h-11 items-center justify-between gap-4 py-1.5">
-                  <span className="text-sm">{item.label}</span><span className="flex shrink-0 items-center gap-1">{comboKeys(item.combo).map((key, index) => <KeyCap key={`${key}-${index}`} k={key} />)}</span>
+                  <span className="text-sm">{displayShortcut(item.label)}</span><span className="flex shrink-0 items-center gap-1">{comboKeys(item.combo).map((key, index) => <KeyCap key={`${key}-${index}`} k={key} />)}</span>
                 </div>)}
               </div>
             </div>)}
@@ -371,7 +372,7 @@ function MyFiltersEditor() {
     <div className="flex flex-wrap items-center gap-2">
       <Button className="max-md:min-h-11" onClick={() => void save()} disabled={!dirty || saving}><AppIcon name="Check" />{saving ? 'Saving…' : 'Save'}</Button>
       <Button className="max-md:min-h-11" variant="outline" onClick={() => setText(saved)} disabled={!dirty || saving}><AppIcon name="RotateCcw" />Revert</Button>
-      <span className="ms-auto flex items-center gap-3 text-[0.8667rem] text-muted-foreground"><span data-part="filter-count">{lineCountLabel(lines)}</span><span className="flex items-center gap-1" aria-label="Save shortcut"><Kbd>Ctrl</Kbd><Kbd>S</Kbd></span></span>
+      <span className="ms-auto flex items-center gap-3 text-[0.8667rem] text-muted-foreground"><span data-part="filter-count">{lineCountLabel(lines)}</span><span className="flex items-center gap-1" aria-label="Save shortcut"><Kbd>{primaryModifier}</Kbd><Kbd>S</Kbd></span></span>
     </div>
     {issues.length > 0 && <div>
       <p className="mb-2 mt-1 text-[0.8667rem] text-muted-foreground">The engine ignored {lineCountLabel(issues.length)}:</p>

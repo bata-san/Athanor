@@ -5,6 +5,7 @@ import type { Download as DownloadItem, MediaState, NavHistory, Snapshot, Tab } 
 import { listen } from '@/lib/events'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { isMacOS } from '@/lib/platform'
 import { fileTabs } from '@/lib/filing'
 import { cn } from '@/lib/utils'
 import { activeTransfers, downloadStatus, formatBytes, isDownloading, useDownloads } from '@/lib/downloads'
@@ -211,10 +212,10 @@ function DownloadActivity({ active, onOpen }: { active: DownloadItem[]; onOpen: 
       <span className="flex min-w-0 items-center gap-1 text-[0.7333rem]"><span className="truncate">{item.name}</span><span className="shrink-0 text-muted-foreground">{item.state === 'paused' ? 'Paused' : item.state === 'failed' ? 'Interrupted' : determinate ? `${Math.floor(percent)}%` : formatBytes(item.received)}{active.length > 1 ? ` +${active.length - 1}` : ''}</span></span>
       <span className="relative h-0.5 overflow-hidden rounded-full bg-foreground/10" role="progressbar" aria-label={`Download ${item.name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={determinate ? Math.floor(percent) : undefined} aria-valuetext={downloadStatus(item)}><span className={cn('absolute inset-y-0 start-0 rounded-full bg-primary', !determinate && isDownloading(item) && '[animation:ath-indeterminate_1.1s_var(--ease-snap)_infinite] motion-reduce:animate-none')} style={{ width: determinate ? `${percent}%` : isDownloading(item) ? '35%' : '0%' }} /></span>
     </span>
-  </Button><NavButton label={isDownloading(item) ? `Pause ${item.name}` : `Resume ${item.name}`} disabled={pending || !isDownloading(item) && !item.canResume} onClick={() => {
+  </Button>{!isMacOS && <NavButton label={isDownloading(item) ? `Pause ${item.name}` : `Resume ${item.name}`} disabled={pending || !isDownloading(item) && !item.canResume} onClick={() => {
     setPending(true)
     void api.controlDownload(item.id, isDownloading(item) ? 'pause' : 'resume').catch((error) => toast.error('Could not change download', { description: String(error), action: { label: 'Downloads', onClick: onOpen } })).finally(() => setPending(false))
-  }}>{isDownloading(item) ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}</NavButton></div>
+  }}>{isDownloading(item) ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}</NavButton>}</div>
 }
 
 export function MobileBar({ snapshot, activeTab, openBar, openSwitcher, openMenu, openPage }: { snapshot: Snapshot; activeTab: Tab | null; openBar: () => void; openSwitcher: () => void; openMenu: () => void; openPage: (page: Page) => void }) {

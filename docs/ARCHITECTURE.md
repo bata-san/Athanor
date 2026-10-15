@@ -1,7 +1,7 @@
 # Athanor architecture
 
-Athanor is a lightweight Chromium-based browser for Windows and Android. It does **not** ship or fork Chromium.
-Rendering is done by the system's Chromium runtime (WebView2 on Windows, Android System WebView on Android), which
+Athanor is a lightweight browser for Windows, macOS and Android. It does **not** ship or fork Chromium.
+Rendering is done by the system runtime (WebView2 on Windows, WKWebView on macOS, Android System WebView on Android), which
 the OS updates independently. Everything Athanor adds sits in clearly separated layers so that a big Chromium change
 can only ever touch the thin adapter at the bottom.
 
@@ -15,7 +15,7 @@ can only ever touch the thin adapter at the bottom.
  L1  Platform adapters   app/src-tauri (engine_desktop.rs, win.rs)        <- WebView2 events, request blocking, shortcuts
                          Android plugin (Kotlin) + engine_mobile.rs       <- native WebView per tab
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────
- L0  Engine              WebView2 (Chromium) / Android System WebView     <- updated by the OS, not by us
+ L0  Engine              WebView2 (Chromium) / WKWebView (WebKit) / Android System WebView     <- updated by the OS, not by us
 ```
 
 ## The rule that keeps it maintainable
@@ -50,14 +50,21 @@ When Chromium ships a large change:
   places one webview per visible pane (split view = several rectangles, computed by `athanor-core::layout`).
 * Tabs are created lazily and archived tabs are discarded, so idle memory stays low.
 
+The macOS adapter (`macos.rs` / `macos.m`) uses public WebKit APIs for navigation, history and captures,
+with native menu accelerators for page-focused commands. It retains Tauri's navigation/UI delegates so
+website requests and popup openers survive. Transparent notification views use Tauri's private-API opt-in.
+See [MACOS.md](MACOS.md) for API differences and runtime verification limits.
+
 ## Content blocking
 
 `athanor-adblock` wraps Brave's `adblock-rust` engine (network rules, cosmetic rules, scriptlets, redirect resources).
 Adapters call it through the small `Filter` facade in `app/src-tauri/src/filter.rs`:
 
 * Windows: `WebResourceRequested` (all requests) → `should_block`; cosmetic/scriptlet JS injected on `ContentLoading`.
+* macOS: adblock-rust exports supported rules to WKContentRuleList; URL-specific scripts use page-load callbacks.
 * Android: `shouldInterceptRequest` → JNI → `should_block`; cosmetic JS injected on page start / commit.
-* HTTPS upgrade and tracking-parameter stripping are applied to main-frame navigations.
+* HTTPS upgrade and tracking-parameter stripping are applied to main-frame navigations on Windows/Android;
+  on macOS, only explicit address/new-tab navigations are transformed.
 
 ## Extensibility and theming
 

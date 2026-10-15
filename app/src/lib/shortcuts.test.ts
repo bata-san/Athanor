@@ -1,8 +1,38 @@
 import { describe, expect, it } from 'vitest'
-import { SHORTCUTS, canonicalShortcut, comboKeys, normalizeShortcut, shortcutFromKeyboard, shortcutOwner } from './shortcuts'
+import { SHORTCUTS, canonicalShortcut, comboKeys, displayShortcut, normalizeShortcut, shortcutFromKeyboard, shortcutOwner } from './shortcuts'
 describe('shortcut normalization', () => {
   it('normalizes modifier order and aliases', () => { expect(normalizeShortcut('shift+control+k')).toBe('Ctrl+Shift+K'); expect(normalizeShortcut('ALT+LEFT')).toBe('Alt+Left') })
   it('builds stable combos from DOM keyboard events', () => { expect(shortcutFromKeyboard({ key: 'Tab', ctrlKey: true, altKey: false, shiftKey: true, metaKey: false })).toBe('Ctrl+Shift+Tab'); expect(shortcutFromKeyboard({ key: 'k', ctrlKey: true, altKey: false, shiftKey: false, metaKey: false })).toBe('Ctrl+K') })
+})
+
+describe('macOS shortcuts', () => {
+  const macKey = (init: Partial<KeyboardEvent> & { key: string }) => shortcutFromKeyboard({ ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, ...init }, true)
+  it('uses Command for browser actions and preserves system combinations', () => {
+    expect(macKey({ key: 'l', metaKey: true })).toBe('Ctrl+L')
+    expect(macKey({ key: '+', code: 'Equal', metaKey: true, shiftKey: true })).toBe('Ctrl+=')
+    expect(macKey({ key: 'Tab', metaKey: true })).toBeNull()
+    expect(macKey({ key: ' ', metaKey: true })).toBeNull()
+    expect(macKey({ key: 'f', ctrlKey: true })).toBeNull()
+    expect(macKey({ key: 'Tab', ctrlKey: true })).toBe('Ctrl+Tab')
+  })
+  it('supports browser navigation and the standard inspector/full-screen keys', () => {
+    expect(macKey({ key: '[', code: 'BracketLeft', metaKey: true })).toBe('Alt+Left')
+    expect(macKey({ key: ']', code: 'BracketRight', metaKey: true })).toBe('Alt+Right')
+    expect(macKey({ key: '|', code: 'Backslash', metaKey: true, shiftKey: true })).toBe('Ctrl+Space')
+    expect(macKey({ key: 'f', ctrlKey: true, metaKey: true })).toBe('F11')
+    expect(macKey({ key: 'i', altKey: true, metaKey: true })).toBe('F12')
+  })
+  it('handles native DOM events whose key properties are not enumerable', () => {
+    const event = new KeyboardEvent('keydown', { key: 'l', metaKey: true })
+    expect(shortcutFromKeyboard(event, true)).toBe('Ctrl+L')
+  })
+  it('displays the actual Mac equivalents, including Control-Tab', () => {
+    expect(displayShortcut('Ctrl+T', true)).toBe('Cmd+T')
+    expect(comboKeys('Ctrl+Tab', true)).toEqual(['Ctrl', 'Tab'])
+    expect(comboKeys('F11', true)).toEqual(['Ctrl', 'Cmd', 'F'])
+    expect(displayShortcut('Alt+Left', true)).toBe('Cmd+[')
+    expect(displayShortcut('Ctrl+T', false)).toBe('Ctrl+T')
+  })
 })
 const key = (init: Partial<KeyboardEvent> & { key: string }) => shortcutFromKeyboard({ ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, ...init })
 describe('shortcut registry', () => {

@@ -1,6 +1,7 @@
 import * as React from 'react'
 import * as TooltipPrimitive from '@radix-ui/react-tooltip'
 import { cn } from '@/lib/utils'
+import { displayShortcut } from '@/lib/shortcuts'
 export const TooltipProvider = ({ delayDuration = 450, ...props }: React.ComponentProps<typeof TooltipPrimitive.Provider>) => <TooltipPrimitive.Provider delayDuration={delayDuration} {...props} />
 export const Tooltip = TooltipPrimitive.Root
 export const TooltipTrigger = TooltipPrimitive.Trigger
@@ -10,5 +11,5 @@ export const TooltipContent = React.forwardRef<React.ElementRef<typeof TooltipPr
 TooltipContent.displayName = 'TooltipContent'
 /** Wraps a single child in a tooltip carrying a label and an optional shortcut. */
 export function Tip({ label, shortcut, side = 'bottom', disabled = false, children }: { label: string; shortcut?: string; side?: 'top' | 'right' | 'bottom' | 'left'; disabled?: boolean; children: React.ReactElement }) {
-  return <Tooltip open={disabled ? false : undefined}><TooltipTrigger asChild>{children}</TooltipTrigger><TooltipContent side={side}>{label}{shortcut && <span className="ms-2 text-[0.7333rem] text-background/60">{shortcut}</span>}</TooltipContent></Tooltip>
+  return <Tooltip open={disabled ? false : undefined}><TooltipTrigger asChild>{children}</TooltipTrigger><TooltipContent side={side}>{label}{shortcut && <span className="ms-2 text-[0.7333rem] text-background/60">{displayShortcut(shortcut)}</span>}</TooltipContent></Tooltip>
 }

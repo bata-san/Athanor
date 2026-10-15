@@ -6,7 +6,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-adblock = { version = "0.13", default-features = false, features = ["embedded-domain-resolver", "full-regex-handling"] }
+adblock = { version = "0.13", default-features = false, features = ["embedded-domain-resolver", "full-regex-handling", "content-blocking"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

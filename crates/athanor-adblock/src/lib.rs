@@ -1079,6 +1079,49 @@ impl Blocker {
     pub fn site_disabled(&self, host: &str) -> bool {
         site_key(host).is_some_and(|k| self.inner.config.read().disabled_sites.contains(&k))
     }
+
+    /// Export the representable subset of the active ABP lists for WKContentRuleList.
+    /// WebKit enforces these rules without intercepting or replaying HTTP requests.
+    #[cfg(target_os = "macos")]
+    pub fn webkit_rules(&self) -> Result<String, String> {
+        if !self.enabled() {
+            return Ok("[]".into());
+        }
+        let (_, raw, has_lists) = self.collect_raw();
+        let mut set = FilterSet::new(true);
+        for (source, text) in raw {
+            if source.kind != ListKind::Resources {
+                // Preserve original options: unsupported rules must be omitted, never broadened.
+                set.add_filter_list(text, ParseOptions::default());
+            }
+        }
+        if !has_lists {
+            set.add_filter_list(FALLBACK.into(), ParseOptions::default());
+        }
+        let (rules, _) = set
+            .into_content_blocking()
+            .map_err(|()| "Could not export WebKit rules".to_string())?;
+        let mut rules = serde_json::to_value(rules).map_err(|e| e.to_string())?;
+        let entries = rules
+            .as_array_mut()
+            .ok_or_else(|| "Invalid WebKit rule array".to_string())?;
+        let mut sites: Vec<String> = self
+            .inner
+            .config
+            .read()
+            .disabled_sites
+            .iter()
+            .cloned()
+            .collect();
+        sites.sort();
+        for site in sites {
+            entries.push(serde_json::json!({
+                "trigger": { "url-filter": ".*", "if-top-url": [webkit_site_pattern(&site)] },
+                "action": { "type": "ignore-previous-rules" }
+            }));
+        }
+        serde_json::to_string(&rules).map_err(|e| e.to_string())
+    }
     /// Describe the curated sources and their current state.
     pub fn lists(&self) -> Vec<ListState> {
         default_lists()
@@ -1179,6 +1222,21 @@ impl Blocker {
         }
     }
 }
+#[cfg(target_os = "macos")]
+fn webkit_site_pattern(site: &str) -> String {
+    let escaped: String = site
+        .chars()
+        .flat_map(|c| {
+            if ".+*?()[]{}^$|\\".contains(c) {
+                vec!['\\', c]
+            } else {
+                vec![c]
+            }
+        })
+        .collect();
+    format!("^https?://([^/]+\\.)?{escaped}([:/]|$)")
+}
+
 fn normalize_denyallow(text: &str, denyallow: &mut HashMap<String, Vec<String>>) -> String {
     let mut normalized = String::with_capacity(text.len());
     for line in text.lines() {
@@ -1425,6 +1483,37 @@ fn is_youtube_host(host: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn webkit_rules_preserve_exceptions_and_global_disable() {
+        let dir = std::env::temp_dir().join(format!("athanor-webkit-{}", std::process::id()));
+        let blocker = Blocker::new(&dir);
+        blocker.set_extra_lists(vec![(
+            "test".into(),
+            "||ads.example.com^$script\n@@||safe.example.com^$script".into(),
+        )]);
+        blocker.set_site_disabled("www.example.org", true);
+        let rules: serde_json::Value =
+            serde_json::from_str(&blocker.webkit_rules().unwrap()).unwrap();
+        let list = rules.as_array().unwrap();
+        assert!(list.iter().any(|r| r["action"]["type"] == "block"));
+        assert_eq!(
+            list.last().unwrap()["action"]["type"],
+            "ignore-previous-rules"
+        );
+        assert_eq!(
+            list.last().unwrap()["trigger"]["if-top-url"][0],
+            webkit_site_pattern("example.org")
+        );
+        assert_eq!(
+            webkit_site_pattern("example.org"),
+            r"^https?://([^/]+\.)?example\.org([:/]|$)"
+        );
+        blocker.set_enabled(false);
+        assert_eq!(blocker.webkit_rules().unwrap(), "[]");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn the_builtin_youtube_rules_live_in_the_engine_and_follow_the_switch() {
         let dir = std::env::temp_dir().join("athanor-builtin-engine");

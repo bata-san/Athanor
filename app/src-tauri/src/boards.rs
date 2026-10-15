@@ -274,7 +274,7 @@ pub struct PureRefImport {
 
 /// Turn a PureRef 2.x scene (`.pur`) into a board of its own: every image keeps its place, size, rotation, flip,
 /// opacity and grey filter; notes become text. PureRef's world is centred on (0, 0) with y down, like a board's.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 pub fn import_pureref(paths: &Paths, file: &std::path::Path) -> Result<PureRefImport, String> {
     use athanor_core::board::{Item, ItemKind};
     let bytes = std::fs::read(file).map_err(|e| format!("could not read the file: {e}"))?;
