@@ -25,7 +25,8 @@ pub fn init(
     let shell = window.add_child(
         WebviewBuilder::new("shell", WebviewUrl::App("index.html".into()))
             .auto_resize()
-            .devtools(true),
+            // The shell is Athanor's own UI; only page tabs get the inspector in release builds.
+            .devtools(cfg!(debug_assertions)),
         LogicalPosition::new(0.0, 0.0),
         size,
     )?;
