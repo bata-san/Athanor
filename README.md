@@ -27,7 +27,7 @@ shield, *My filters*). Automated end-to-end check: [`e2e/`](e2e/README.md).
 
 Not finished yet (contributions welcome): Brave-style privacy hardening (GPC/referrer trimming, fingerprint
 farbling, third-party storage), element picker / zapper, uBO-style dynamic filtering matrix, loading unpacked
-Chrome extensions, Android generic-cosmetic parity and release signing.
+Chrome extensions, Android generic-cosmetic parity.
 
 macOS support includes a WKWebView adapter, native menus and window controls, PNG capture, page tools,
 browser bookmark/history import, PureRef import, native notifications and WebKit content rules. Apple
