@@ -139,6 +139,34 @@ $bt = "$env:LOCALAPPDATA\Android\Sdk\build-tools\36.0.0"
   --key-pass pass:android --ks-key-alias androiddebugkey --out Athanor.apk aligned.apk
 ```
 
+## Release signing
+
+Android refuses to install an unsigned APK ("App not installed" / "package appears to be invalid").
+`app/build.gradle.kts` signs the release build when `gen/android/keystore.properties` (git-ignored) exists:
+
+```properties
+storeFile=/absolute/path/to/release.jks
+storePassword=...
+keyAlias=...
+keyPassword=...
+```
+
+The release workflow writes this file from the repository secrets `ANDROID_KEYSTORE_BASE64` (the keystore,
+base64-encoded), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`, verifies the
+result with `apksigner verify` and publishes it as `Athanor_<version>_arm64.apk`. Keep using the same key:
+Android installs an update only when it is signed by the key of the installed version. Without the secrets
+the workflow signs with a throwaway key and warns; such an APK installs, but replacing an APK signed by a
+different key requires uninstalling it first. Create a key once with:
+
+```bash
+keytool -genkeypair -keystore athanor-release.jks -storetype PKCS12 -alias athanor \
+  -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=Athanor"
+base64 -w0 athanor-release.jks   # value for ANDROID_KEYSTORE_BASE64
+```
+
+The release APK contains only the arm64-v8a library, which covers current 64-bit ARM phones;
+32-bit ARM and x86 devices cannot install it.
+
 ## Testing on an emulator
 
 An x86_64 `google_apis` image works (Windows Hypervisor Platform is enough). Build with `--target x86_64`, install

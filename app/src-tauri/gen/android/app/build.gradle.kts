@@ -14,6 +14,20 @@ val tauriProperties = Properties().apply {
     }
 }
 
+// Release signing. Android refuses to install an unsigned APK, so release builds are signed when
+// `keystore.properties` (git-ignored, next to settings.gradle) names a keystore:
+//   storeFile=/absolute/path/to/release.jks
+//   storePassword=...
+//   keyAlias=...
+//   keyPassword=...
+// The release workflow writes it from repository secrets. Without it the release APK stays unsigned.
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { load(it) }
+    }
+}
+
 android {
     compileSdk = 36
     namespace = "dev.athanor.browser"
@@ -26,6 +40,16 @@ android {
     targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
+    }
+    signingConfigs {
+        if (keystorePropertiesFile.exists()) {
+            create("release") {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
     }
     buildTypes {
         getByName("debug") {
@@ -41,6 +65,9 @@ android {
             }
         }
         getByName("release") {
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             optimization {
                enable = true
             }

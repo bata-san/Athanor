@@ -109,7 +109,7 @@ jobs:
           path: release-assets/*
 
   android:
-    name: Android APK (unsigned)
+    name: Android APK
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -130,16 +130,59 @@ jobs:
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.1.12297006" "platforms;android-36" "build-tools;36.0.0"
+      # Android refuses to install an unsigned APK ("App not installed"), so the release APK is always signed.
+      # Use the same key for every release so updates install over the previous version: store a keystore
+      # in the repository secrets ANDROID_KEYSTORE_BASE64 (base64 of the .jks), ANDROID_KEYSTORE_PASSWORD,
+      # ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD. Without them a throwaway key is generated, which installs
+      # fine but cannot update an APK signed by a different key (uninstall first).
+      - name: Prepare the APK signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          keystore="$RUNNER_TEMP/athanor-release.jks"
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$keystore"
+            store_password="$KEYSTORE_PASSWORD"
+            alias="$KEY_ALIAS"
+            key_password="${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
+          else
+            echo "::warning::ANDROID_KEYSTORE_BASE64 is not set; signing the APK with a throwaway key. Updates from an APK signed by another key need an uninstall first."
+            store_password=$(openssl rand -hex 24)
+            alias=athanor
+            key_password="$store_password"
+            keytool -genkeypair -noprompt -keystore "$keystore" -storetype PKCS12 -alias "$alias" \
+              -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=Athanor" \
+              -storepass "$store_password" -keypass "$key_password"
+          fi
+          {
+            echo "storeFile=$keystore"
+            echo "storePassword=$store_password"
+            echo "keyAlias=$alias"
+            echo "keyPassword=$key_password"
+          } > app/src-tauri/gen/android/keystore.properties
       - working-directory: app
         run: |
           export ANDROID_SDK_ROOT="$ANDROID_HOME"
           export NDK_HOME="$ANDROID_HOME/ndk/27.1.12297006"
           npm ci
           npx tauri android build --target aarch64 --apk
+      - name: Verify the signature and name the APK
+        run: |
+          rm -f app/src-tauri/gen/android/keystore.properties
+          apk=$(find app/src-tauri/gen/android/app/build/outputs/apk -name '*-release*.apk' | head -n1)
+          if [ -z "$apk" ]; then echo "No release APK was built"; exit 1; fi
+          case "$apk" in *unsigned*) echo "The release APK is unsigned: $apk"; exit 1;; esac
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$apk"
+          version=$(node -p "require('./app/src-tauri/tauri.conf.json').version")
+          mkdir -p android-dist
+          cp "$apk" "android-dist/Athanor_${version}_arm64.apk"
       - uses: actions/upload-artifact@v4
         with:
           name: athanor-android
-          path: app/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          path: android-dist/*.apk
 
   publish:
     name: Publish release and update feed
